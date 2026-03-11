@@ -51,6 +51,14 @@ When working in a meta-repo environment with many child repositories, parallel d
 - **FR-9**: Single-repo mode — `ww` should work fine in a standalone repo, not only in meta-repo contexts.
 - **FR-10**: Shell integration — output that enables `cd` into created worktrees (e.g., `cd $(ww create feat/x)`).
 
+#### Agent-Friendly CLI Design
+
+- **FR-11**: `--dry-run` flag for mutation commands (create, remove, clean) — validate and show what would happen without executing.
+- **FR-12**: `--json` flag on all commands — output NDJSON (one JSON object per line) for stream-friendly machine consumption.
+- **FR-13**: `--fields` flag to limit output fields (e.g., `ww list --json --fields path,branch,dirty`), reducing context window cost for AI agents.
+- **FR-14**: `ww schema <command>` — runtime introspection exposing available params, flags, and types as JSON. Agents discover capabilities without parsing `--help`.
+- **FR-15**: Ship agent skill files (e.g., `.claude/skills/ww-operator`) encoding invariants agents cannot infer from help text (e.g., "always use `--dry-run` before mutations").
+
 ### Non-Functional Requirements
 
 - **NFR-1**: Written in Go. Single static binary, no runtime dependencies.
@@ -59,6 +67,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 - **NFR-4**: Configuration via a simple file (TOML or YAML) in the workspace root.
 - **NFR-5**: Works on macOS and Linux. Windows is not a priority.
 - **NFR-6**: Installable via `go install` and Homebrew.
+- **NFR-7**: Hardened input validation — reject invalid branch names, path traversals, control characters. Assume agent-generated inputs can be adversarial.
 
 ## Milestones
 
@@ -72,6 +81,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 2. **Convention over configuration**: Sensible defaults (worktree path = `<repo>@<branch>`), minimal required config.
 3. **Single-repo first**: Phase 1 must work perfectly in a single repo. Multi-repo is an extension, not a prerequisite.
 4. **Composable**: Output machine-readable data (JSON flag) for scripting and AI agent integration.
+5. **Agent-friendly by default**: Structured output, runtime schema introspection, dry-run safety, and hardened input validation. Design for both human and AI agent operators from day one.
 
 ## References
 
@@ -82,3 +92,4 @@ When working in a meta-repo environment with many child repositories, parallel d
 - [workspace-manager](https://github.com/go-go-golems/workspace-manager) — Closest multi-repo precedent (Go)
 - [Zenn: git worktree tools survey](https://zenn.dev/kawarimidoll/articles/9a77555122b3d5)
 - [Zenn: twig introduction](https://zenn.dev/progate/articles/2e1e90796d82f0)
+- [Rewrite Your CLI for AI Agents](https://justin.poehnelt.com/posts/rewrite-your-cli-for-ai-agents/) — Agent-friendly CLI design patterns (JSON payloads, schema introspection, dry-run, input validation)
