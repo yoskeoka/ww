@@ -1,5 +1,12 @@
 # Project Plan: ww (Workspace Worktree)
 
+## Naming
+
+Current name: **ww** (workspace worktree). Alternatives considered — can rename before first release:
+
+- **gww** (git workspace worktree) — 3 chars, smooth typing rhythm, no clashes
+- **wwm** (workspace worktree manager) — 3 chars, sounds like a proper tool name, no clashes
+
 ## Goal
 
 Build a fast, portable CLI tool (`ww`) that manages git worktrees across multiple repositories in a meta-repo workspace. Where existing tools handle single-repo worktree management well, `ww` fills the gap of **coordinated multi-repo worktree operations** — creating, listing, and cleaning up worktrees across N repos from a single command.
