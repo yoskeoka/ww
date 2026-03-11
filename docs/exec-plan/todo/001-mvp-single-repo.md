@@ -15,11 +15,30 @@ Use TOML (`.ww.toml`) for workspace configuration. Rationale:
 - TOML is the standard for Go/Rust CLI tool configs (cargo, goreleaser)
 - Simpler than YAML for flat key-value + tables
 
-### Worktree path layout: `<repo>@<branch>`
+### Worktree path layout: `<repo>@<branch>` with configurable parent dir
 
-Following `ha`'s convention. Flat sibling layout avoids nested config leakage.
-- Repo at `/path/to/myapp` with branch `feat/auth` → `/path/to/myapp@feat/auth`
-- Slash in branch names replaced with `-`: `feat/auth` → `myapp@feat-auth`
+Directory naming follows `ha`'s `@` convention. Slash in branch names replaced with `-`.
+
+Parent directory is configurable via `worktree_dir` in `.ww.toml`:
+
+- **Workspace mode** (`worktree_dir = ".worktrees"`): All worktrees under a single directory, easy to `.gitignore`.
+  ```
+  vibe-coding-workspace/
+  ├── ww/                        # real repo
+  ├── ai-arena/                  # real repo
+  ├── .worktrees/                 # one .gitignore entry
+  │   ├── ww@feat-auth/
+  │   └── ai-arena@feat-auth/
+  └── .ww.toml
+  ```
+- **Single-repo mode** (`worktree_dir` omitted or `""`): Flat sibling layout (ha-style).
+  ```
+  myapp/
+  myapp@feat-auth/
+  myapp@fix-bug/
+  ```
+
+Default: `""` (sibling layout). Zero-config for single-repo users.
 
 ### CLI framework: custom subcommand pattern + pflag
 
@@ -61,7 +80,7 @@ Create initial specs:
 
 ### 3. Core: configuration
 - [ ] [depends on: scaffolding] `internal/config/` — load `.ww.toml`
-  - Config struct: `default_base`, `copy_files []string`, `symlink_files []string`, `post_create_hook string`
+  - Config struct: `worktree_dir`, `default_base`, `copy_files []string`, `symlink_files []string`, `post_create_hook string`
   - Search upward from CWD to find `.ww.toml`
   - Sensible defaults when no config file exists (zero-config single-repo usage)
 
