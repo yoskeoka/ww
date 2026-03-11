@@ -72,7 +72,7 @@ Create initial specs:
 ### 2. Core: git wrapper
 - [ ] [depends on: scaffolding] `internal/git/` — thin wrapper around `git` CLI execution
   - `RunGit(args ...string) (stdout, stderr, error)`
-  - `WorktreeAdd(path, branch, base string) error`
+  - `WorktreeAdd(path, branch, base string) error` — new branch: `git worktree add -b <branch> <path> <base>`; existing branch: `git worktree add <path> <branch>`
   - `WorktreeList() ([]Worktree, error)`
   - `WorktreeRemove(path string) error`
   - `BranchDelete(branch string) error`
@@ -142,7 +142,8 @@ Create initial specs:
 
 ## Verification
 
-- [ ] `ww create feat/test` creates a worktree at `<repo>@feat-test` with correct branch
+- [ ] `ww create feat/test` creates a new branch + worktree together (1 command = 1 branch + 1 worktree)
+- [ ] `ww create feat/test` when branch `feat/test` already exists: checks out the existing branch as a worktree (no new branch)
 - [ ] `ww list` shows the created worktree with path and branch
 - [ ] `ww remove feat/test` removes worktree and branch
 - [ ] `ww list --json` outputs valid NDJSON
