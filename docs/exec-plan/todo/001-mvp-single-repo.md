@@ -43,11 +43,12 @@ Create initial specs:
 
 ## Sub-tasks
 
-### 1. Project scaffolding
+### 1. Project scaffolding + CI
 - [ ] [parallel] Initialize Go module (`go mod init github.com/yoskeoka/ww`)
 - [ ] [parallel] Set up project structure: `cmd/ww/main.go`, `internal/git/`, `internal/config/`, `internal/worktree/`
 - [ ] [parallel] Add `.gitignore` for Go binaries
 - [ ] [parallel] Create spec files in `docs/specs/`
+- [ ] [parallel] GitHub Actions CI: `go test ./...` on push and PR, Makefile with `build`/`test` targets
 
 ### 2. Core: git wrapper
 - [ ] [depends on: scaffolding] `internal/git/` — thin wrapper around `git` CLI execution
@@ -105,9 +106,8 @@ Create initial specs:
   - `--dry-run`: show planned actions without executing (FR-11)
 
 ### 10. Tests
-- [ ] [parallel, ongoing] Unit tests for each `internal/` package
+- [ ] [parallel, ongoing] Unit tests for each `internal/` package (every task from #2 onward includes tests)
 - [ ] [depends on: CLI wiring] Integration tests — create temp git repo, run `ww` commands, verify state
-- [ ] [depends on: integration tests] CI setup (GitHub Actions) with `go test ./...`
 
 ## Out of Scope (deferred to later plans)
 
