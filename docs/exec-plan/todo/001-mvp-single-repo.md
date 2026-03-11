@@ -21,6 +21,10 @@ Following `ha`'s convention. Flat sibling layout avoids nested config leakage.
 - Repo at `/path/to/myapp` with branch `feat/auth` → `/path/to/myapp@feat/auth`
 - Slash in branch names replaced with `-`: `feat/auth` → `myapp@feat-auth`
 
+### CLI framework: custom subcommand pattern + pflag
+
+Based on `yoskeoka/go-templates/cli/subcommand` template. Uses a custom `command` struct with recursive subcommand dispatch. Replace `flag.FlagSet` with `pflag.FlagSet` for POSIX-style `--flag` support. No cobra dependency.
+
 ### Git execution: shell out to `git`
 
 Use `os/exec` to call `git` directly (NFR-3). Wrap in a thin internal package for testability.
@@ -73,12 +77,13 @@ Create initial specs:
   - Validate branch names against `git check-ref-format` rules
 
 ### 6. CLI: command wiring
-- [ ] [depends on: worktree operations, validation] `cmd/ww/main.go` — CLI entry point using cobra or similar
+- [ ] [depends on: worktree operations, validation] `cmd/ww/main.go` — CLI entry point based on `yoskeoka/go-templates/cli/subcommand` pattern with `pflag`
+  - Custom `command` struct with `pflag.FlagSet` per subcommand
+  - `globalOpts` carries `--json` and `--dry-run` flags, plus `io.Writer` for output
   - `ww create <branch>` — create worktree
   - `ww list` — list worktrees
   - `ww remove <branch>` — remove worktree
   - `ww version` — print version
-  - Global flags: `--json`, `--dry-run`
 
 ### 7. File operations: copy and symlink
 - [ ] [depends on: worktree operations] Implement `copy_files` and `symlink_files` from config
