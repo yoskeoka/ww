@@ -58,6 +58,10 @@ When working in a meta-repo environment with many child repositories, parallel d
 - **FR-9**: Single-repo mode — `ww` should work fine in a standalone repo, not only in meta-repo contexts.
 - **FR-10**: Shell integration — output that enables `cd` into created worktrees (e.g., `cd $(ww create feat/x)`).
 
+#### Future
+
+- **FR-16**: Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (e.g., AI agent orchestrators running long tasks). Configurable per-repo or per-command flag.
+
 #### Agent-Friendly CLI Design
 
 - **FR-11**: `--dry-run` flag for mutation commands (create, remove, clean) — validate and show what would happen without executing.
