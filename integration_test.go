@@ -313,6 +313,49 @@ post_create_hook = "echo hook-ran > hook-output.txt"
 	}
 }
 
+func TestRemoveNonexistentWorktree(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	// Try to remove a worktree that doesn't exist
+	out, err := runWW(t, repo, "remove", "feat/nonexistent")
+	if err == nil {
+		t.Fatalf("expected error for non-existent worktree, got: %s", out)
+	}
+	if !strings.Contains(out, "no worktree found") {
+		t.Errorf("error should mention 'no worktree found': %s", out)
+	}
+}
+
+func TestRemoveNonexistentWorktreeDryRun(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	out, err := runWW(t, repo, "remove", "--dry-run", "feat/nonexistent")
+	if err == nil {
+		t.Fatalf("expected error for non-existent worktree dry-run, got: %s", out)
+	}
+	if !strings.Contains(out, "no worktree found") {
+		t.Errorf("error should mention 'no worktree found': %s", out)
+	}
+}
+
+func TestHelpFlag(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	// Subcommand --help should exit cleanly (exit 0)
+	out, err := runWW(t, repo, "remove", "--help")
+	if err != nil {
+		t.Fatalf("--help should exit 0, got error: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "pflag") {
+		t.Errorf("--help output should not expose pflag internals: %s", out)
+	}
+	if !strings.Contains(out, "--keep-branch") {
+		t.Errorf("--help should show available flags: %s", out)
+	}
+}
+
 func TestCreateExistingBranch(t *testing.T) {
 	repo := setupTestRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)

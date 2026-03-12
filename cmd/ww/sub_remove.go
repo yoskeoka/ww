@@ -8,7 +8,7 @@ import (
 )
 
 func removeCmd() command {
-	fset := pflag.NewFlagSet(mainCmdName+" remove", pflag.ExitOnError)
+	fset := pflag.NewFlagSet(mainCmdName+" remove", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
 	keepBranch := fset.Bool("keep-branch", false, "Do not delete the branch")
@@ -18,7 +18,9 @@ func removeCmd() command {
 		description: "Remove a worktree and its branch",
 		fset:        fset,
 		fn: func(args []string, glOpts *globalOpts) error {
-			fset.Parse(args)
+			if err := parseFlags(fset, args); err != nil {
+				return err
+			}
 			glOpts.json = glOpts.json || *jsonFlag
 			glOpts.dryRun = glOpts.dryRun || *dryRun
 

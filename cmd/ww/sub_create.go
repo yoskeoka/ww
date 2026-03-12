@@ -7,7 +7,7 @@ import (
 )
 
 func createCmd() command {
-	fset := pflag.NewFlagSet(mainCmdName+" create", pflag.ExitOnError)
+	fset := pflag.NewFlagSet(mainCmdName+" create", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
 
@@ -16,7 +16,9 @@ func createCmd() command {
 		description: "Create a new worktree for a branch",
 		fset:        fset,
 		fn: func(args []string, glOpts *globalOpts) error {
-			fset.Parse(args)
+			if err := parseFlags(fset, args); err != nil {
+				return err
+			}
 			glOpts.json = glOpts.json || *jsonFlag
 			glOpts.dryRun = glOpts.dryRun || *dryRun
 

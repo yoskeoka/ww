@@ -8,7 +8,7 @@ import (
 )
 
 func listCmd() command {
-	fset := pflag.NewFlagSet(mainCmdName+" list", pflag.ExitOnError)
+	fset := pflag.NewFlagSet(mainCmdName+" list", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output NDJSON")
 
 	return command{
@@ -16,7 +16,9 @@ func listCmd() command {
 		description: "List all worktrees",
 		fset:        fset,
 		fn: func(args []string, glOpts *globalOpts) error {
-			fset.Parse(args)
+			if err := parseFlags(fset, args); err != nil {
+				return err
+			}
 			glOpts.json = glOpts.json || *jsonFlag
 
 			mgr, err := newManager()

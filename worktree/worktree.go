@@ -172,6 +172,11 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 
 	result := &RemoveResult{Path: wtPath, Branch: branch}
 
+	// Check if worktree directory actually exists
+	if _, err := os.Stat(wtPath); err != nil {
+		return nil, nil, fmt.Errorf("no worktree found at %s", wtPath)
+	}
+
 	if opts.DryRun {
 		var dryRunLog []string
 		dryRunLog = append(dryRunLog, fmt.Sprintf("Would remove worktree at %s", wtPath))

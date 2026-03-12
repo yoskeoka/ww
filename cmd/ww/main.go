@@ -2,16 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/spf13/pflag"
-	"github.com/yoskeoka/ww/internal/config"
 	"github.com/yoskeoka/ww/git"
+	"github.com/yoskeoka/ww/internal/config"
 	"github.com/yoskeoka/ww/worktree"
 )
+
+// errHelp is returned when --help is requested. Not an error — just signals clean exit.
+var errHelp = errors.New("")
 
 func main() {
 	os.Exit(cliMain())
@@ -41,7 +45,7 @@ func cliMain() int {
 		versionCmd(),
 	}
 
-	fset := pflag.NewFlagSet(mainCmdName, pflag.ExitOnError)
+	fset := pflag.NewFlagSet(mainCmdName, pflag.ContinueOnError)
 	fset.SetInterspersed(false)
 	showVersion := fset.Bool("version", false, "Print version")
 
@@ -54,7 +58,12 @@ func cliMain() int {
 		fset.PrintDefaults()
 	}
 
-	fset.Parse(os.Args[1:])
+	if err := fset.Parse(os.Args[1:]); err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
 
 	if *showVersion {
 		printVersion(os.Stdout)
@@ -69,6 +78,9 @@ func cliMain() int {
 
 	glOpts := &globalOpts{output: os.Stdout}
 	if err := runSubcmd(mainCmdName, commands, args, glOpts); err != nil {
+		if errors.Is(err, errHelp) {
+			return 0
+		}
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
