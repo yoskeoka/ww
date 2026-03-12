@@ -43,7 +43,11 @@ func listCmd() command {
 			tw := tabwriter.NewWriter(glOpts.output, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(tw, "PATH\tBRANCH\tHEAD")
 			for _, info := range infos {
-				fmt.Fprintf(tw, "%s\t%s\t%s\n", info.Path, info.Branch, info.Head)
+				path := info.Path
+				if info.Main {
+					path += " (main worktree)"
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\n", path, info.Branch, info.Head)
 			}
 			return tw.Flush()
 		},

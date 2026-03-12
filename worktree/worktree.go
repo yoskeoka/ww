@@ -38,6 +38,7 @@ type WorktreeInfo struct {
 	Branch  string `json:"branch"`
 	Head    string `json:"head,omitempty"`
 	Bare    bool   `json:"bare,omitempty"`
+	Main    bool   `json:"main,omitempty"`
 	Created bool   `json:"created,omitempty"`
 	Base    string `json:"base,omitempty"`
 }
@@ -154,6 +155,7 @@ func (m *Manager) List() ([]WorktreeInfo, error) {
 			Branch: e.Branch,
 			Head:   e.Head,
 			Bare:   e.Bare,
+			Main:   e.Main,
 		})
 	}
 	return infos, nil

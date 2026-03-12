@@ -19,6 +19,7 @@ type WorktreeEntry struct {
 	Head   string
 	Branch string
 	Bare   bool
+	Main   bool // true for the main working tree (first entry from git)
 }
 
 func (r *Runner) gitBin() string {
@@ -68,6 +69,7 @@ func (r *Runner) WorktreeList() ([]WorktreeEntry, error) {
 func parseWorktreeList(output string) []WorktreeEntry {
 	var entries []WorktreeEntry
 	var current WorktreeEntry
+	isFirst := true
 
 	for _, line := range strings.Split(output, "\n") {
 		switch {
@@ -82,12 +84,19 @@ func parseWorktreeList(output string) []WorktreeEntry {
 			current.Bare = true
 		case line == "":
 			if current.Path != "" {
+				if isFirst {
+					current.Main = true
+					isFirst = false
+				}
 				entries = append(entries, current)
 				current = WorktreeEntry{}
 			}
 		}
 	}
 	if current.Path != "" {
+		if isFirst {
+			current.Main = true
+		}
 		entries = append(entries, current)
 	}
 	return entries

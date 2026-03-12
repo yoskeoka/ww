@@ -51,21 +51,25 @@ Would run hook: npm install
 
 ### `ww list`
 
-List all worktrees for the current repository.
+List all worktrees for the current repository, including the main working tree.
+
+The main working tree (the original repo checkout) is always included and marked with `(main worktree)` in text output or `"main":true` in JSON output. This distinguishes it from secondary worktrees created by `ww create`.
+
+Note: `ww list` shows **worktrees**, not branches. Branches that do not have an associated worktree are not shown. Use `git branch` to see all branches.
 
 **Flags:** Inherits global flags only.
 
 **Output (text):**
 ```
-PATH                          BRANCH              HEAD
-/path/to/repo                 main                abc1234
-/path/to/repo@feat-auth       feat/auth           def5678
+PATH                                  BRANCH              HEAD
+/path/to/repo (main worktree)        main                abc1234
+/path/to/repo@feat-auth              feat/auth           def5678
 ```
 
 **Output (JSON, NDJSON):**
 ```
-{"path":"/path/to/repo","branch":"main","head":"abc1234","bare":false}
-{"path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678","bare":false}
+{"path":"/path/to/repo","branch":"main","head":"abc1234","main":true}
+{"path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678"}
 ```
 
 ### `ww remove <branch>`

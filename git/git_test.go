@@ -28,9 +28,15 @@ branch refs/heads/feat/auth
 	if entries[0].Head != "abc1234" {
 		t.Errorf("entry[0].Head = %q, want abc1234", entries[0].Head)
 	}
+	if !entries[0].Main {
+		t.Error("entry[0].Main should be true (first entry is main worktree)")
+	}
 
 	if entries[1].Branch != "feat/auth" {
 		t.Errorf("entry[1].Branch = %q, want feat/auth", entries[1].Branch)
+	}
+	if entries[1].Main {
+		t.Error("entry[1].Main should be false")
 	}
 }
 

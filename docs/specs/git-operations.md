@@ -44,13 +44,14 @@ List all worktrees using porcelain format:
 git worktree list --porcelain
 ```
 
-Parse the output into structured entries:
+Parse the output into structured entries. The first entry returned by git is always the main working tree and is marked with `Main: true`:
 ```go
 type WorktreeEntry struct {
     Path   string
     Head   string // abbreviated commit hash
     Branch string // e.g., "refs/heads/main" -> "main"
     Bare   bool
+    Main   bool   // true for the main working tree (first entry)
 }
 ```
 

@@ -141,6 +141,9 @@ func TestCreateAndList(t *testing.T) {
 	if !strings.Contains(out, "feat/test-branch") {
 		t.Errorf("list output should contain branch name: %s", out)
 	}
+	if !strings.Contains(out, "(main worktree)") {
+		t.Errorf("list output should mark the main worktree: %s", out)
+	}
 }
 
 func TestListJSON(t *testing.T) {
