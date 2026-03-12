@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Build the ww binary for integration tests
 	cmd := exec.Command("go", "build", "-o", filepath.Join(os.TempDir(), "ww-test"), "./cmd/ww/")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -23,6 +23,10 @@ func wwBin() string {
 	return filepath.Join(os.TempDir(), "ww-test")
 }
 
+// setupTestRepo creates a fresh git repository with realistic seed data:
+// - explicit main branch
+// - multiple commits with actual file content
+// - an existing branch for testing checkout of existing branches
 func setupTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -31,19 +35,52 @@ func setupTestRepo(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	cmds := [][]string{
-		{"git", "init"},
-		{"git", "config", "user.email", "test@test.com"},
-		{"git", "config", "user.name", "Test"},
-		{"git", "commit", "--allow-empty", "-m", "initial"},
-	}
-	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
 		cmd.Dir = repo
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("setup %v: %v\n%s", args, err, out)
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
 	}
+
+	writeFile := func(name, content string) {
+		t.Helper()
+		path := filepath.Join(repo, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Initialize repo with explicit branch name
+	git("init", "-b", "main")
+	git("config", "user.email", "test@test.com")
+	git("config", "user.name", "Test User")
+
+	// Seed commit 1: initial project structure
+	writeFile("README.md", "# My Repo\n\nA test repository for ww integration tests.\n")
+	writeFile("go.mod", "module example.com/myrepo\n\ngo 1.25.0\n")
+	writeFile("main.go", fmt.Sprintf("package main\n\nfunc main() {\n\tprintln(%q)\n}\n", "hello"))
+	git("add", ".")
+	git("commit", "-m", "initial: project scaffold")
+
+	// Seed commit 2: add more files
+	writeFile("internal/util.go", "package internal\n\nfunc Add(a, b int) int { return a + b }\n")
+	writeFile("internal/util_test.go", "package internal\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal(\"bad\")\n\t}\n}\n")
+	git("add", ".")
+	git("commit", "-m", "feat: add util package")
+
+	// Seed commit 3: update readme
+	writeFile("README.md", "# My Repo\n\nA test repository for ww integration tests.\n\n## Usage\n\nRun `go run main.go`\n")
+	git("add", ".")
+	git("commit", "-m", "docs: update readme with usage")
+
+	// Create an existing branch (for TestCreateExistingBranch)
+	git("branch", "feat/existing")
+
 	return repo
 }
 
@@ -53,6 +90,13 @@ func runWW(t *testing.T, dir string, args ...string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+func writeConfig(t *testing.T, repo, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestVersionCommand(t *testing.T) {
@@ -68,14 +112,7 @@ func TestVersionCommand(t *testing.T) {
 
 func TestCreateAndList(t *testing.T) {
 	repo := setupTestRepo(t)
-
-	// Create a worktree (no remote, so we need to specify base)
-	// Without origin/HEAD, it will fail, so let's create a branch manually first
-	// and use the config to set default_base
-	cfgContent := `default_base = "main"`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeConfig(t, repo, `default_base = "main"`)
 
 	out, err := runWW(t, repo, "create", "feat/test-branch")
 	if err != nil {
@@ -85,10 +122,15 @@ func TestCreateAndList(t *testing.T) {
 		t.Errorf("unexpected create output: %s", out)
 	}
 
-	// Verify worktree was created
+	// Verify worktree directory exists
 	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-test-branch")
 	if _, err := os.Stat(wtPath); err != nil {
 		t.Errorf("worktree directory not created at %s", wtPath)
+	}
+
+	// Verify the worktree contains repo files (inherited from main)
+	if _, err := os.Stat(filepath.Join(wtPath, "go.mod")); err != nil {
+		t.Error("worktree should contain go.mod from main branch")
 	}
 
 	// List worktrees
@@ -103,11 +145,7 @@ func TestCreateAndList(t *testing.T) {
 
 func TestListJSON(t *testing.T) {
 	repo := setupTestRepo(t)
-
-	cfgContent := `default_base = "main"`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeConfig(t, repo, `default_base = "main"`)
 
 	if _, err := runWW(t, repo, "create", "feat/json-test"); err != nil {
 		t.Fatal(err)
@@ -118,8 +156,11 @@ func TestListJSON(t *testing.T) {
 		t.Fatalf("ww list --json: %v\n%s", err, out)
 	}
 
-	// Each line should be valid JSON
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 NDJSON lines (main + worktree), got %d", len(lines))
+	}
+	for _, line := range lines {
 		if line == "" {
 			continue
 		}
@@ -127,16 +168,15 @@ func TestListJSON(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &obj); err != nil {
 			t.Errorf("invalid JSON line: %s\nerror: %v", line, err)
 		}
+		if _, ok := obj["path"]; !ok {
+			t.Errorf("JSON object missing 'path' field: %s", line)
+		}
 	}
 }
 
 func TestCreateDryRun(t *testing.T) {
 	repo := setupTestRepo(t)
-
-	cfgContent := `default_base = "main"`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeConfig(t, repo, `default_base = "main"`)
 
 	out, err := runWW(t, repo, "create", "--dry-run", "feat/dry-test")
 	if err != nil {
@@ -155,11 +195,7 @@ func TestCreateDryRun(t *testing.T) {
 
 func TestRemoveWorktree(t *testing.T) {
 	repo := setupTestRepo(t)
-
-	cfgContent := `default_base = "main"`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeConfig(t, repo, `default_base = "main"`)
 
 	if _, err := runWW(t, repo, "create", "feat/to-remove"); err != nil {
 		t.Fatal(err)
@@ -172,15 +208,17 @@ func TestRemoveWorktree(t *testing.T) {
 	if !strings.Contains(out, "Removed worktree") {
 		t.Errorf("unexpected remove output: %s", out)
 	}
+
+	// Verify worktree directory is gone
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-to-remove")
+	if _, err := os.Stat(wtPath); err == nil {
+		t.Error("worktree directory should be removed")
+	}
 }
 
 func TestInvalidBranchName(t *testing.T) {
 	repo := setupTestRepo(t)
-
-	cfgContent := `default_base = "main"`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeConfig(t, repo, `default_base = "main"`)
 
 	out, err := runWW(t, repo, "create", "-starts-with-dash")
 	if err == nil {
@@ -191,40 +229,33 @@ func TestInvalidBranchName(t *testing.T) {
 func TestZeroConfig(t *testing.T) {
 	repo := setupTestRepo(t)
 
-	// No .ww.toml, but we need a default base. Without remote, default_branch will fail.
-	// This tests that zero-config mode attempts to detect default branch and gives a clear error.
+	// No .ww.toml — without a remote, default branch detection fails.
+	// This tests that zero-config mode gives a clear error (not a panic).
 	_, err := runWW(t, repo, "create", "feat/zero-config")
 	if err == nil {
-		// Without a remote, this should fail with a clear error about default branch detection
 		t.Log("zero-config create succeeded (repo has remote)")
 	}
-	// Either way, the command should not panic
 }
 
 func TestCopyFiles(t *testing.T) {
 	repo := setupTestRepo(t)
 
-	// Create a file to copy
 	envContent := "SECRET=test123"
 	if err := os.WriteFile(filepath.Join(repo, ".env"), []byte(envContent), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfgContent := `
+	writeConfig(t, repo, `
 default_base = "main"
 copy_files = [".env"]
-`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+`)
 
 	if _, err := runWW(t, repo, "create", "feat/copy-test"); err != nil {
 		t.Fatal(err)
 	}
 
 	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-copy-test")
-	copiedEnv := filepath.Join(wtPath, ".env")
-	data, err := os.ReadFile(copiedEnv)
+	data, err := os.ReadFile(filepath.Join(wtPath, ".env"))
 	if err != nil {
 		t.Fatalf("copied .env not found: %v", err)
 	}
@@ -236,27 +267,22 @@ copy_files = [".env"]
 func TestSymlinkFiles(t *testing.T) {
 	repo := setupTestRepo(t)
 
-	// Create a directory to symlink
 	nmDir := filepath.Join(repo, "node_modules", "pkg")
 	if err := os.MkdirAll(nmDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 
-	cfgContent := `
+	writeConfig(t, repo, `
 default_base = "main"
 symlink_files = ["node_modules"]
-`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+`)
 
 	if _, err := runWW(t, repo, "create", "feat/symlink-test"); err != nil {
 		t.Fatal(err)
 	}
 
 	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-symlink-test")
-	link := filepath.Join(wtPath, "node_modules")
-	fi, err := os.Lstat(link)
+	fi, err := os.Lstat(filepath.Join(wtPath, "node_modules"))
 	if err != nil {
 		t.Fatalf("symlink not found: %v", err)
 	}
@@ -268,13 +294,10 @@ symlink_files = ["node_modules"]
 func TestPostCreateHook(t *testing.T) {
 	repo := setupTestRepo(t)
 
-	cfgContent := `
+	writeConfig(t, repo, `
 default_base = "main"
 post_create_hook = "echo hook-ran > hook-output.txt"
-`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
+`)
 
 	if _, err := runWW(t, repo, "create", "feat/hook-test"); err != nil {
 		t.Fatal(err)
@@ -292,25 +315,20 @@ post_create_hook = "echo hook-ran > hook-output.txt"
 
 func TestCreateExistingBranch(t *testing.T) {
 	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
 
-	cfgContent := `default_base = "main"`
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(cfgContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a branch without a worktree
-	cmd := exec.Command("git", "branch", "feat/existing")
-	cmd.Dir = repo
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git branch: %v\n%s", err, out)
-	}
-
-	// Now create a worktree for the existing branch
+	// feat/existing was created by setupTestRepo
 	out, err := runWW(t, repo, "create", "feat/existing")
 	if err != nil {
 		t.Fatalf("ww create existing branch: %v\n%s", err, out)
 	}
 	if !strings.Contains(out, "Created worktree") {
 		t.Errorf("unexpected output: %s", out)
+	}
+
+	// Verify the worktree has the repo content
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-existing")
+	if _, err := os.Stat(filepath.Join(wtPath, "main.go")); err != nil {
+		t.Error("worktree for existing branch should contain main.go")
 	}
 }
