@@ -120,7 +120,7 @@ func newManager() (*worktree.Manager, error) {
 	}
 
 	runner := &git.Runner{Dir: dir}
-	repoTop, err := runner.Run("rev-parse", "--show-toplevel")
+	mainDir, err := runner.MainWorktreeDir()
 	if err != nil {
 		return nil, fmt.Errorf("not a git repository: %w", err)
 	}
@@ -128,7 +128,7 @@ func newManager() (*worktree.Manager, error) {
 	return &worktree.Manager{
 		Git:     runner,
 		Config:  cfg,
-		RepoDir: repoTop,
+		RepoDir: mainDir,
 	}, nil
 }
 

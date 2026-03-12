@@ -96,14 +96,22 @@ Fetch from origin:
 git fetch origin
 ```
 
+#### `MainWorktreeDir() (string, error)`
+
+Get the absolute path of the main working tree (the original repo checkout). This works correctly even when called from inside a secondary worktree:
+```
+git rev-parse --path-format=absolute --git-common-dir
+```
+
+Returns the parent directory of the result (the `.git` dir's parent is the repo root).
+
+This is critical for correct behavior: `ww` must always resolve back to the main working tree for computing worktree paths and the repo name, regardless of which worktree the user is currently in.
+
 #### `RepoName() (string, error)`
 
-Get the repository name from the toplevel directory:
-```
-git rev-parse --show-toplevel
-```
+Get the repository name. Uses `MainWorktreeDir()` internally to ensure the correct name is returned even from a secondary worktree.
 
-Returns the basename of the result.
+Returns the basename of the main working tree path.
 
 ## Error Handling
 

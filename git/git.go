@@ -137,11 +137,24 @@ func (r *Runner) Fetch() error {
 	return err
 }
 
-// RepoName returns the repository directory name.
-func (r *Runner) RepoName() (string, error) {
-	out, err := r.Run("rev-parse", "--show-toplevel")
+// MainWorktreeDir returns the absolute path of the main working tree.
+// This works correctly even when called from inside a secondary worktree.
+func (r *Runner) MainWorktreeDir() (string, error) {
+	out, err := r.Run("rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
 		return "", err
 	}
-	return filepath.Base(out), nil
+	// --git-common-dir returns the .git directory; parent is the repo root
+	return filepath.Dir(out), nil
+}
+
+// RepoName returns the repository directory name.
+// Uses the main working tree to determine the name, so it returns the
+// correct name even when called from a secondary worktree.
+func (r *Runner) RepoName() (string, error) {
+	dir, err := r.MainWorktreeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(dir), nil
 }

@@ -359,6 +359,48 @@ func TestHelpFlag(t *testing.T) {
 	}
 }
 
+func TestRunFromWorktreeDir(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	// Create a worktree
+	out, err := runWW(t, repo, "create", "feat/first")
+	if err != nil {
+		t.Fatalf("ww create: %v\n%s", err, out)
+	}
+
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-first")
+
+	// Now run ww from INSIDE the worktree directory.
+	// Config in the main repo isn't reachable via upward search from the
+	// sibling worktree, so write it to the parent dir (shared by both).
+	writeConfig(t, filepath.Dir(repo), `default_base = "main"`)
+
+	// Create a second worktree — should resolve back to the main repo
+	out, err = runWW(t, wtPath, "create", "feat/second")
+	if err != nil {
+		t.Fatalf("ww create from worktree: %v\n%s", err, out)
+	}
+
+	// The second worktree should be a sibling of the main repo, not the first worktree
+	secondWtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-second")
+	if _, err := os.Stat(secondWtPath); err != nil {
+		t.Errorf("second worktree should be at %s (sibling of main repo), not relative to first worktree", secondWtPath)
+	}
+
+	// List from inside a worktree should show all worktrees
+	out, err = runWW(t, wtPath, "list")
+	if err != nil {
+		t.Fatalf("ww list from worktree: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "(main worktree)") {
+		t.Errorf("list from worktree should mark main worktree: %s", out)
+	}
+	if !strings.Contains(out, "feat/first") || !strings.Contains(out, "feat/second") {
+		t.Errorf("list from worktree should show all worktrees: %s", out)
+	}
+}
+
 func TestCreateExistingBranch(t *testing.T) {
 	repo := setupTestRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
