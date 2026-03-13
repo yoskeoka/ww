@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -37,6 +38,10 @@ func (r *Runner) Run(args ...string) (string, error) {
 	}
 	out, err := cmd.Output()
 	if err != nil {
+		var pathErr *exec.Error
+		if errors.As(err, &pathErr) {
+			return "", fmt.Errorf("git not found in PATH: install git and try again")
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return "", fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, string(exitErr.Stderr))
 		}

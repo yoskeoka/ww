@@ -2,7 +2,14 @@
 
 ## Overview
 
-`ww` is a git worktree manager CLI. It follows a custom subcommand dispatch pattern with `pflag` for POSIX-style flags.
+`ww` is a git worktree manager CLI. It uses a subcommand dispatch pattern with POSIX-style `--flag` syntax.
+
+## Prerequisites
+
+- `git` must be available in PATH. If not found, `ww` exits with a clear error: `git not found in PATH`.
+- `ww` must be run inside a git repository (or a worktree of one). If not, `ww` exits with: `not a git repository`.
+
+When run from a secondary worktree, `ww` resolves back to the main working tree for all path computations. This means all commands work identically regardless of which worktree the user is in.
 
 ## Global Flags
 
@@ -77,8 +84,9 @@ PATH                                  BRANCH              HEAD
 Remove the worktree for the given branch and optionally delete the branch.
 
 **Behavior:**
-1. Remove the git worktree.
-2. Delete the branch (default behavior). The branch is always deleted unless it is the current branch of the main worktree.
+1. Verify the worktree exists. If not, return an error.
+2. Remove the git worktree.
+3. Delete the branch (default behavior). The branch is always deleted unless it is the current branch of the main worktree.
 
 **Flags:**
 | Flag | Type | Default | Description |

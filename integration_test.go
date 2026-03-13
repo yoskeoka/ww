@@ -240,6 +240,18 @@ func TestZeroConfig(t *testing.T) {
 	}
 }
 
+func TestNonGitDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	out, err := runWW(t, dir, "list")
+	if err == nil {
+		t.Fatalf("expected error in non-git dir, got: %s", out)
+	}
+	if !strings.Contains(out, "not a git repository") {
+		t.Errorf("error should mention 'not a git repository': %s", out)
+	}
+}
+
 func TestCopyFiles(t *testing.T) {
 	repo := setupTestRepo(t)
 
