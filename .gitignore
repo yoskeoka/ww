@@ -1,0 +1,10 @@
+# Go binaries (only the built binary at repo root)
+/ww
+/cmd/ww/ww
+*.exe
+
+# Build output
+/dist/
+
+# OS files
+.DS_Store

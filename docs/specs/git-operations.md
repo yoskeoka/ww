@@ -1,0 +1,83 @@
+# Git Operations Specification
+
+## Overview
+
+`ww` wraps the `git` CLI for all git operations. All operations are performed by shelling out to `git`, not via a library. This maximizes compatibility with any git version and configuration.
+
+## Prerequisites
+
+`git` must be available in PATH. If not found, `ww` reports a clear error and exits.
+
+## Main Working Tree Resolution
+
+`ww` must always resolve back to the **main working tree** for path computations, regardless of which worktree the user is in. This is achieved via:
+
+```
+git rev-parse --path-format=absolute --git-common-dir
+```
+
+This returns the shared `.git` directory; its parent is the main working tree root. The repository name is derived from this path.
+
+## Operations
+
+### Worktree Management
+
+**Create worktree with new branch:**
+```
+git worktree add -b <branch> <path> <base>
+```
+
+**Create worktree for existing branch:**
+```
+git worktree add <path> <branch>
+```
+
+**List all worktrees (porcelain format):**
+```
+git worktree list --porcelain
+```
+
+The output is parsed into structured entries. The first entry is always the main working tree and is marked accordingly. Each entry contains: path, HEAD (abbreviated), branch name, bare flag, and main worktree flag.
+
+**Remove worktree:**
+```
+git worktree remove <path>
+```
+
+### Branch Operations
+
+**Delete branch (safe):**
+```
+git branch -d <branch>
+```
+
+Uses `-d` (safe delete) to prevent deleting unmerged branches. If the branch has unmerged work, git refuses and the error is surfaced to the user.
+
+**Check branch existence:**
+```
+git rev-parse --verify refs/heads/<branch>
+```
+
+**Detect default branch:**
+```
+git symbolic-ref refs/remotes/origin/HEAD
+```
+
+Extracts the branch name (e.g., `refs/remotes/origin/main` → `origin/main`). Falls back to config `default_base` if origin/HEAD is not set.
+
+### Other
+
+**Fetch from origin:**
+```
+git fetch origin
+```
+
+## Error Handling
+
+All git errors include:
+- The git command that was run
+- The stderr output from git
+
+Errors are wrapped with context to make debugging straightforward.
+
+When `git` is not found in PATH, the error message must clearly state that git is required rather than showing a raw exec error.
