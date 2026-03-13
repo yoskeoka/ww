@@ -21,7 +21,7 @@ validate/         # Public: branch name and path validation
 internal/config/  # Internal: .ww.toml loader
 docs/specs/       # Behavioral specs (no implementation details)
 docs/exec-plan/   # Execution plans (todo/ and done/)
-docs/issues/      # Known issues with GitHub issue links
+docs/issues/      # Known issues
 ```
 
 **Public vs internal:** `git/`, `worktree/`, `validate/` are importable as a library. `internal/config/` is ww-specific. See [#5](https://github.com/yoskeoka/ww/issues/5) for a known coupling issue.
