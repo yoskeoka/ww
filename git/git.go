@@ -81,7 +81,11 @@ func parseWorktreeList(output string) []WorktreeEntry {
 		case strings.HasPrefix(line, "worktree "):
 			current = WorktreeEntry{Path: strings.TrimPrefix(line, "worktree ")}
 		case strings.HasPrefix(line, "HEAD "):
-			current.Head = strings.TrimPrefix(line, "HEAD ")[:7]
+			hash := strings.TrimPrefix(line, "HEAD ")
+			if len(hash) > 7 {
+				hash = hash[:7]
+			}
+			current.Head = hash
 		case strings.HasPrefix(line, "branch "):
 			ref := strings.TrimPrefix(line, "branch ")
 			current.Branch = strings.TrimPrefix(ref, "refs/heads/")

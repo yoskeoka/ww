@@ -114,15 +114,15 @@ func newManager() (*worktree.Manager, error) {
 		return nil, err
 	}
 
-	cfg, err := config.Load(dir)
-	if err != nil {
-		return nil, fmt.Errorf("loading config: %w", err)
-	}
-
 	runner := &git.Runner{Dir: dir}
 	mainDir, err := runner.MainWorktreeDir()
 	if err != nil {
 		return nil, fmt.Errorf("not a git repository: %w", err)
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
 	return &worktree.Manager{

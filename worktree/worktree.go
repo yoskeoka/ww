@@ -58,11 +58,7 @@ func SanitizeBranch(branch string) string {
 
 // WorktreePath computes the worktree directory path for a branch.
 func (m *Manager) WorktreePath(branch string) (string, error) {
-	repoName, err := m.Git.RepoName()
-	if err != nil {
-		return "", err
-	}
-
+	repoName := filepath.Base(m.RepoDir)
 	dirName := repoName + "@" + SanitizeBranch(branch)
 
 	if m.Config.WorktreeDir != "" {
@@ -293,8 +289,11 @@ func copyFile(src, dst string, mode fs.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, in)
-	return err
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }
