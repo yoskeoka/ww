@@ -328,6 +328,34 @@ post_create_hook = "echo hook-ran > hook-output.txt"
 	}
 }
 
+func TestRemoveMainWorktreeRejected(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	// Try to remove the main worktree — should be rejected
+	out, err := runWW(t, repo, "remove", "main")
+	if err == nil {
+		t.Fatalf("expected error when removing main worktree, got: %s", out)
+	}
+	if !strings.Contains(out, "cannot remove the main worktree") {
+		t.Errorf("error should say 'cannot remove the main worktree': %s", out)
+	}
+}
+
+func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	// Even dry-run should reject removing the main worktree
+	out, err := runWW(t, repo, "remove", "--dry-run", "main")
+	if err == nil {
+		t.Fatalf("expected error when dry-run removing main worktree, got: %s", out)
+	}
+	if !strings.Contains(out, "cannot remove the main worktree") {
+		t.Errorf("error should say 'cannot remove the main worktree': %s", out)
+	}
+}
+
 func TestRemoveNonexistentWorktree(t *testing.T) {
 	repo := setupTestRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
