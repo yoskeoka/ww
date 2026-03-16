@@ -46,7 +46,7 @@ safe-outputs:
             script: |
               const fs = require('fs');
               const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
-              const items = output.items.filter(i => i.type === 'submit-pr-review');
+              const items = output.items.filter(i => i.type === 'submit_pr_review');
               for (const item of items) {
                 await github.rest.pulls.createReview({
                   owner: context.repo.owner,
