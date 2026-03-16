@@ -10,10 +10,10 @@ test:
 
 lint:
 	go vet ./...
-	@test -z "$$(go tool goimports -l .)" || (echo "goimports check failed:"; go tool goimports -l .; exit 1)
+	@test -z "$$(go tool goimports -local github.com/yoskeoka/ww -l .)" || (echo "goimports check failed:"; go tool goimports -local github.com/yoskeoka/ww -l .; exit 1)
 
 fmt:
-	go tool goimports -w .
+	go tool goimports -local github.com/yoskeoka/ww -w .
 
 clean:
 	rm -f ww
