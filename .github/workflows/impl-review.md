@@ -4,8 +4,8 @@ on:
     types: [opened, synchronize]
     paths:
       - "docs/exec-plan/done/**"
-      - "*.go"
-      - "**/*.go"
+
+
 
 permissions:
   contents: read
