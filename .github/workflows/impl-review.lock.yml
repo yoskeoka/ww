@@ -22,21 +22,18 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"a7baca079a9eef051bd0e1357c0352c81b38dd107af416096c4d0183dd065e19","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"51cceb827f37da5c8729bee5af106205669e7baa391e5919c34b9fcdc7e8d631","compiler_version":"v0.59.0","strict":true}
 
 name: "Implementation Review"
 "on":
   pull_request:
     paths:
     - docs/exec-plan/done/**
-    - "*.go"
-    - "**/*.go"
     types:
     - opened
     - synchronize
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: "gh-aw-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}"
@@ -951,7 +948,6 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: read
-      discussions: write
       issues: write
       pull-requests: write
     concurrency:
@@ -1076,7 +1072,6 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: read
-      discussions: write
       issues: write
       pull-requests: write
     timeout-minutes: 15

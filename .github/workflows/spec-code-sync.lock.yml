@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"ce79de06413326fab6193e34c388bea36d9d5f218b2739d1dfeaf2aa9eaa6b0c","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"ca2db3f8ae5c674e913b9a0c20c45250de76ec39e6a23e2223501c08e80ff816","compiler_version":"v0.59.0","strict":true}
 
 name: "Spec/Code Sync Check"
 "on":
@@ -38,8 +38,7 @@ name: "Spec/Code Sync Check"
     - opened
     - synchronize
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: "gh-aw-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}"
@@ -954,7 +953,6 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: read
-      discussions: write
       issues: write
       pull-requests: write
     concurrency:
@@ -1079,7 +1077,6 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: read
-      discussions: write
       issues: write
       pull-requests: write
     timeout-minutes: 15
