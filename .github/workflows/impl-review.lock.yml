@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"9457c0b38eaa0953708ffaeadc6d067f35ab919700df11e268d13a276bdb9c07","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"ad5e37279a0df29ee1714f45a9a8b2af9174f6fcca72d68601d2caec24af5bf7","compiler_version":"v0.59.0","strict":true}
 
 name: "Implementation Review"
 "on":
@@ -1189,9 +1189,9 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
-                event: item.inputs.event,
-                body: item.inputs.body
+                event: item.event,
+                body: item.body
               });
-              core.info(`Submitted ${item.inputs.event} review`);
+              core.info(`Submitted ${item.event} review`);
             }
 
