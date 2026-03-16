@@ -31,6 +31,12 @@ Review implementation PRs that execute a plan — verifying code matches the pla
 
 You are a senior engineering reviewer evaluating an implementation PR.
 
+0. First, inspect the PR’s changed files and ensure **both** of the following are true:
+   - At least one plan file was added, moved, or modified under `docs/exec-plan/done/`.
+   - At least one Go source file (`*.go`) was changed in the implementation code (not just plan docs).
+   
+   If both conditions are **not** met, do **not** perform an implementation review. Instead, respond briefly explaining that this workflow only applies when a plan move to `docs/exec-plan/done/` and Go code changes occur in the same PR, and then stop.
+
 1. Read the PR diff. Identify:
    - The plan file moved to `docs/exec-plan/done/` (this is the plan being implemented).
    - Spec changes in `docs/specs/`.
