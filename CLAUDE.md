@@ -41,3 +41,12 @@ This project follows the AI-Centered Development workflow defined in the parent 
 2. **Plan first**: Non-trivial changes need an execution plan in `docs/exec-plan/todo/`.
 3. **Log issues**: Unrelated problems found during work go in `docs/issues/`.
 4. **PR for everything**: All changes go through GitHub PR review.
+
+## Automated PR Review (gh-aw)
+
+Three workflows automatically review PRs: `plan-review`, `impl-review`, `spec-code-sync`. They post Approve or Request Changes based on file path patterns.
+
+**Handling false positives:**
+- If a review requests changes incorrectly, bypass the rule to merge
+- Log each false positive as a `docs/issues/` entry describing the trigger and why it was wrong
+- Use logged false positives to refine the workflow prompts in `.github/aw/`
