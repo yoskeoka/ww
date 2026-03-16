@@ -19,7 +19,7 @@ safe-outputs:
   add-comment:
     discussions: false
   jobs:
-    submit-pr-review:
+    submit_pr_review:
       description: "Submit a PR review with Approve or Request Changes"
       runs-on: ubuntu-latest
       permissions:
@@ -41,7 +41,7 @@ safe-outputs:
             script: |
               const fs = require('fs');
               const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
-              const items = output.items.filter(i => i.type === 'submit-pr-review');
+              const items = output.items.filter(i => i.type === 'submit_pr_review');
               for (const item of items) {
                 await github.rest.pulls.createReview({
                   owner: context.repo.owner,
@@ -81,7 +81,7 @@ You are a senior engineering reviewer evaluating an execution plan PR.
 
 ### Submitting Your Review
 
-After making your decision, you MUST submit a formal PR review using the `submit-pr-review` safe output:
+After making your decision, you MUST submit a formal PR review using the `submit_pr_review` safe output:
 
 - Use `event: "APPROVE"` to approve the PR.
 - Use `event: "REQUEST_CHANGES"` to request changes.

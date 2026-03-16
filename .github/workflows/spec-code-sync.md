@@ -24,7 +24,7 @@ safe-outputs:
   add-comment:
     discussions: false
   jobs:
-    submit-pr-review:
+    submit_pr_review:
       description: "Submit a PR review with Approve or Request Changes"
       runs-on: ubuntu-latest
       permissions:
@@ -91,7 +91,7 @@ You are a reviewer checking spec-code synchronization.
 
 ### Submitting Your Review
 
-After making your decision, you MUST submit a formal PR review using the `submit-pr-review` safe output:
+After making your decision, you MUST submit a formal PR review using the `submit_pr_review` safe output:
 
 - Use `event: "APPROVE"` to approve the PR.
 - Use `event: "REQUEST_CHANGES"` to request changes.

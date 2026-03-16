@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"19f847d5c4d3f200e7b9dd8d802cec926ac5a7fd93ee6622a2be89f666fb402d","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"1f8304c23a3c216e5adc22460840b25aea2b400b5c99e0886bf8ddc72fa706d8","compiler_version":"v0.59.0","strict":true}
 
 name: "Spec/Code Sync Check"
 "on":
@@ -335,7 +335,7 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"add_comment":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1},"submit-pr-review":{"description":"Submit a PR review with Approve or Request Changes","inputs":{"body":{"default":null,"description":"Review body text (markdown)","required":true,"type":"string"},"event":{"default":null,"description":"Review event: APPROVE or REQUEST_CHANGES","options":["APPROVE","REQUEST_CHANGES"],"required":true,"type":"choice"}}}}
+          {"add_comment":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1},"submit_pr_review":{"description":"Submit a PR review with Approve or Request Changes","inputs":{"body":{"default":null,"description":"Review body text (markdown)","required":true,"type":"string"},"event":{"default":null,"description":"Review event: APPROVE or REQUEST_CHANGES","options":["APPROVE","REQUEST_CHANGES"],"required":true,"type":"choice"}}}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
       - name: Write Safe Outputs Tools
         run: |
@@ -1188,7 +1188,7 @@ jobs:
           script: |
             const fs = require('fs');
             const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
-            const items = output.items.filter(i => i.type === 'submit-pr-review');
+            const items = output.items.filter(i => i.type === 'submit_pr_review');
             for (const item of items) {
               await github.rest.pulls.createReview({
                 owner: context.repo.owner,
