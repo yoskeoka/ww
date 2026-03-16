@@ -13,7 +13,7 @@ permissions:
 
 tools:
   github:
-    toolsets: [context, pull_requests]
+    toolsets: [context, repos, pull_requests]
 
 network: defaults
 
@@ -34,9 +34,9 @@ You are a senior engineering reviewer evaluating an implementation PR.
    - The plan file moved to `docs/exec-plan/done/` (this is the plan being implemented).
    - Spec changes in `docs/specs/`.
    - Code changes.
-2. Read the plan file to understand the intended changes and sub-tasks.
-3. Read the spec files listed as change targets in the plan.
-4. Use `docs/spec-code-mapping.md` to understand which specs map to which code directories.
+2. Read the plan file to understand the intended changes and sub-tasks. If the plan file content is not in the diff (e.g. it was renamed without modification), use `get_file_contents` to read it directly from the repository at `docs/exec-plan/done/`.
+3. Read the spec files listed as change targets in the plan. Use `get_file_contents` to read spec files from `docs/specs/` as needed.
+4. Use `get_file_contents` to read `docs/spec-code-mapping.md` to understand which specs map to which code directories.
 
 ### Review Criteria
 

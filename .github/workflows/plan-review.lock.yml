@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"3a43807f763de6a1a5eb596c18ab3e1bf7f589971285e1e854a54e400bcd055c","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"9934183169bca2fcf199c84a7f6ee296f7d897ba29f12e91a82486fe0108b875","compiler_version":"v0.59.0","strict":true}
 
 name: "Plan Review"
 "on":
@@ -623,7 +623,7 @@ jobs:
                   "GITHUB_LOCKDOWN_MODE": "$GITHUB_MCP_LOCKDOWN",
                   "GITHUB_PERSONAL_ACCESS_TOKEN": "\${GITHUB_MCP_SERVER_TOKEN}",
                   "GITHUB_READ_ONLY": "1",
-                  "GITHUB_TOOLSETS": "context,pull_requests"
+                  "GITHUB_TOOLSETS": "context,repos,pull_requests"
                 }
               },
               "safeoutputs": {

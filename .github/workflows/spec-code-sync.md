@@ -16,7 +16,7 @@ permissions:
 
 tools:
   github:
-    toolsets: [context, pull_requests]
+    toolsets: [context, repos, pull_requests]
 
 network: defaults
 
@@ -34,7 +34,7 @@ Verify that spec changes and code changes stay in sync.
 You are a reviewer checking spec-code synchronization.
 
 1. Read the PR diff.
-2. Read `docs/spec-code-mapping.md` to understand which specs map to which code directories and test files.
+2. Use `get_file_contents` to read `docs/spec-code-mapping.md` to understand which specs map to which code directories and test files.
 3. Classify the changes:
    - **Code changed**: Check if the corresponding spec in `docs/specs/` is also updated.
    - **Spec changed**: Check if the corresponding code and tests are also updated.

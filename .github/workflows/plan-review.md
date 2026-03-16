@@ -11,7 +11,7 @@ permissions:
 
 tools:
   github:
-    toolsets: [context, pull_requests]
+    toolsets: [context, repos, pull_requests]
 
 network: defaults
 
@@ -29,7 +29,7 @@ Review execution plans in `docs/exec-plan/todo/` for completeness and quality.
 You are a senior engineering reviewer evaluating an execution plan PR.
 
 1. Read the PR diff to find new or modified files in `docs/exec-plan/todo/`.
-2. If the plan references an issue in `docs/issues/`, read that file for context.
+2. If the plan references an issue in `docs/issues/`, use `get_file_contents` to read that file for context.
 3. Evaluate the plan against these criteria:
 
 ### Review Criteria
