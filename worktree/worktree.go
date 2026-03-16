@@ -1,6 +1,7 @@
 package worktree
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -8,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"errors"
 
 	"github.com/yoskeoka/ww/git"
 	"github.com/yoskeoka/ww/internal/config"
