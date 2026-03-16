@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yoskeoka/ww/internal/config"
 	"github.com/yoskeoka/ww/git"
+	"github.com/yoskeoka/ww/internal/config"
 	"github.com/yoskeoka/ww/validate"
 )
 
