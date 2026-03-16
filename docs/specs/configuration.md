@@ -40,7 +40,8 @@ post_create_hook = "npm install"
 2. Look for `.ww.toml` in the current directory.
 3. If not found, move to the parent directory and repeat.
 4. Stop at the filesystem root.
-5. If no file is found, use defaults.
+5. If not found via upward search, check caller-provided fallback directories (e.g., the main worktree's root directory).
+6. If no file is found, use defaults.
 
 ## Worktree Path Layout
 

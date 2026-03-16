@@ -73,3 +73,78 @@ func TestLoadSearchUpward(t *testing.T) {
 		t.Errorf("WorktreeDir = %q, want found", cfg.WorktreeDir)
 	}
 }
+
+func TestLoadFallbackDir(t *testing.T) {
+	// startDir has no config, but fallback dir does
+	startDir := t.TempDir()
+	fallbackDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(fallbackDir, FileName), []byte(`worktree_dir = "from-fallback"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(startDir, fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-fallback" {
+		t.Errorf("WorktreeDir = %q, want from-fallback", cfg.WorktreeDir)
+	}
+}
+
+func TestUpwardSearchTakesPriorityOverFallback(t *testing.T) {
+	parentDir := t.TempDir()
+	startDir := filepath.Join(parentDir, "sub")
+	if err := os.MkdirAll(startDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	fallbackDir := t.TempDir()
+
+	// Config in parent (found via upward search)
+	if err := os.WriteFile(filepath.Join(parentDir, FileName), []byte(`worktree_dir = "from-parent"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Config in fallback dir
+	if err := os.WriteFile(filepath.Join(fallbackDir, FileName), []byte(`worktree_dir = "from-fallback"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(startDir, fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-parent" {
+		t.Errorf("WorktreeDir = %q, want from-parent (upward search should win)", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadFallbackDirWithoutConfig(t *testing.T) {
+	startDir := t.TempDir()
+	fallbackDir := t.TempDir() // no .ww.toml here
+
+	cfg, err := Load(startDir, fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "" {
+		t.Errorf("WorktreeDir = %q, want empty (default)", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadFallbackSkipsEmptyString(t *testing.T) {
+	startDir := t.TempDir()
+	fallbackDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(fallbackDir, FileName), []byte(`worktree_dir = "from-fallback"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty string fallback should be skipped, second fallback should be used
+	cfg, err := Load(startDir, "", fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-fallback" {
+		t.Errorf("WorktreeDir = %q, want from-fallback", cfg.WorktreeDir)
+	}
+}

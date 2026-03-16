@@ -19,9 +19,13 @@ type Config struct {
 }
 
 // Load searches upward from startDir for .ww.toml and parses it.
-// Returns default config if no file is found.
-func Load(startDir string) (*Config, error) {
+// If the upward search fails, it checks each directory in fallbackDirs
+// for .ww.toml. Returns default config if no file is found.
+func Load(startDir string, fallbackDirs ...string) (*Config, error) {
 	path := findConfig(startDir)
+	if path == "" {
+		path = findConfigInDirs(fallbackDirs)
+	}
 	if path == "" {
 		return &Config{}, nil
 	}
@@ -47,4 +51,19 @@ func findConfig(dir string) string {
 		}
 		dir = parent
 	}
+}
+
+// findConfigInDirs checks each directory for .ww.toml, returning the
+// first match. Returns empty string if none found.
+func findConfigInDirs(dirs []string) string {
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, FileName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
 }
