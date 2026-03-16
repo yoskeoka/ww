@@ -2,11 +2,11 @@
 
 ## Objective
 
-Harden `ww remove` by switching from filesystem checks to git as source of truth, and adding a main worktree guard. Resolves two issues:
+Prevent `ww remove` from attempting to remove the main working tree. Today, if a user runs `ww remove main` (or whatever branch the main worktree is on), `Remove()` fails early with a `no worktree found at <repo>@<branch>` error because there is no separate `repo@main` directory. As part of switching `Remove()` to use `git worktree list` as the source of truth, the main worktree would start being discovered as a removable entry and the command would then pass through to `git worktree remove`, which fails with a confusing low-level git error. Add an explicit guard with a clear error message so that, after this change, the main worktree is rejected before we ever invoke `git worktree remove`. Resolves `docs/issues/remove-main-worktree-guard.md`.
 
-- `docs/issues/remove-main-worktree-guard.md` — no guard against removing the main worktree
+**Problem**: Currently, `Remove()` computes the worktree path via `WorktreePath(branch)` and checks `os.Stat(wtPath)` without comparing the resolved path against `Manager.RepoDir`. The main worktree actually lives at `RepoDir`, not at the sibling `repo@branch` layout, so for the main branch `os.Stat(wtPath)` fails (since there's no `repo@main` directory) and `Remove()` returns `no worktree found at <repo>@<branch>` before ever calling `m.Git.WorktreeRemove(...)`. Once we switch to using `git worktree list` as the existence check, the main worktree will appear as an entry, and without an explicit guard we would then call `git worktree remove` on it and surface git's confusing error message instead of a clear, intentional one. We should use `git worktree list` to identify worktrees (including the main one via its `Main` flag), and layer a main-worktree guard on top, rather than relying on path guessing or filesystem failures.
 - `docs/issues/remove-uses-stat-not-git.md` — uses `os.Stat` instead of `git worktree list` for existence check
-
+**Solution**: In `Remove()`, before proceeding, list worktrees via `git worktree list --porcelain`, find the entry for the given branch, and reject if it is the main worktree. This ensures the new git-based implementation does not attempt to remove the main worktree and also partially addresses the `remove-uses-stat-not-git` issue (using git as source of truth instead of `os.Stat`).
 **Problem 1 (main worktree guard)**: `Remove()` never checks whether the target is the main worktree. If a user runs `ww remove main`, git refuses with a confusing error instead of a clear message.
 
 **Problem 2 (stat vs git)**: `Remove()` checks `os.Stat(wtPath)` to verify the worktree exists. If the worktree directory was manually deleted but is still registered in git's worktree list, `ww remove` fails with "no worktree found" instead of cleaning up the stale registration.
