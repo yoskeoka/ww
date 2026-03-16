@@ -10,7 +10,7 @@ Add three gh-aw (GitHub Agentic Workflows) that automatically review PRs based o
 
 - `gh aw` CLI extension installed (`gh extension install github/gh-aw`)
 - Repository initialized for gh-aw (`gh aw init`)
-- CLAUDE.md updated with spec-to-code mapping (see Spec Changes below)
+- `docs/spec-code-mapping.md` created with spec-to-code mapping (see Spec Changes below)
 
 ## Workflows
 
@@ -51,11 +51,11 @@ Add three gh-aw (GitHub Agentic Workflows) that automatically review PRs based o
 
 ### 3. Spec/Code Sync Check
 
-**Trigger**: PR diff includes changes to `docs/specs/` OR code files mapped in CLAUDE.md.
+**Trigger**: PR diff includes changes to `docs/specs/` OR code files mapped in `docs/spec-code-mapping.md`.
 
 **Context provided to reviewer**:
 - The PR diff
-- The spec-to-code mapping from CLAUDE.md
+- The spec-to-code mapping from `docs/spec-code-mapping.md`
 
 **Review criteria**:
 - If code changed: is the corresponding spec updated (or is no spec update needed)?
@@ -66,10 +66,10 @@ Add three gh-aw (GitHub Agentic Workflows) that automatically review PRs based o
 
 ## Spec Changes
 
-Update `CLAUDE.md` to add spec-to-code mapping under Project Structure:
+Create `docs/spec-code-mapping.md` as a standalone mapping file. This file is referenced by gh-aw workflows, GitHub Copilot (via `.github/copilot-instructions.md`), and Claude Code (via CLAUDE.md). Keeping it in one place avoids duplication.
 
-```
-## Spec-to-Code Mapping
+```markdown
+# Spec-to-Code Mapping
 
 | Spec | Code directories | Test files |
 |---|---|---|
@@ -97,22 +97,27 @@ No application code changes. All changes are workflow configuration files.
 ### `.github/workflows/spec-code-sync.md`
 
 - [ ] gh-aw workflow definition for Spec/Code Sync Check
-- [ ] Prompt references CLAUDE.md mapping
+- [ ] Prompt references `docs/spec-code-mapping.md`
 - [ ] Configured to trigger on PRs with `docs/specs/` or mapped code directory changes
 
-### `CLAUDE.md`
+### `docs/spec-code-mapping.md`
 
-- [ ] Add Spec-to-Code Mapping table
+- [ ] Create standalone mapping file with spec-to-code-to-test table
+
+### `.github/copilot-instructions.md`
+
+- [ ] Reference `docs/spec-code-mapping.md` so Copilot automatic review is aware of the mapping
 
 ## Sub-tasks
 
-1. [ ] Update `CLAUDE.md` with spec-to-code mapping table
-2. [ ] Run `gh aw init` if not already initialized
-3. [ ] [parallel] Create `.github/workflows/plan-review.md` and compile
-4. [ ] [parallel] Create `.github/workflows/impl-review.md` and compile
-5. [ ] [parallel] Create `.github/workflows/spec-code-sync.md` and compile
-6. [ ] [depends on: 3, 4, 5] Test each workflow with a dry-run PR
-7. [ ] [depends on: 6] Document false-positive handling process in CLAUDE.md
+1. [ ] Create `docs/spec-code-mapping.md`
+2. [ ] Update `.github/copilot-instructions.md` to reference mapping file
+3. [ ] Run `gh aw init` if not already initialized
+4. [ ] [parallel] Create `.github/workflows/plan-review.md` and compile
+5. [ ] [parallel] Create `.github/workflows/impl-review.md` and compile
+6. [ ] [parallel] Create `.github/workflows/spec-code-sync.md` and compile
+7. [ ] [depends on: 4, 5, 6] Test each workflow with a dry-run PR
+8. [ ] [depends on: 7] Document false-positive handling process in CLAUDE.md
 
 ## Verification
 
@@ -125,5 +130,5 @@ No application code changes. All changes are workflow configuration files.
 ## Design Notes
 
 - gh-aw workflows are defined as Markdown (`.md`) and compiled to YAML lock files (`.lock.yml`). Both are committed to the repo.
-- The workflows are project-agnostic in structure. To port to another project, only the CLAUDE.md mapping table needs to change.
+- The workflows are project-agnostic in structure. To port to another project, only `docs/spec-code-mapping.md` needs to change.
 - False positives are expected during initial rollout. Each one should become a `docs/issues/` entry with the trigger, expected behavior, and actual behavior, to iteratively improve prompts.
