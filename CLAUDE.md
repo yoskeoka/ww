@@ -49,4 +49,4 @@ Three workflows automatically review PRs: `plan-review`, `impl-review`, `spec-co
 **Handling false positives:**
 - If a review requests changes incorrectly, bypass the rule to merge
 - Log each false positive as a `docs/issues/` entry describing the trigger and why it was wrong
-- Use logged false positives to refine the workflow prompts in `.github/aw/`
+- Use logged false positives to refine the workflow prompts in `.github/workflows/*.md`
