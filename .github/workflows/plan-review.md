@@ -17,7 +17,7 @@ network: defaults
 
 safe-outputs:
   add-comment:
-
+    discussions: false
 ---
 
 # Plan Review
