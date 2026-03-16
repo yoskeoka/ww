@@ -158,26 +158,39 @@ func (m *Manager) List() ([]WorktreeInfo, error) {
 }
 
 // Remove removes a worktree and optionally its branch.
+// It uses git worktree list as the source of truth (not os.Stat) and
+// rejects attempts to remove the main worktree with a clear error.
 func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []string, error) {
 	if err := validate.BranchName(branch); err != nil {
 		return nil, nil, err
 	}
 
-	wtPath, err := m.WorktreePath(branch)
+	// Look up the branch in git worktree list output
+	entries, err := m.Git.WorktreeList()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("listing worktrees: %w", err)
 	}
 
-	result := &RemoveResult{Path: wtPath, Branch: branch}
-
-	// Check if worktree directory actually exists
-	if _, err := os.Stat(wtPath); err != nil {
-		return nil, nil, fmt.Errorf("no worktree found at %s", wtPath)
+	var found *git.WorktreeEntry
+	for i := range entries {
+		if entries[i].Branch == branch {
+			found = &entries[i]
+			break
+		}
 	}
+	if found == nil {
+		return nil, nil, fmt.Errorf("no worktree found for branch %q", branch)
+	}
+
+	if found.Main {
+		return nil, nil, fmt.Errorf("cannot remove the main worktree")
+	}
+
+	result := &RemoveResult{Path: found.Path, Branch: branch}
 
 	if opts.DryRun {
 		var dryRunLog []string
-		dryRunLog = append(dryRunLog, fmt.Sprintf("Would remove worktree at %s", wtPath))
+		dryRunLog = append(dryRunLog, fmt.Sprintf("Would remove worktree at %s", found.Path))
 		if !opts.KeepBranch {
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would delete branch %s", branch))
 		}
@@ -186,14 +199,13 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 		return result, dryRunLog, nil
 	}
 
-	if err := m.Git.WorktreeRemove(wtPath); err != nil {
+	if err := m.Git.WorktreeRemove(found.Path); err != nil {
 		return nil, nil, fmt.Errorf("removing worktree: %w", err)
 	}
 	result.Removed = true
 
 	if !opts.KeepBranch {
 		if err := m.Git.BranchDelete(branch); err != nil {
-			// Branch delete failure is not fatal
 			fmt.Fprintf(os.Stderr, "warning: could not delete branch %s: %v\n", branch, err)
 		} else {
 			result.BranchDeleted = true

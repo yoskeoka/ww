@@ -84,9 +84,10 @@ PATH                                  BRANCH              HEAD
 Remove the worktree for the given branch and optionally delete the branch.
 
 **Behavior:**
-1. Verify the worktree exists. If not, return an error.
-2. Remove the git worktree.
-3. Delete the branch (default behavior). The branch is always deleted unless it is the current branch of the main worktree.
+1. Look up the branch in `git worktree list` output. If no worktree entry exists for the branch, return an error: `no worktree found for branch "<branch>"`.
+2. If the matching entry is the main worktree (`Main == true`), reject with error: `cannot remove the main worktree`.
+3. Remove the git worktree using the path from the worktree list entry.
+4. Delete the branch (default behavior). The branch is always deleted unless it is the current branch of the main worktree.
 
 **Flags:**
 | Flag | Type | Default | Description |
