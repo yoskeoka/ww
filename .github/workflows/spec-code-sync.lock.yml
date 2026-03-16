@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"1f8304c23a3c216e5adc22460840b25aea2b400b5c99e0886bf8ddc72fa706d8","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"81a449746a5509fa5ea96b963dbea0988cd3d8f9a66a95c2b1b90a4ae6480f96","compiler_version":"v0.59.0","strict":true}
 
 name: "Spec/Code Sync Check"
 "on":
@@ -1194,9 +1194,9 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
-                event: item.inputs.event,
-                body: item.inputs.body
+                event: item.event,
+                body: item.body
               });
-              core.info(`Submitted ${item.inputs.event} review`);
+              core.info(`Submitted ${item.event} review`);
             }
 

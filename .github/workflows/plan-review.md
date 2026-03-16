@@ -47,10 +47,10 @@ safe-outputs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   pull_number: context.issue.number,
-                  event: item.inputs.event,
-                  body: item.inputs.body
+                  event: item.event,
+                  body: item.body
                 });
-                core.info(`Submitted ${item.inputs.event} review`);
+                core.info(`Submitted ${item.event} review`);
               }
 ---
 
