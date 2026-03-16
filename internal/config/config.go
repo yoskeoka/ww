@@ -57,6 +57,9 @@ func findConfig(dir string) string {
 // first match. Returns empty string if none found.
 func findConfigInDirs(dirs []string) string {
 	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
 		candidate := filepath.Join(dir, FileName)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate

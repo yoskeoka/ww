@@ -118,17 +118,6 @@ func TestUpwardSearchTakesPriorityOverFallback(t *testing.T) {
 	}
 }
 
-func TestLoadNoFallbackReturnsDefaults(t *testing.T) {
-	dir := t.TempDir()
-	cfg, err := Load(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.WorktreeDir != "" {
-		t.Errorf("WorktreeDir = %q, want empty (default)", cfg.WorktreeDir)
-	}
-}
-
 func TestLoadFallbackDirWithoutConfig(t *testing.T) {
 	startDir := t.TempDir()
 	fallbackDir := t.TempDir() // no .ww.toml here
@@ -139,5 +128,23 @@ func TestLoadFallbackDirWithoutConfig(t *testing.T) {
 	}
 	if cfg.WorktreeDir != "" {
 		t.Errorf("WorktreeDir = %q, want empty (default)", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadFallbackSkipsEmptyString(t *testing.T) {
+	startDir := t.TempDir()
+	fallbackDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(fallbackDir, FileName), []byte(`worktree_dir = "from-fallback"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty string fallback should be skipped, second fallback should be used
+	cfg, err := Load(startDir, "", fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-fallback" {
+		t.Errorf("WorktreeDir = %q, want from-fallback", cfg.WorktreeDir)
 	}
 }

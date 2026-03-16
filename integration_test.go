@@ -413,6 +413,30 @@ func TestRunFromWorktreeDir(t *testing.T) {
 	}
 }
 
+func TestConfigFallbackFromWorktree(t *testing.T) {
+	repo := setupTestRepo(t)
+	// Config ONLY in the main repo — not in parent dir
+	writeConfig(t, repo, `default_base = "main"`)
+
+	// Create a worktree from the main repo
+	out, err := runWW(t, repo, "create", "feat/fallback-test")
+	if err != nil {
+		t.Fatalf("ww create: %v\n%s", err, out)
+	}
+
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-fallback-test")
+
+	// Run ww list from inside the worktree — config should be found
+	// via the main worktree fallback (not upward search)
+	out, err = runWW(t, wtPath, "list")
+	if err != nil {
+		t.Fatalf("ww list from worktree (with config fallback): %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "feat/fallback-test") {
+		t.Errorf("list should show the worktree branch: %s", out)
+	}
+}
+
 func TestCreateExistingBranch(t *testing.T) {
 	repo := setupTestRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
