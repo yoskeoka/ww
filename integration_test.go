@@ -484,3 +484,23 @@ func TestCreateExistingBranch(t *testing.T) {
 		t.Error("worktree for existing branch should contain main.go")
 	}
 }
+
+func TestCreateExistingPathRejected(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	// Create a worktree
+	out, err := runWW(t, repo, "create", "feat/dup-test")
+	if err != nil {
+		t.Fatalf("ww create: %v\n%s", err, out)
+	}
+
+	// Try to create again at the same path — should fail with clear message
+	out, err = runWW(t, repo, "create", "feat/dup-test")
+	if err == nil {
+		t.Fatalf("expected error for existing path, got: %s", out)
+	}
+	if !strings.Contains(out, "worktree already exists at") {
+		t.Errorf("error should say 'worktree already exists at': %s", out)
+	}
+}

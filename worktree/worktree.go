@@ -1,6 +1,7 @@
 package worktree
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -86,6 +87,12 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	if err := validate.WorktreePath(wtPath, m.RepoDir); err != nil {
 		return nil, nil, err
+	}
+
+	if _, err := os.Lstat(wtPath); err == nil {
+		return nil, nil, fmt.Errorf("worktree already exists at %s", wtPath)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, fmt.Errorf("cannot access worktree path %s: %w", wtPath, err)
 	}
 
 	branchExists := m.Git.BranchExists(branch)
