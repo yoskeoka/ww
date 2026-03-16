@@ -2,11 +2,16 @@
 
 ## Objective
 
-Prevent `ww remove` from attempting to remove the main working tree. Currently, if a user runs `ww remove main` (or whatever branch the main worktree is on), the command passes through to `git worktree remove` which fails with a confusing error. Add an explicit guard with a clear error message. Resolves `docs/issues/remove-main-worktree-guard.md`.
+Harden `ww remove` by switching from filesystem checks to git as source of truth, and adding a main worktree guard. Resolves two issues:
 
-**Problem**: `Remove()` computes the worktree path via `WorktreePath(branch)` and checks `os.Stat`, but never compares the resolved path against `Manager.RepoDir`. The main worktree lives at `RepoDir`, not at the sibling path layout, so `os.Stat` would actually fail for the main branch (since there's no `repo@main` directory) — but if someone names a branch that collides, or if the path layout changes, this is still a gap. More importantly, we should check against the git worktree list to identify the main worktree by its `main` flag, not by path guessing.
+- `docs/issues/remove-main-worktree-guard.md` — no guard against removing the main worktree
+- `docs/issues/remove-uses-stat-not-git.md` — uses `os.Stat` instead of `git worktree list` for existence check
 
-**Solution**: In `Remove()`, before proceeding, list worktrees via `git worktree list --porcelain`, find the entry for the given branch, and reject if it is the main worktree. This also partially addresses the `remove-uses-stat-not-git` issue (using git as source of truth instead of `os.Stat`).
+**Problem 1 (main worktree guard)**: `Remove()` never checks whether the target is the main worktree. If a user runs `ww remove main`, git refuses with a confusing error instead of a clear message.
+
+**Problem 2 (stat vs git)**: `Remove()` checks `os.Stat(wtPath)` to verify the worktree exists. If the worktree directory was manually deleted but is still registered in git's worktree list, `ww remove` fails with "no worktree found" instead of cleaning up the stale registration.
+
+**Solution**: Replace the `os.Stat` check with a lookup against `git worktree list --porcelain` output. Find the entry matching the given branch, reject if `Main == true`, and use git's recorded path for removal. This solves both issues in one change.
 
 ## Spec Changes
 
@@ -37,9 +42,10 @@ Update `docs/specs/cli-commands.md` section `ww remove <branch>`:
 3. [ ] [parallel] Write unit tests in `worktree/worktree_test.go`
 4. [ ] [depends on: 2, 3] Run `make test && make lint`, fix any failures
 5. [ ] [depends on: 4] Verify with integration test if applicable
+6. [ ] [depends on: 5] Move `docs/issues/remove-main-worktree-guard.md` and `docs/issues/remove-uses-stat-not-git.md` to `docs/issues/done/`
 
 ## Design Notes
 
-- Using `git worktree list` as source of truth (instead of `os.Stat`) aligns with NFR-3 (use git CLI) and partially resolves the `remove-uses-stat-not-git` issue.
+- Using `git worktree list` as source of truth (instead of `os.Stat`) aligns with NFR-3 (use git CLI) and fully resolves the `remove-uses-stat-not-git` issue.
 - The `Main` flag is already parsed by `git.Runner.WorktreeList()` so no new git plumbing is needed.
 - Error message follows existing style: lowercase, no punctuation, descriptive.
