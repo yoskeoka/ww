@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"errors"
 
 	"github.com/yoskeoka/ww/git"
 	"github.com/yoskeoka/ww/internal/config"
@@ -88,8 +89,10 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		return nil, nil, err
 	}
 
-	if _, err := os.Stat(wtPath); err == nil {
+	if _, err := os.Lstat(wtPath); err == nil {
 		return nil, nil, fmt.Errorf("worktree already exists at %s", wtPath)
+	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, fmt.Errorf("cannot access worktree path %s: %w", wtPath, err)
 	}
 
 	branchExists := m.Git.BranchExists(branch)
