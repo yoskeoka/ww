@@ -2,9 +2,7 @@ package config
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -21,13 +19,12 @@ type Config struct {
 }
 
 // Load searches upward from startDir for .ww.toml and parses it.
-// If the upward search fails and startDir is inside a git worktree,
-// it also checks the main worktree's root directory as a fallback.
-// Returns default config if no file is found.
-func Load(startDir string) (*Config, error) {
+// If the upward search fails, it checks each directory in fallbackDirs
+// for .ww.toml. Returns default config if no file is found.
+func Load(startDir string, fallbackDirs ...string) (*Config, error) {
 	path := findConfig(startDir)
 	if path == "" {
-		path = findConfigFromMainWorktree(startDir)
+		path = findConfigInDirs(fallbackDirs)
 	}
 	if path == "" {
 		return &Config{}, nil
@@ -56,22 +53,14 @@ func findConfig(dir string) string {
 	}
 }
 
-// findConfigFromMainWorktree resolves the main worktree directory via git
-// and checks for .ww.toml there. Returns empty string if not in a git repo
-// or if the config file does not exist in the main worktree.
-func findConfigFromMainWorktree(startDir string) string {
-	cmd := exec.Command("git", "rev-parse", "--path-format=absolute", "--git-common-dir")
-	cmd.Dir = startDir
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	gitCommonDir := strings.TrimRight(string(out), "\n")
-	mainWorktreeDir := filepath.Dir(gitCommonDir)
-
-	candidate := filepath.Join(mainWorktreeDir, FileName)
-	if _, err := os.Stat(candidate); err == nil {
-		return candidate
+// findConfigInDirs checks each directory for .ww.toml, returning the
+// first match. Returns empty string if none found.
+func findConfigInDirs(dirs []string) string {
+	for _, dir := range dirs {
+		candidate := filepath.Join(dir, FileName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
 	}
 	return ""
 }

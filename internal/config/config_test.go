@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -75,82 +74,42 @@ func TestLoadSearchUpward(t *testing.T) {
 	}
 }
 
-// initGitRepo initializes a bare-minimum git repo at dir with one commit.
-func initGitRepo(t *testing.T, dir string) {
-	t.Helper()
-	for _, args := range [][]string{
-		{"init"},
-		{"config", "user.email", "test@test.com"},
-		{"config", "user.name", "Test"},
-		{"commit", "--allow-empty", "-m", "init"},
-	} {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
-		}
-	}
-}
+func TestLoadFallbackDir(t *testing.T) {
+	// startDir has no config, but fallback dir does
+	startDir := t.TempDir()
+	fallbackDir := t.TempDir()
 
-func TestLoadFromMainWorktreeFallback(t *testing.T) {
-	// Create a git repo with .ww.toml
-	mainRepo := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(mainRepo, 0755); err != nil {
-		t.Fatal(err)
-	}
-	initGitRepo(t, mainRepo)
-
-	content := `worktree_dir = "from-main"`
-	if err := os.WriteFile(filepath.Join(mainRepo, FileName), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(fallbackDir, FileName), []byte(`worktree_dir = "from-fallback"`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create a sibling worktree
-	wtDir := filepath.Join(filepath.Dir(mainRepo), "repo@feat-x")
-	cmd := exec.Command("git", "worktree", "add", "-b", "feat-x", wtDir, "HEAD")
-	cmd.Dir = mainRepo
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git worktree add failed: %v\n%s", err, out)
-	}
-
-	// Load config from the worktree — should find .ww.toml in main repo
-	cfg, err := Load(wtDir)
+	cfg, err := Load(startDir, fallbackDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.WorktreeDir != "from-main" {
-		t.Errorf("WorktreeDir = %q, want from-main", cfg.WorktreeDir)
+	if cfg.WorktreeDir != "from-fallback" {
+		t.Errorf("WorktreeDir = %q, want from-fallback", cfg.WorktreeDir)
 	}
 }
 
-func TestUpwardSearchTakesPriorityOverMainWorktree(t *testing.T) {
-	// Create a git repo
-	mainRepo := filepath.Join(t.TempDir(), "repo")
-	if err := os.MkdirAll(mainRepo, 0755); err != nil {
+func TestUpwardSearchTakesPriorityOverFallback(t *testing.T) {
+	parentDir := t.TempDir()
+	startDir := filepath.Join(parentDir, "sub")
+	if err := os.MkdirAll(startDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	initGitRepo(t, mainRepo)
+	fallbackDir := t.TempDir()
 
-	// Put .ww.toml in main repo
-	if err := os.WriteFile(filepath.Join(mainRepo, FileName), []byte(`worktree_dir = "from-main"`), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a worktree
-	wtDir := filepath.Join(filepath.Dir(mainRepo), "repo@feat-y")
-	cmd := exec.Command("git", "worktree", "add", "-b", "feat-y", wtDir, "HEAD")
-	cmd.Dir = mainRepo
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git worktree add failed: %v\n%s", err, out)
-	}
-
-	// Put a different .ww.toml in the parent dir (upward search should find this first)
-	parentDir := filepath.Dir(mainRepo)
+	// Config in parent (found via upward search)
 	if err := os.WriteFile(filepath.Join(parentDir, FileName), []byte(`worktree_dir = "from-parent"`), 0644); err != nil {
 		t.Fatal(err)
 	}
+	// Config in fallback dir
+	if err := os.WriteFile(filepath.Join(fallbackDir, FileName), []byte(`worktree_dir = "from-fallback"`), 0644); err != nil {
+		t.Fatal(err)
+	}
 
-	cfg, err := Load(wtDir)
+	cfg, err := Load(startDir, fallbackDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,9 +118,22 @@ func TestUpwardSearchTakesPriorityOverMainWorktree(t *testing.T) {
 	}
 }
 
-func TestFallbackGracefullyReturnsDefaultsOutsideGitRepo(t *testing.T) {
+func TestLoadNoFallbackReturnsDefaults(t *testing.T) {
 	dir := t.TempDir()
 	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "" {
+		t.Errorf("WorktreeDir = %q, want empty (default)", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadFallbackDirWithoutConfig(t *testing.T) {
+	startDir := t.TempDir()
+	fallbackDir := t.TempDir() // no .ww.toml here
+
+	cfg, err := Load(startDir, fallbackDir)
 	if err != nil {
 		t.Fatal(err)
 	}
