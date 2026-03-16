@@ -29,6 +29,7 @@ func TestBranchNameInvalid(t *testing.T) {
 		"has^caret",
 		"has:colon",
 		"has\\backslash",
+		"has*glob",
 		".starts-with-dot",
 		"ends.lock",
 		"has/@{at-brace",

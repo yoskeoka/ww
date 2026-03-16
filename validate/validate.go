@@ -22,6 +22,9 @@ func BranchName(name string) error {
 	if strings.Contains(name, "~") || strings.Contains(name, "^") || strings.Contains(name, ":") {
 		return fmt.Errorf("branch name contains invalid character (~, ^, or :): %q", name)
 	}
+	if strings.Contains(name, "*") {
+		return fmt.Errorf("branch name contains invalid character '*': %q", name)
+	}
 	if strings.Contains(name, " ") || strings.Contains(name, "\\") {
 		return fmt.Errorf("branch name contains space or backslash: %q", name)
 	}
