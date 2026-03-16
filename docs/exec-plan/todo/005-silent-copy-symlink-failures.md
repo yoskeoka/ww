@@ -15,6 +15,7 @@ fmt.Fprintf(os.Stderr, "warning: post-create hook failed: %v\n", err)
 ## Sub-tasks
 
 - [ ] [parallel] **Spec update**: Create `docs/specs/worktree-file-operations.md` documenting copy/symlink error handling behavior (silent skip for `os.IsNotExist`, warning for other errors).
+- [ ] [depends on: Spec update] **Update spec-code mapping**: Add a row to `docs/spec-code-mapping.md` mapping `docs/specs/worktree-file-operations.md` to `worktree/` and `worktree/worktree_test.go`.
 - [ ] [parallel] **Fix `copyFiles()`**: After `copyPath()` fails, check `os.IsNotExist(err)` — if true, `continue`; otherwise `fmt.Fprintf(os.Stderr, "warning: could not copy %s: %v\n", pattern, err)`.
 - [ ] [parallel] **Fix `symlinkFiles()`**: Same pattern — silent skip for missing source, warn for `MkdirAll` and `Symlink` failures.
 - [ ] [depends on: Fix copyFiles, Fix symlinkFiles] **Add unit tests**: Add tests to `worktree/worktree_test.go` covering:
@@ -35,6 +36,7 @@ fmt.Fprintf(os.Stderr, "warning: post-create hook failed: %v\n", err)
 | File | Change |
 |------|--------|
 | `docs/specs/worktree-file-operations.md` | New — document copy/symlink error handling contract |
+| `docs/spec-code-mapping.md` | Add mapping row for `docs/specs/worktree-file-operations.md` → `worktree/`, `worktree/worktree_test.go` |
 
 ## Design Notes
 
