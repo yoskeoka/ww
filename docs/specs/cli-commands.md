@@ -26,8 +26,9 @@ When run from a secondary worktree, `ww` resolves back to the main working tree 
 Create a new worktree for the given branch.
 
 **Behavior:**
-1. If the branch does not exist: create a new branch from `default_base` (config) or `origin/HEAD` and add a worktree for it.
-2. If the branch already exists: add a worktree that checks out the existing branch.
+1. If a worktree directory already exists at the target path, return an error: `worktree already exists at <path>`.
+2. If the branch does not exist: create a new branch from `default_base` (config) or `origin/HEAD` and add a worktree for it.
+3. If the branch already exists: add a worktree that checks out the existing branch.
 3. After worktree creation, copy files listed in `copy_files` config.
 4. Create symlinks for files listed in `symlink_files` config.
 5. Run `post_create_hook` if configured.

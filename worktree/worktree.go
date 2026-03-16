@@ -88,6 +88,10 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		return nil, nil, err
 	}
 
+	if _, err := os.Stat(wtPath); err == nil {
+		return nil, nil, fmt.Errorf("worktree already exists at %s", wtPath)
+	}
+
 	branchExists := m.Git.BranchExists(branch)
 
 	base := m.Config.DefaultBase
