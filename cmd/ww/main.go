@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -90,8 +89,7 @@ func cliMain() int {
 
 func printCommands(w io.Writer, commands []command) {
 	for _, cmd := range commands {
-		padding := strings.Repeat(" ", 14-len(cmd.name))
-		fmt.Fprintf(w, "  %s%s%s\n", cmd.name, padding, cmd.description)
+		fmt.Fprintf(w, "  %-14s%s\n", cmd.name, cmd.description)
 	}
 }
 
