@@ -46,7 +46,16 @@ This project follows the AI-Centered Development workflow defined in the parent 
 
 Three workflows automatically review PRs: `plan-review`, `impl-review`, `spec-code-sync`. They post Approve or Request Changes based on file path patterns.
 
+**Editing agentic workflows:**
+- Source files are `.github/workflows/*.md` — edit these, never the `.lock.yml` files.
+- After editing, always run `gh aw compile` to regenerate lock files.
+- Commit both `.md` and `.lock.yml` changes together.
+
 **Handling false positives:**
 - If a review requests changes incorrectly, bypass the rule to merge
 - Log each false positive as a `docs/issues/` entry describing the trigger and why it was wrong
 - Use logged false positives to refine the workflow prompts in `.github/workflows/*.md`
+
+## Lessons Learned
+
+- **Always pull before pushing on CI-active branches**: Agentic workflows may push commits (e.g., automated fixes) between your commits. Always `git pull --rebase` before pushing to avoid rejected pushes and merge conflicts.
