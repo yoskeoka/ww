@@ -125,8 +125,14 @@ func newManager() (*worktree.Manager, error) {
 	}
 
 	return &worktree.Manager{
-		Git:     runner,
-		Config:  cfg,
+		Git: runner,
+		Config: worktree.Config{
+			WorktreeDir:    cfg.WorktreeDir,
+			DefaultBase:    cfg.DefaultBase,
+			CopyFiles:      cfg.CopyFiles,
+			SymlinkFiles:   cfg.SymlinkFiles,
+			PostCreateHook: cfg.PostCreateHook,
+		},
 		RepoDir: mainDir,
 	}, nil
 }
