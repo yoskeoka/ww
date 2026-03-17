@@ -34,6 +34,10 @@ post_create_hook = "npm install"
 | `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped. |
 | `post_create_hook` | string | `""` | Shell command to run in the new worktree directory after creation. Empty = no hook. |
 
+## Trust Model
+
+`.ww.toml` is treated as **trusted input**, the same trust model as `.gitconfig`. The `post_create_hook` value is passed directly to `sh -c` without sanitization because it is authored by the repository owner. Users should review `.ww.toml` before using an untrusted repository, just as they would review `.gitconfig` aliases.
+
 ## Config Search
 
 1. Start from the current working directory.

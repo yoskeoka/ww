@@ -112,8 +112,13 @@ func parseWorktreeList(output string) []WorktreeEntry {
 }
 
 // WorktreeRemove removes a worktree at the given path.
-func (r *Runner) WorktreeRemove(path string) error {
-	_, err := r.Run("worktree", "remove", path)
+func (r *Runner) WorktreeRemove(path string, force bool) error {
+	args := []string{"worktree", "remove"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, path)
+	_, err := r.Run(args...)
 	return err
 }
 

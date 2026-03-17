@@ -12,6 +12,7 @@ func removeCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" remove", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
+	force := fset.Bool("force", false, "Force removal even if the worktree is dirty")
 	keepBranch := fset.Bool("keep-branch", false, "Do not delete the branch")
 
 	return command{
@@ -37,6 +38,7 @@ func removeCmd() command {
 			}
 
 			result, dryLog, err := mgr.Remove(branch, worktree.RemoveOpts{
+				Force:      *force,
 				KeepBranch: *keepBranch,
 				DryRun:     glOpts.dryRun,
 			})
