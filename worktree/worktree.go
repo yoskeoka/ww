@@ -11,14 +11,24 @@ import (
 	"strings"
 
 	"github.com/yoskeoka/ww/git"
-	"github.com/yoskeoka/ww/internal/config"
 	"github.com/yoskeoka/ww/validate"
 )
+
+// Config holds the configuration values that Manager needs to operate.
+// This is decoupled from the TOML config file format (internal/config)
+// so that library consumers can construct it directly.
+type Config struct {
+	WorktreeDir    string
+	DefaultBase    string
+	CopyFiles      []string
+	SymlinkFiles   []string
+	PostCreateHook string
+}
 
 // Manager coordinates worktree operations.
 type Manager struct {
 	Git     *git.Runner
-	Config  *config.Config
+	Config  Config
 	RepoDir string // absolute path to the main repository
 }
 
