@@ -485,6 +485,63 @@ func TestCreateExistingBranch(t *testing.T) {
 	}
 }
 
+func TestRemoveForceCleanWorktree(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/force-clean"); err != nil {
+		t.Fatal(err)
+	}
+
+	// --force on a clean worktree should succeed
+	out, err := runWW(t, repo, "remove", "--force", "feat/force-clean")
+	if err != nil {
+		t.Fatalf("ww remove --force (clean): %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Removed worktree") {
+		t.Errorf("unexpected output: %s", out)
+	}
+
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-force-clean")
+	if _, err := os.Stat(wtPath); err == nil {
+		t.Error("worktree directory should be removed")
+	}
+}
+
+func TestRemoveForceDirtyWorktree(t *testing.T) {
+	repo := setupTestRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/force-dirty"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make the worktree dirty by adding an uncommitted file
+	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-force-dirty")
+	if err := os.WriteFile(filepath.Join(wtPath, "dirty.txt"), []byte("uncommitted"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without --force, remove should fail on dirty worktree
+	out, err := runWW(t, repo, "remove", "feat/force-dirty")
+	if err == nil {
+		t.Fatalf("expected error removing dirty worktree without --force, got: %s", out)
+	}
+
+	// With --force, remove should succeed
+	out, err = runWW(t, repo, "remove", "--force", "feat/force-dirty")
+	if err != nil {
+		t.Fatalf("ww remove --force (dirty): %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Removed worktree") {
+		t.Errorf("unexpected output: %s", out)
+	}
+
+	if _, err := os.Stat(wtPath); err == nil {
+		t.Error("dirty worktree directory should be removed with --force")
+	}
+}
+
 func TestCreateExistingPathRejected(t *testing.T) {
 	repo := setupTestRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
