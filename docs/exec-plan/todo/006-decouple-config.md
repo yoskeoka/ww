@@ -1,6 +1,6 @@
 # 006: Decouple worktree.Manager from internal/config
 
-**Objective**: Remove `worktree.Manager`'s dependency on `internal/config.Config` so that the `worktree` package is usable as a library by external consumers. Closes [GH #5](https://github.com/yoskeoka/ww/issues/5).
+**Objective**: Remove `worktree.Manager`'s dependency on `internal/config.Config` so that the `worktree` package is usable as a library by external consumers. Resolves `docs/issues/public-worktree-depends-on-internal-config.md`.
 
 **Approach**: Option B from the issue — replace `Config *config.Config` with plain fields on `Manager`. The CLI layer (`cmd/ww/`) maps config values to Manager fields. `internal/config` stays internal (it handles TOML parsing, file search — CLI concerns).
 
@@ -23,7 +23,7 @@ No spec changes required. This is a pure internal refactor — public CLI behavi
 - [ ] [depends on: above] Update `cmd/ww/main.go:newManager()` to map `config.Config` fields to `Manager` fields
 - [ ] [depends on: above] Remove `config` import from `worktree` package
 - [ ] [depends on: above] Run `make test` — all existing tests must pass with zero changes
-- [ ] Move issue file to `docs/issues/done/`
+- [ ] Move `docs/issues/public-worktree-depends-on-internal-config.md` to `docs/issues/done/`
 
 ## Design decisions
 
