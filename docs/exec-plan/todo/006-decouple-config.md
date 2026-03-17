@@ -25,6 +25,13 @@ No spec changes required. This is a pure internal refactor — public CLI behavi
 - [ ] [depends on: above] Run `make test` — all existing tests must pass with zero changes
 - [ ] Move issue file to `docs/issues/done/`
 
+## Code Changes
+
+| File                  | Changes                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `worktree/worktree.go` | Replace `Config *config.Config` with plain fields on `Manager`; update all `m.Config.X` usages to `m.X`; remove `internal/config` import. |
+| `cmd/ww/main.go`      | Update `newManager` (or equivalent) to map `config.Config` fields onto the corresponding `worktree.Manager` fields. |
+
 ## Design decisions
 
 No ADR needed. This is a straightforward decoupling — Option B was already identified in the issue as the cleaner approach for library consumers.
