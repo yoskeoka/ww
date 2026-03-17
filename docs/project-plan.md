@@ -42,20 +42,20 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 ### Functional Requirements
 
-#### Core (MVP)
+#### Core (MVP — Phase 1)
 
-- **FR-1**: Manage a workspace configuration that lists multiple git repositories.
-- **FR-2**: Create worktrees across one or more repos with a single command (`ww create <branch> [--repos repo1,repo2,...]`).
-- **FR-3**: List all active worktrees across all managed repos (`ww list`).
-- **FR-4**: Remove worktrees across repos with cleanup (`ww remove <branch>`).
+- **FR-1**: Detect workspace automatically by scanning parent and child directories for git repos. Support `workspace = true` in `.ww.toml` for explicit declaration.
+- **FR-2**: Create a worktree for a single repo (`ww create <branch>`). Support `--repo` flag to target any repo in the workspace.
+- **FR-3**: List all worktrees across the workspace (`ww list`). Show REPO, STATUS (`active`/`merged`/`stale`) columns. Support `--cleanable` filter for `merged`/`stale` worktrees.
+- **FR-4**: Remove a worktree from a single repo (`ww remove <branch>`). Support `--repo` flag to target any repo in the workspace.
 - **FR-5**: Copy/symlink gitignored files (`.env`, IDE configs) into new worktrees automatically, configured per-repo.
 - **FR-6**: Run post-create hooks (e.g., dependency install) per-repo.
 
-#### Enhanced
+#### Enhanced (Phase 2)
 
-- **FR-7**: Status overview — show branch state (ahead/behind, dirty) across all worktrees.
-- **FR-8**: Clean merged/stale worktrees in bulk (`ww clean`).
-- **FR-9**: Single-repo mode — `ww` should work fine in a standalone repo, not only in meta-repo contexts.
+- **FR-7**: STATUS column in `ww list` — `merged` (branch merged into base), `stale` (remote tracking set but remote branch gone + unmerged), `active` (neither).
+- **FR-8**: Clean merged/stale worktrees in bulk (`ww clean`). Safe delete by default, `--force` for dirty worktrees.
+- **FR-9**: Single-repo mode — when no workspace is detected, `ww` works on the current repo only (Phase 1 compatible).
 - **FR-10**: Shell integration — output that enables `cd` into created worktrees (e.g., `cd $(ww create feat/x)`).
 
 #### Future
@@ -63,6 +63,11 @@ When working in a meta-repo environment with many child repositories, parallel d
 - **FR-16**: Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (e.g., AI agent orchestrators running long tasks). Configurable per-repo or per-command flag.
 - **FR-17**: Lifecycle hooks beyond post-create — support `pre-create`, `post-create`, `pre-remove`, and `post-remove` hooks per-repo. Enables container orchestration (e.g., `docker compose up` on create, DB cleanup + `docker compose down` on remove).
 - **FR-18**: Inject environment variables into hooks — `WW_BRANCH`, `WW_WORKTREE_PATH`, `WW_REPO_NAME`, `WW_WORKTREE_INDEX` (numeric, for port offset derivation). Enables worktree-aware compose files without hardcoding.
+- **FR-19**: Multi-repo batch worktree operations — `ww create feat/x --repos ai-arena,ww` to create worktrees across multiple repos simultaneously. Useful when child repos have dependencies on each other.
+- **FR-20**: `ww cd` — shell navigation between worktrees and workspace root.
+- **FR-21**: Child repo `.ww.toml` override — child repos can override workspace-level `copy_files`, `post_create_hook` etc.
+- **FR-22**: Recursive workspace detection — respect `workspace = true` in child repos to support nested workspace structures.
+- **FR-23**: Time-based stale detection — mark worktrees as stale after N days since last commit. Configurable via `--stale-days`.
 
 #### Agent-Friendly CLI Design
 
@@ -84,9 +89,9 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 ## Milestones
 
-- [ ] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling. Validate core UX.
-- [ ] Phase 2: Multi-repo coordination — workspace config, create/list/remove across repos, unified status view.
-- [ ] Phase 3: Polish — `ww clean`, shell integration (`cd` support), Homebrew formula, documentation.
+- [x] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling.
+- [ ] Phase 2: Workspace discovery (auto-detect parent/child git repos, `workspace = true`), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
+- [ ] Phase 3: Polish — shell integration (`ww cd`, `cd $(ww create feat/x)`), Homebrew formula, documentation.
 - [ ] Phase 4 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
 
 ## Design Principles
