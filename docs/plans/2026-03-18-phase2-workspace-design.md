@@ -38,6 +38,40 @@ Identified by absolute path. If the parent candidate from step 0 becomes workspa
 - `.ww.toml` is found via upward search (same as Phase 1).
 - Per-child-repo `.ww.toml` override is out of scope (FR-21).
 
+## Worktree Path Layout
+
+The default `worktree_dir` changes based on mode:
+
+| Mode | `worktree_dir` default | Layout |
+|------|----------------------|--------|
+| workspace | `".worktrees"` | `<workspace_root>/.worktrees/<repo>@<branch>` |
+| single-repo | `""` | `<repo-parent>/<repo>@<branch>` (sibling) |
+
+In workspace mode, all worktrees from all repos are collected under `<workspace_root>/.worktrees/`. This keeps the workspace root clean and worktrees centrally managed.
+
+An explicit `worktree_dir` in `.ww.toml` overrides the default in both modes.
+
+Examples:
+
+**Workspace mode (default):**
+```
+workspace/
+├── .worktrees/
+│   ├── ww@feat-x/
+│   └── ai-arena@feat-x/
+├── .ww.toml
+├── ww/
+└── ai-arena/
+```
+
+**Single-repo mode (default):**
+```
+projects/
+├── ww/
+├── ww@feat-x/
+└── ww@fix-bug/
+```
+
 ## ww list Changes
 
 ### STATUS Column
