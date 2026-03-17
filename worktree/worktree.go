@@ -29,6 +29,7 @@ type CreateOpts struct {
 
 // RemoveOpts configures worktree removal.
 type RemoveOpts struct {
+	Force      bool
 	KeepBranch bool
 	DryRun     bool
 }
@@ -206,7 +207,7 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 		return result, dryRunLog, nil
 	}
 
-	if err := m.Git.WorktreeRemove(found.Path); err != nil {
+	if err := m.Git.WorktreeRemove(found.Path, opts.Force); err != nil {
 		return nil, nil, fmt.Errorf("removing worktree: %w", err)
 	}
 	result.Removed = true
@@ -227,8 +228,9 @@ func (m *Manager) copyFiles(wtPath string) {
 		src := filepath.Join(m.RepoDir, pattern)
 		dst := filepath.Join(wtPath, pattern)
 		if err := copyPath(src, dst); err != nil {
-			// Skip silently if source doesn't exist
-			continue
+			if !errors.Is(err, fs.ErrNotExist) {
+				fmt.Fprintf(os.Stderr, "warning: could not copy %s: %v\n", pattern, err)
+			}
 		}
 	}
 }
@@ -238,12 +240,18 @@ func (m *Manager) symlinkFiles(wtPath string) {
 		src := filepath.Join(m.RepoDir, pattern)
 		dst := filepath.Join(wtPath, pattern)
 		if _, err := os.Stat(src); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				fmt.Fprintf(os.Stderr, "warning: could not access %s: %v\n", pattern, err)
+			}
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not create directory for %s: %v\n", pattern, err)
 			continue
 		}
-		os.Symlink(src, dst)
+		if err := os.Symlink(src, dst); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not symlink %s: %v\n", pattern, err)
+		}
 	}
 }
 

@@ -30,9 +30,13 @@ post_create_hook = "npm install"
 |-------|------|---------|-------------|
 | `worktree_dir` | string | `""` | Parent directory for worktrees. Empty = sibling layout (worktrees created next to the repo). Non-empty = all worktrees under this directory. |
 | `default_base` | string | `""` | Base ref for new branches. Empty = auto-detect via `origin/HEAD`. |
-| `copy_files` | string[] | `[]` | Files/directories to deep-copy from main worktree to new worktrees. Missing sources are silently skipped. |
-| `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped. |
+| `copy_files` | string[] | `[]` | Files/directories to deep-copy from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
+| `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `post_create_hook` | string | `""` | Shell command to run in the new worktree directory after creation. Empty = no hook. |
+
+## Trust Model
+
+`.ww.toml` is treated as **trusted input**, the same trust model as `.gitconfig`. The `post_create_hook` value is passed directly to `sh -c` without sanitization because it is authored by the repository owner. Users should review `.ww.toml` before using an untrusted repository, just as they would review `.gitconfig` aliases.
 
 ## Config Search
 
