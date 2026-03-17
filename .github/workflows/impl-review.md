@@ -45,14 +45,26 @@ safe-outputs:
               const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
               const items = output.items.filter(i => i.type === 'submit_pr_review');
               for (const item of items) {
-                await github.rest.pulls.createReview({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.issue.number,
-                  event: item.event,
-                  body: item.body
-                });
-                core.info(`Submitted ${item.event} review`);
+                try {
+                  await github.rest.pulls.createReview({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                    event: item.event,
+                    body: item.body
+                  });
+                  core.info(`Submitted ${item.event} review`);
+                } catch (err) {
+                  core.warning(`Failed to submit ${item.event} review: ${err.message}. Falling back to PR comment.`);
+                  const fixGuide = `> **Fix:** Go to **Settings → Actions → General → Workflow permissions** and check **"Allow GitHub Actions to create and approve pull requests"**.`;
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `**${item.event}** (posted as comment — review submission failed)\n\n${item.body}\n\n---\n${fixGuide}`
+                  });
+                  core.info(`Posted ${item.event} review as PR comment (fallback)`);
+                }
               }
 
 ---
