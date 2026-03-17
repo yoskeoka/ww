@@ -87,6 +87,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 - [ ] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling. Validate core UX.
 - [ ] Phase 2: Multi-repo coordination — workspace config, create/list/remove across repos, unified status view.
 - [ ] Phase 3: Polish — `ww clean`, shell integration (`cd` support), Homebrew formula, documentation.
+- [ ] Phase 4 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
 
 ## Design Principles
 
