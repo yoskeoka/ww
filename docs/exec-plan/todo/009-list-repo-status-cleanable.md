@@ -77,7 +77,7 @@ STATUS determination:
 
 - `make test` passes
 - `make lint` passes
-- `make test-docker` passes with workspace-mode list tests
+- `make test-all` passes with workspace-mode list tests
 - Single-repo `ww list` output unchanged (backward compatible)
 - `ww list --json` includes `repo` and `status` fields
 - `ww list --cleanable` shows only merged/stale worktrees

@@ -70,7 +70,7 @@ No confirmation prompt — `ww clean` is explicit intent. Users preview with `ww
 
 - `make test` passes
 - `make lint` passes
-- `make test-docker` passes
+- `make test-all` passes
 - `ww clean --dry-run` shows correct preview
 - `ww clean` removes only merged/stale worktrees
 - Active worktrees are never removed by `ww clean`

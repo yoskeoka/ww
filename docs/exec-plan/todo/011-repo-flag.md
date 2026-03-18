@@ -63,7 +63,7 @@ ww remove feat/x --repo ai-arena
 
 - `make test` passes
 - `make lint` passes
-- `make test-docker` passes
+- `make test-all` passes
 - `ww create feat/x --repo <name>` creates worktree in correct repo
 - `ww remove feat/x --repo <name>` removes worktree from correct repo
 - Phase 1 behavior unchanged when `--repo` is omitted
