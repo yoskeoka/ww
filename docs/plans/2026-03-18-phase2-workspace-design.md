@@ -135,6 +135,16 @@ ww remove feat/x --repo ai-arena
 - Omitted → current directory's repo (Phase 1 compatible).
 - Error if `--repo` is used outside a workspace or repo name not found.
 
+## Test Strategy
+
+Phase 2 introduces workspace structures (parent + multiple child repos + worktree directories) that are more complex than Phase 1's single-repo tests.
+
+**Integration tests should run in Docker** to isolate from host environment (git global config, filesystem layout). The container needs only `git` and the `ww` binary.
+
+**Unit tests** (e.g., `git/` package) can continue using `t.TempDir()` — sufficient for isolated git operations.
+
+Exec-plan should include a sub-task for setting up a Dockerfile/docker-compose for integration tests before implementing workspace features.
+
 ## Out of Scope (Future FRs)
 
 Recorded in project-plan.md:
