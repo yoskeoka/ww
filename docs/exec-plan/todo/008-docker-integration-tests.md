@@ -20,7 +20,7 @@ Rather than maintaining a separate test suite or Dockerfile-based runner, integr
 | Target | Flag | Docker required | What runs |
 |--------|------|-----------------|-----------|
 | `make test` | `go test -short ./...` | No | Unit tests only (integration tests skipped) |
-| `make test-integration` | `go test ./...` | Yes | All tests including integration (Docker) |
+| `make test-all` | `go test ./...` | Yes | All tests including integration (Docker) |
 
 Integration test functions skip themselves in short mode:
 ```go
@@ -48,10 +48,7 @@ CI runs both as separate jobs/steps.
 - [ ] [depends on: testcontainers-go, workspace helpers] **Migrate existing integration tests to Docker**: Update tests to run `ww` commands inside the container instead of on the host. Existing single-repo tests should produce identical results.
 - [ ] [depends on: Refactor] **Update Makefile**:
   - `make test` → `go test -short ./...` (was `go test ./...`)
-  - `make test-integration` → `go test ./...` (new target, runs everything including Docker-dependent tests)
-- [ ] [depends on: Update Makefile] **Update CI workflow (`.github/workflows/ci.yml`)**: Split into two jobs or steps:
-  - Unit tests: `make test` (fast, no Docker)
-  - Integration tests: `make test-integration` (requires Docker)
+  - `make test-all` → `go test ./...` (new target, runs everything including Docker-dependent tests)
 
 ## Code Changes
 
@@ -61,8 +58,7 @@ CI runs both as separate jobs/steps.
 | `testutil/container.go` | New — testcontainers-go helper (start container, copy binary, exec commands) |
 | `testutil/workspace.go` | New — workspace structure test helpers |
 | `integration_test.go` | Add `testing.Short()` guards, migrate to run inside Docker containers |
-| `Makefile` | Change `test` to `-short`, add `test-integration` target |
-| `.github/workflows/ci.yml` | Split unit/integration test jobs |
+| `Makefile` | Change `test` to `-short`, add `test-all` target |
 
 ## Spec Changes
 
@@ -77,6 +73,5 @@ None — this is test infrastructure only.
 ## Verification
 
 - `make test` passes without Docker running (unit tests only)
-- `make test-integration` passes with Docker running (integration tests)
+- `make test-all` passes with Docker running (all tests including integration)
 - Existing Phase 1 integration tests produce identical results inside Docker
-- CI workflow has separate unit/integration steps, both green
