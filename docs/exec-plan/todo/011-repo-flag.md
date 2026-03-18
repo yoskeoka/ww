@@ -1,5 +1,7 @@
 # 011: `--repo` Flag for create/remove
 
+> **Execution**: Use `/execute-task` to implement this plan.
+
 **Objective:** Add `--repo` flag to `ww create` and `ww remove` so users can target any repo in the workspace without `cd`-ing into it.
 
 **Covers:** "ww create / ww remove Changes" section of Phase 2 design doc.

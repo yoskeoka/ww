@@ -1,5 +1,7 @@
 # 010: `ww clean` New Command
 
+> **Execution**: Use `/execute-task` to implement this plan.
+
 **Objective:** Implement `ww clean` to bulk-remove merged and stale worktrees across the workspace.
 
 **Covers:** "ww clean (New Command)" section of Phase 2 design doc.

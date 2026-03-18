@@ -1,5 +1,7 @@
 # 008: Docker Integration Test Infrastructure
 
+> **Execution**: Use `/execute-task` to implement this plan.
+
 **Objective:** Evolve the existing integration tests to run inside Docker containers via testcontainers-go, isolating from host git config and filesystem. Introduce `testing.Short()` split so unit tests run fast without Docker.
 
 **Covers:** Test strategy from Phase 2 design doc.

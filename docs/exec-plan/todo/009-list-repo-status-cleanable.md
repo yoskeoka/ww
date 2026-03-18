@@ -1,5 +1,7 @@
 # 009: `ww list` Enhancements — REPO, STATUS, `--cleanable`
 
+> **Execution**: Use `/execute-task` to implement this plan.
+
 **Objective:** Extend `ww list` to show worktree health status and repository context in workspace mode. Add filtering for cleanable worktrees.
 
 **Covers:** "ww list Changes" section of Phase 2 design doc.
