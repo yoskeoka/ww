@@ -42,11 +42,11 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 ### Functional Requirements
 
-#### Core (MVP — Phase 1)
+#### Core (MVP)
 
 - **FR-1**: Detect workspace automatically by scanning parent and child directories for git repos. Support `workspace = true` in `.ww.toml` for explicit declaration.
 - **FR-2**: Create a worktree for a single repo (`ww create <branch>`). Support `--repo` flag to target any repo in the workspace.
-- **FR-3**: List all worktrees across the workspace (`ww list`). Show REPO, STATUS (`active`/`merged`/`stale`) columns. Support `--cleanable` filter for `merged`/`stale` worktrees.
+- **FR-3**: List all worktrees across the workspace (`ww list`). Show REPO and STATUS columns. Support `--cleanable` filter for `merged`/`stale` worktrees.
 - **FR-4**: Remove a worktree from a single repo (`ww remove <branch>`). Support `--repo` flag to target any repo in the workspace.
 - **FR-5**: Copy/symlink gitignored files (`.env`, IDE configs) into new worktrees automatically, configured per-repo.
 - **FR-6**: Run post-create hooks (e.g., dependency install) per-repo.

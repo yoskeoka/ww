@@ -10,18 +10,18 @@ Phase 2 does NOT add multi-repo batch create/remove (FR-19) or shell navigation 
 
 ### Detection Algorithm
 
-0. Scan current directory's immediate children for `.git` directories. If found → current directory becomes a **parent candidate**, children are recorded as child repos.
-1. Determine current git repo root (if inside a git repo).
+0. Scan current directory's immediate children for `.git` entries (files or directories). If found → current directory becomes a **parent candidate**, children are recorded as child repos.
+1. Determine current git repo root (if inside a git repo) using `git rev-parse --is-inside-work-tree` / `git rev-parse --show-toplevel`.
 2. Look at the parent directory.
-3. If parent has `.git` → parent is workspace root.
-4. If parent is non-git → scan parent's immediate children for `.git`. If siblings found → parent is workspace root (non-git workspace).
-5. If parent has `.ww.toml` with `workspace = true` → parent is workspace root (overrides steps 3-4, works for both git and non-git parents).
-6. If steps 2-5 find no parent but step 0 found a parent candidate → current directory becomes workspace root.
+3. If parent has a `.git` entry (file or directory) → parent is workspace root.
+4. If parent is non-git → scan parent's immediate children for `.git` entries. If siblings found → parent is workspace root (non-git workspace).
+5. [Reserved / future] Potential override via `.ww.toml` (for example, a `workspace` flag) is out of scope until the configuration spec defines such a field. Do not implement config-based workspace overrides yet.
+6. If steps 2-4 find no parent but step 0 found a parent candidate → current directory becomes workspace root.
 7. None of the above → single-repo mode (Phase 1 compatible).
 
 ### Child Repository Definition
 
-All directories with `.git` found at:
+All directories that contain a `.git` entry (file or directory) found at:
 - workspace root's immediate children
 - current directory's immediate children
 
@@ -29,8 +29,8 @@ Identified by absolute path. If the parent candidate from step 0 becomes workspa
 
 ### Edge Cases
 
-- **Current directory is non-git with git children**: operates as non-git workspace. Parent's own worktrees are not applicable, but child repos' worktrees are managed.
-- **Child repo has `workspace = true` in `.ww.toml`**: ignored. Child repos are never treated as workspace roots during detection. This prevents unintended recursive workspace nesting. (See FR-22 for future consideration.)
+- **Current directory is non-git with git children**: operates as non-git workspace. Parent's own worktrees are not applicable, but child repos' worktrees are managed. This relaxes the current CLI prerequisite that `ww` must be run inside a git repository/worktree and will be implemented in Phase 2 alongside an update to `docs/specs/cli-commands.md`.
+- **Child repos are never workspace roots**: detection never treats child repos as workspace roots, which prevents unintended recursive workspace nesting. (See FR-22 for any future changes to this invariant.)
 - **Workspace root is a git repo**: included in the child repo list alongside its children.
 
 ### Config
@@ -98,11 +98,11 @@ Each non-main worktree gets a status:
 
 Filters output to show only `merged` and `stale` worktrees. Works with `--json`.
 
-### JSON Output
+### JSON (NDJSON) Output
 
-Adds `"repo"` and `"status"` fields:
+Adds `"repo"` and `"status"` fields. Output is newline-delimited JSON (NDJSON), one object per line:
 
-```json
+```jsonl
 {"repo":"ww","path":"/path/to/ww@feat-x","branch":"feat/x","head":"def5678","status":"active"}
 {"repo":"ww","path":"/path/to/ww@feat-done","branch":"feat/done","head":"789abcd","status":"merged"}
 ```
