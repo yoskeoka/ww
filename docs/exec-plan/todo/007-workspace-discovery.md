@@ -1,6 +1,6 @@
 # 007: Workspace Discovery + Path Layout
 
-**Objective:** Implement the workspace detection algorithm and worktree path layout changes described in the Phase 2 design (`docs/plans/2026-03-18-phase2-workspace-design.md`). This is the foundation for all Phase 2 features.
+**Objective:** Implement the workspace detection algorithm and worktree path layout changes described in the Phase 2 design (see `docs/design-decisions/adr.md` for key decisions). This is the foundation for all Phase 2 features.
 
 **Covers:** Workspace detection (design doc "Workspace Discovery" section), worktree path layout (design doc "Worktree Path Layout" section), CLI prerequisites relaxation (non-git workspace roots).
 
