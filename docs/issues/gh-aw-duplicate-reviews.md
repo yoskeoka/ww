@@ -39,4 +39,5 @@ This keeps exactly one fallback comment per workflow per PR.
 - `.github/workflows/plan-review.md` — `submit_pr_review` safe-output script (both routes)
 - `.github/workflows/impl-review.md` — same
 - `.github/workflows/spec-code-sync.md` — check if same pattern applies
-- Run `gh aw compile` after editing `.md` files
+- Run `gh aw compile` after editing `.md` files to regenerate the corresponding `*.lock.yml` workflow files
+- Commit both the updated `.md` sources and the regenerated `*.lock.yml` workflows (GitHub Actions runs the lock files and enforces timestamp checks)
