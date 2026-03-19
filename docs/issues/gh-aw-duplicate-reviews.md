@@ -14,7 +14,7 @@ When pushing multiple commits to a PR branch, gh-aw workflows (plan-review, impl
 Change from `pulls.createReview()` to a PR comment-based approach with find-and-update:
 
 1. Add a hidden HTML marker to each workflow's comment (e.g., `<!-- gh-aw:plan-review -->`)
-2. On each run, search for an existing comment with that marker
+2. On each run, use the GitHub REST API to list all PR comments (with pagination) and filter them client-side for that marker to find an existing comment ID
 3. If found, update it via `issues.updateComment()`; if not, create via `issues.createComment()`
 
 This keeps exactly one comment per workflow per PR, always showing the latest result.
