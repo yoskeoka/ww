@@ -14,3 +14,8 @@ This project follows strict spec-code parity. When reviewing or suggesting chang
 - `ww` is a git worktree manager CLI written in Go.
 - Execution plans live in `docs/exec-plan/todo/` (active) and `docs/exec-plan/done/` (completed).
 - Issues are tracked in `docs/issues/` (active) and `docs/issues/done/` (resolved).
+- Design decisions are documented in `docs/design-decisions/adr.md` as ADRs (Architecture Decision Records) and `docs/design-decisions/core-beliefs.md` (fundamental principles that guide design decisions).
+
+## Project Structure
+
+See Project Structure section in `AGENTS.md` for an overview of the code organization.
