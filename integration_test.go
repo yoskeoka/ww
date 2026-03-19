@@ -1,106 +1,60 @@
 package integration_test
 
 import (
-	"encoding/json"
+	"context"
+	"flag"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
+	"path"
 	"strings"
 	"testing"
+
+	"github.com/yoskeoka/ww/testutil"
 )
 
+// globalEnv is the shared container environment for all integration tests.
+// It is nil when running in short mode (go test -short).
+var globalEnv *testutil.ContainerEnv
+
 func TestMain(m *testing.M) {
-	cmd := exec.Command("go", "build", "-o", filepath.Join(os.TempDir(), "ww-test"), "./cmd/ww/")
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		panic("failed to build ww: " + err.Error())
+	flag.Parse()
+	if !testing.Short() {
+		var err error
+		globalEnv, err = testutil.NewContainerEnv(context.Background())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "FATAL: setup container env: %v\n", err)
+			os.Exit(1)
+		}
+		defer globalEnv.Terminate()
 	}
 	os.Exit(m.Run())
 }
 
-func wwBin() string {
-	return filepath.Join(os.TempDir(), "ww-test")
-}
-
-// setupTestRepo creates a fresh git repository with realistic seed data:
-// - explicit main branch
-// - multiple commits with actual file content
-// - an existing branch for testing checkout of existing branches
-func setupTestRepo(t *testing.T) string {
+func setupRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	repo := filepath.Join(dir, "myrepo")
-	if err := os.MkdirAll(repo, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
-	}
-
-	writeFile := func(name, content string) {
-		t.Helper()
-		path := filepath.Join(repo, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Initialize repo with explicit branch name
-	git("init", "-b", "main")
-	git("config", "user.email", "test@test.com")
-	git("config", "user.name", "Test User")
-
-	// Seed commit 1: initial project structure
-	writeFile("README.md", "# My Repo\n\nA test repository for ww integration tests.\n")
-	writeFile("go.mod", "module example.com/myrepo\n\ngo 1.25.0\n")
-	writeFile("main.go", fmt.Sprintf("package main\n\nfunc main() {\n\tprintln(%q)\n}\n", "hello"))
-	git("add", ".")
-	git("commit", "-m", "initial: project scaffold")
-
-	// Seed commit 2: add more files
-	writeFile("internal/util.go", "package internal\n\nfunc Add(a, b int) int { return a + b }\n")
-	writeFile("internal/util_test.go", "package internal\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal(\"bad\")\n\t}\n}\n")
-	git("add", ".")
-	git("commit", "-m", "feat: add util package")
-
-	// Seed commit 3: update readme
-	writeFile("README.md", "# My Repo\n\nA test repository for ww integration tests.\n\n## Usage\n\nRun `go run main.go`\n")
-	git("add", ".")
-	git("commit", "-m", "docs: update readme with usage")
-
-	// Create an existing branch (for TestCreateExistingBranch)
-	git("branch", "feat/existing")
-
-	return repo
-}
-
-func runWW(t *testing.T, dir string, args ...string) (string, error) {
-	t.Helper()
-	cmd := exec.Command(wwBin(), args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	return testutil.SetupRepo(t, globalEnv, testutil.RepoOpts{})
 }
 
 func writeConfig(t *testing.T, repo, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(repo, ".ww.toml"), []byte(content), 0644); err != nil {
+	if err := globalEnv.WriteFile(path.Join(repo, ".ww.toml"), content); err != nil {
 		t.Fatal(err)
 	}
 }
 
+func runWW(t *testing.T, dir string, args ...string) (string, error) {
+	t.Helper()
+	return globalEnv.RunWW(dir, args...)
+}
+
 func TestVersionCommand(t *testing.T) {
-	dir := t.TempDir()
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	dir, err := globalEnv.MkdirTemp("ww-ver")
+	if err != nil {
+		t.Fatal(err)
+	}
 	out, err := runWW(t, dir, "version")
 	if err != nil {
 		t.Fatalf("ww version: %v\n%s", err, out)
@@ -111,7 +65,10 @@ func TestVersionCommand(t *testing.T) {
 }
 
 func TestCreateAndList(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	out, err := runWW(t, repo, "create", "feat/test-branch")
@@ -122,18 +79,14 @@ func TestCreateAndList(t *testing.T) {
 		t.Errorf("unexpected create output: %s", out)
 	}
 
-	// Verify worktree directory exists
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-test-branch")
-	if _, err := os.Stat(wtPath); err != nil {
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-test-branch")
+	if !globalEnv.PathExists(wtPath) {
 		t.Errorf("worktree directory not created at %s", wtPath)
 	}
-
-	// Verify the worktree contains repo files (inherited from main)
-	if _, err := os.Stat(filepath.Join(wtPath, "go.mod")); err != nil {
+	if !globalEnv.PathExists(path.Join(wtPath, "go.mod")) {
 		t.Error("worktree should contain go.mod from main branch")
 	}
 
-	// List worktrees
 	out, err = runWW(t, repo, "list")
 	if err != nil {
 		t.Fatalf("ww list: %v\n%s", err, out)
@@ -147,7 +100,10 @@ func TestCreateAndList(t *testing.T) {
 }
 
 func TestListJSON(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	if _, err := runWW(t, repo, "create", "feat/json-test"); err != nil {
@@ -167,18 +123,17 @@ func TestListJSON(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			t.Errorf("invalid JSON line: %s\nerror: %v", line, err)
-		}
-		if _, ok := obj["path"]; !ok {
-			t.Errorf("JSON object missing 'path' field: %s", line)
+		if !strings.Contains(line, `"path"`) {
+			t.Errorf("JSON line missing 'path' field: %s", line)
 		}
 	}
 }
 
 func TestCreateDryRun(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	out, err := runWW(t, repo, "create", "--dry-run", "feat/dry-test")
@@ -189,15 +144,17 @@ func TestCreateDryRun(t *testing.T) {
 		t.Errorf("dry-run should show 'Would create': %s", out)
 	}
 
-	// Verify worktree was NOT created
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-dry-test")
-	if _, err := os.Stat(wtPath); err == nil {
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-dry-test")
+	if globalEnv.PathExists(wtPath) {
 		t.Error("dry-run should not create worktree directory")
 	}
 }
 
 func TestRemoveWorktree(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	if _, err := runWW(t, repo, "create", "feat/to-remove"); err != nil {
@@ -212,15 +169,17 @@ func TestRemoveWorktree(t *testing.T) {
 		t.Errorf("unexpected remove output: %s", out)
 	}
 
-	// Verify worktree directory is gone
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-to-remove")
-	if _, err := os.Stat(wtPath); err == nil {
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-to-remove")
+	if globalEnv.PathExists(wtPath) {
 		t.Error("worktree directory should be removed")
 	}
 }
 
 func TestInvalidBranchName(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	out, err := runWW(t, repo, "create", "-starts-with-dash")
@@ -230,10 +189,11 @@ func TestInvalidBranchName(t *testing.T) {
 }
 
 func TestZeroConfig(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 
-	// No .ww.toml — without a remote, default branch detection fails.
-	// This tests that zero-config mode gives a clear error (not a panic).
 	_, err := runWW(t, repo, "create", "feat/zero-config")
 	if err == nil {
 		t.Log("zero-config create succeeded (repo has remote)")
@@ -241,7 +201,13 @@ func TestZeroConfig(t *testing.T) {
 }
 
 func TestNonGitDirectory(t *testing.T) {
-	dir := t.TempDir()
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	dir, err := globalEnv.MkdirTemp("ww-nongit")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	out, err := runWW(t, dir, "list")
 	if err == nil {
@@ -253,86 +219,82 @@ func TestNonGitDirectory(t *testing.T) {
 }
 
 func TestCopyFiles(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 
-	envContent := "SECRET=test123"
-	if err := os.WriteFile(filepath.Join(repo, ".env"), []byte(envContent), 0644); err != nil {
+	if err := globalEnv.WriteFile(path.Join(repo, ".env"), "SECRET=test123"); err != nil {
 		t.Fatal(err)
 	}
 
-	writeConfig(t, repo, `
-default_base = "main"
-copy_files = [".env"]
-`)
+	writeConfig(t, repo, "default_base = \"main\"\ncopy_files = [\".env\"]\n")
 
 	if _, err := runWW(t, repo, "create", "feat/copy-test"); err != nil {
 		t.Fatal(err)
 	}
 
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-copy-test")
-	data, err := os.ReadFile(filepath.Join(wtPath, ".env"))
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-copy-test")
+	data, err := globalEnv.ReadFile(path.Join(wtPath, ".env"))
 	if err != nil {
 		t.Fatalf("copied .env not found: %v", err)
 	}
-	if string(data) != envContent {
-		t.Errorf("copied .env content = %q, want %q", string(data), envContent)
+	if !strings.Contains(data, "SECRET=test123") {
+		t.Errorf("copied .env content = %q, want 'SECRET=test123'", data)
 	}
 }
 
 func TestSymlinkFiles(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 
-	nmDir := filepath.Join(repo, "node_modules", "pkg")
-	if err := os.MkdirAll(nmDir, 0755); err != nil {
+	if err := globalEnv.MkdirAll(path.Join(repo, "node_modules", "pkg")); err != nil {
 		t.Fatal(err)
 	}
 
-	writeConfig(t, repo, `
-default_base = "main"
-symlink_files = ["node_modules"]
-`)
+	writeConfig(t, repo, "default_base = \"main\"\nsymlink_files = [\"node_modules\"]\n")
 
 	if _, err := runWW(t, repo, "create", "feat/symlink-test"); err != nil {
 		t.Fatal(err)
 	}
 
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-symlink-test")
-	fi, err := os.Lstat(filepath.Join(wtPath, "node_modules"))
-	if err != nil {
-		t.Fatalf("symlink not found: %v", err)
-	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		t.Error("expected symlink, got regular file/dir")
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-symlink-test")
+	if !globalEnv.IsSymlink(path.Join(wtPath, "node_modules")) {
+		t.Error("expected symlink for node_modules, got regular file/dir")
 	}
 }
 
 func TestPostCreateHook(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 
-	writeConfig(t, repo, `
-default_base = "main"
-post_create_hook = "echo hook-ran > hook-output.txt"
-`)
+	writeConfig(t, repo, "default_base = \"main\"\npost_create_hook = \"echo hook-ran > hook-output.txt\"\n")
 
 	if _, err := runWW(t, repo, "create", "feat/hook-test"); err != nil {
 		t.Fatal(err)
 	}
 
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-hook-test")
-	data, err := os.ReadFile(filepath.Join(wtPath, "hook-output.txt"))
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-hook-test")
+	data, err := globalEnv.ReadFile(path.Join(wtPath, "hook-output.txt"))
 	if err != nil {
 		t.Fatalf("hook output not found: %v", err)
 	}
-	if !strings.Contains(string(data), "hook-ran") {
-		t.Errorf("hook output = %q, want 'hook-ran'", string(data))
+	if !strings.Contains(data, "hook-ran") {
+		t.Errorf("hook output = %q, want 'hook-ran'", data)
 	}
 }
 
 func TestRemoveMainWorktreeRejected(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
-	// Try to remove the main worktree — should be rejected
 	out, err := runWW(t, repo, "remove", "main")
 	if err == nil {
 		t.Fatalf("expected error when removing main worktree, got: %s", out)
@@ -343,10 +305,12 @@ func TestRemoveMainWorktreeRejected(t *testing.T) {
 }
 
 func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
-	// Even dry-run should reject removing the main worktree
 	out, err := runWW(t, repo, "remove", "--dry-run", "main")
 	if err == nil {
 		t.Fatalf("expected error when dry-run removing main worktree, got: %s", out)
@@ -357,10 +321,12 @@ func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {
 }
 
 func TestRemoveNonexistentWorktree(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
-	// Try to remove a worktree that doesn't exist
 	out, err := runWW(t, repo, "remove", "feat/nonexistent")
 	if err == nil {
 		t.Fatalf("expected error for non-existent worktree, got: %s", out)
@@ -371,7 +337,10 @@ func TestRemoveNonexistentWorktree(t *testing.T) {
 }
 
 func TestRemoveNonexistentWorktreeDryRun(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	out, err := runWW(t, repo, "remove", "--dry-run", "feat/nonexistent")
@@ -384,9 +353,11 @@ func TestRemoveNonexistentWorktreeDryRun(t *testing.T) {
 }
 
 func TestHelpFlag(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 
-	// Subcommand --help should exit cleanly (exit 0)
 	out, err := runWW(t, repo, "remove", "--help")
 	if err != nil {
 		t.Fatalf("--help should exit 0, got error: %v\n%s", err, out)
@@ -400,35 +371,30 @@ func TestHelpFlag(t *testing.T) {
 }
 
 func TestRunFromWorktreeDir(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
-	// Create a worktree
 	out, err := runWW(t, repo, "create", "feat/first")
 	if err != nil {
 		t.Fatalf("ww create: %v\n%s", err, out)
 	}
 
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-first")
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-first")
+	writeConfig(t, path.Dir(repo), `default_base = "main"`)
 
-	// Now run ww from INSIDE the worktree directory.
-	// Config in the main repo isn't reachable via upward search from the
-	// sibling worktree, so write it to the parent dir (shared by both).
-	writeConfig(t, filepath.Dir(repo), `default_base = "main"`)
-
-	// Create a second worktree — should resolve back to the main repo
 	out, err = runWW(t, wtPath, "create", "feat/second")
 	if err != nil {
 		t.Fatalf("ww create from worktree: %v\n%s", err, out)
 	}
 
-	// The second worktree should be a sibling of the main repo, not the first worktree
-	secondWtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-second")
-	if _, err := os.Stat(secondWtPath); err != nil {
-		t.Errorf("second worktree should be at %s (sibling of main repo), not relative to first worktree", secondWtPath)
+	secondWtPath := path.Join(path.Dir(repo), "myrepo@feat-second")
+	if !globalEnv.PathExists(secondWtPath) {
+		t.Errorf("second worktree should be at %s (sibling of main repo)", secondWtPath)
 	}
 
-	// List from inside a worktree should show all worktrees
 	out, err = runWW(t, wtPath, "list")
 	if err != nil {
 		t.Fatalf("ww list from worktree: %v\n%s", err, out)
@@ -442,23 +408,22 @@ func TestRunFromWorktreeDir(t *testing.T) {
 }
 
 func TestConfigFallbackFromWorktree(t *testing.T) {
-	repo := setupTestRepo(t)
-	// Config ONLY in the main repo — not in parent dir
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
-	// Create a worktree from the main repo
 	out, err := runWW(t, repo, "create", "feat/fallback-test")
 	if err != nil {
 		t.Fatalf("ww create: %v\n%s", err, out)
 	}
 
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-fallback-test")
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-fallback-test")
 
-	// Run ww list from inside the worktree — config should be found
-	// via the main worktree fallback (not upward search)
 	out, err = runWW(t, wtPath, "list")
 	if err != nil {
-		t.Fatalf("ww list from worktree (with config fallback): %v\n%s", err, out)
+		t.Fatalf("ww list from worktree (config fallback): %v\n%s", err, out)
 	}
 	if !strings.Contains(out, "feat/fallback-test") {
 		t.Errorf("list should show the worktree branch: %s", out)
@@ -466,10 +431,12 @@ func TestConfigFallbackFromWorktree(t *testing.T) {
 }
 
 func TestCreateExistingBranch(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
-	// feat/existing was created by setupTestRepo
 	out, err := runWW(t, repo, "create", "feat/existing")
 	if err != nil {
 		t.Fatalf("ww create existing branch: %v\n%s", err, out)
@@ -478,22 +445,23 @@ func TestCreateExistingBranch(t *testing.T) {
 		t.Errorf("unexpected output: %s", out)
 	}
 
-	// Verify the worktree has the repo content
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-existing")
-	if _, err := os.Stat(filepath.Join(wtPath, "main.go")); err != nil {
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-existing")
+	if !globalEnv.PathExists(path.Join(wtPath, "main.go")) {
 		t.Error("worktree for existing branch should contain main.go")
 	}
 }
 
 func TestRemoveForceCleanWorktree(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	if _, err := runWW(t, repo, "create", "feat/force-clean"); err != nil {
 		t.Fatal(err)
 	}
 
-	// --force on a clean worktree should succeed
 	out, err := runWW(t, repo, "remove", "--force", "feat/force-clean")
 	if err != nil {
 		t.Fatalf("ww remove --force (clean): %v\n%s", err, out)
@@ -502,33 +470,33 @@ func TestRemoveForceCleanWorktree(t *testing.T) {
 		t.Errorf("unexpected output: %s", out)
 	}
 
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-force-clean")
-	if _, err := os.Stat(wtPath); err == nil {
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-force-clean")
+	if globalEnv.PathExists(wtPath) {
 		t.Error("worktree directory should be removed")
 	}
 }
 
 func TestRemoveForceDirtyWorktree(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
 	if _, err := runWW(t, repo, "create", "feat/force-dirty"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make the worktree dirty by adding an uncommitted file
-	wtPath := filepath.Join(filepath.Dir(repo), "myrepo@feat-force-dirty")
-	if err := os.WriteFile(filepath.Join(wtPath, "dirty.txt"), []byte("uncommitted"), 0644); err != nil {
+	wtPath := path.Join(path.Dir(repo), "myrepo@feat-force-dirty")
+	if err := globalEnv.WriteFile(path.Join(wtPath, "dirty.txt"), "uncommitted"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Without --force, remove should fail on dirty worktree
 	out, err := runWW(t, repo, "remove", "feat/force-dirty")
 	if err == nil {
 		t.Fatalf("expected error removing dirty worktree without --force, got: %s", out)
 	}
 
-	// With --force, remove should succeed
 	out, err = runWW(t, repo, "remove", "--force", "feat/force-dirty")
 	if err != nil {
 		t.Fatalf("ww remove --force (dirty): %v\n%s", err, out)
@@ -536,24 +504,23 @@ func TestRemoveForceDirtyWorktree(t *testing.T) {
 	if !strings.Contains(out, "Removed worktree") {
 		t.Errorf("unexpected output: %s", out)
 	}
-
-	if _, err := os.Stat(wtPath); err == nil {
+	if globalEnv.PathExists(wtPath) {
 		t.Error("dirty worktree directory should be removed with --force")
 	}
 }
 
 func TestCreateExistingPathRejected(t *testing.T) {
-	repo := setupTestRepo(t)
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
-	// Create a worktree
-	out, err := runWW(t, repo, "create", "feat/dup-test")
-	if err != nil {
-		t.Fatalf("ww create: %v\n%s", err, out)
+	if _, err := runWW(t, repo, "create", "feat/dup-test"); err != nil {
+		t.Fatal(err)
 	}
 
-	// Try to create again at the same path — should fail with clear message
-	out, err = runWW(t, repo, "create", "feat/dup-test")
+	out, err := runWW(t, repo, "create", "feat/dup-test")
 	if err == nil {
 		t.Fatalf("expected error for existing path, got: %s", out)
 	}

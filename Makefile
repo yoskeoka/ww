@@ -6,6 +6,9 @@ build:
 	go build -ldflags "-X main.CommitHash=$(COMMIT_HASH)" -o ww ./cmd/ww/
 
 test:
+	go test -short ./...
+
+test-all:
 	go test ./...
 
 lint:
