@@ -1,4 +1,4 @@
-# gh-aw Review Comments Duplicate on Each Push
+# gh-aw PR Reviews Duplicate on Each Push
 
 ## Problem
 
