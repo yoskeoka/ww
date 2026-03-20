@@ -56,7 +56,7 @@ safe-outputs:
                     })) {
                       for (const r of page.data) {
                         if (r.user && r.user.login === 'github-actions[bot]' &&
-                            r.state !== 'DISMISSED' && r.body.includes(marker)) {
+                            r.state !== 'DISMISSED' && (r.body || '').includes(marker)) {
                           botReviews.push(r);
                         }
                       }
@@ -85,15 +85,34 @@ safe-outputs:
                   core.warning(`Failed to submit ${item.event} review: ${err.message}. Falling back to PR comment.`);
                   const fixGuide = `> **Fix:** Go to **Settings → Actions → General → Workflow permissions** and check **"Allow GitHub Actions to create and approve pull requests"**.`;
                   const commentBody = `${marker}\n**${item.event}** (posted as comment — review submission failed)\n\n${item.body}\n\n---\n${fixGuide}`;
-                  // Route B: Find-and-update existing bot-authored fallback comment
-                  let existingId = null;
+                  // Route B: Find bot-authored fallback comments; update newest, delete older duplicates
+                  const matchingComments = [];
                   for await (const page of github.paginate.iterator(github.rest.issues.listComments, {
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     issue_number: context.issue.number,
                   })) {
-                    const found = page.data.find(c => c.user.login === 'github-actions[bot]' && c.body.includes(marker));
-                    if (found) { existingId = found.id; break; }
+                    for (const c of page.data) {
+                      if (c.user && c.user.login === 'github-actions[bot]' &&
+                          typeof c.body === 'string' && c.body.includes(marker)) {
+                        matchingComments.push(c);
+                      }
+                    }
+                  }
+                  // Sort ascending by id; keep last (newest), delete the rest
+                  matchingComments.sort((a, b) => a.id - b.id);
+                  const toDelete = matchingComments.slice(0, -1);
+                  const existingId = matchingComments.length > 0 ? matchingComments[matchingComments.length - 1].id : null;
+                  for (const dup of toDelete) {
+                    try {
+                      await github.rest.issues.deleteComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        comment_id: dup.id,
+                      });
+                    } catch (delErr) {
+                      core.warning(`Failed to delete duplicate comment ${dup.id}: ${delErr.message}`);
+                    }
                   }
                   if (existingId) {
                     await github.rest.issues.updateComment({
