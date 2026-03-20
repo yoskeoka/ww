@@ -239,8 +239,10 @@ func TestCopyFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("copied .env not found: %v", err)
 	}
-	if !strings.Contains(data, "SECRET=test123") {
-		t.Errorf("copied .env content = %q, want 'SECRET=test123'", data)
+	expected := "SECRET=test123"
+	normalized := strings.TrimRight(data, "\r\n")
+	if normalized != expected {
+		t.Errorf("copied .env content = %q (normalized %q), want %q", data, normalized, expected)
 	}
 }
 
