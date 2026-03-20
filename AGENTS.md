@@ -56,6 +56,10 @@ Three workflows automatically review PRs: `plan-review`, `impl-review`, `spec-co
 - Log each false positive as a `docs/issues/` entry describing the trigger and why it was wrong
 - Use logged false positives to refine the workflow prompts in `.github/workflows/*.md`
 
+**Review logic vs review criteria:**
+- Review **criteria** (what to check, prompts, file patterns) will evolve over time as the project grows.
+- Review **plumbing** (dismiss old reviews, find-and-update fallback comments, duplicate cleanup) is stable infrastructure — once bugs are fixed, it should rarely need changes. DRY refactoring of this plumbing is deferred; the cost of duplication is low for code that doesn't change.
+
 ## Lessons Learned
 
 - **Always pull before pushing on CI-active branches**: Agentic workflows may push commits (e.g., automated fixes) between your commits. Always `git pull --rebase` before pushing to avoid rejected pushes and merge conflicts.
