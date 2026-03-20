@@ -115,7 +115,7 @@ func SetupWorkspace(t *testing.T, env *ContainerEnv, opts WorkspaceOpts) *Worksp
 		if err := env.MkdirAll(repoDir); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := env.Git(repoDir, "init", "-b", "main"); err != nil {
+		if _, err := env.Git(repoDir, "init", "-b", ro.DefaultBranch); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := env.Git(repoDir, "commit", "--allow-empty", "-m", "initial"); err != nil {
@@ -145,7 +145,7 @@ func SetupNonGitWorkspace(t *testing.T, env *ContainerEnv, opts WorkspaceOpts) *
 		if err := env.MkdirAll(repoDir); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := env.Git(repoDir, "init", "-b", "main"); err != nil {
+		if _, err := env.Git(repoDir, "init", "-b", ro.DefaultBranch); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := env.Git(repoDir, "commit", "--allow-empty", "-m", "initial"); err != nil {
