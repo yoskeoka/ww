@@ -6,6 +6,7 @@ package testutil
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/testcontainers/testcontainers-go"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -156,23 +156,42 @@ func (e *ContainerEnv) Exec(dir string, cmd string, args ...string) (string, err
 		shellScript = shellJoin(fullArgs) + " 2>&1"
 	}
 
-	exitCode, reader, err := e.container.Exec(e.ctx, []string{"sh", "-c", shellScript}, tcexec.Multiplexed())
+	exitCode, reader, err := e.container.Exec(e.ctx, []string{"sh", "-c", shellScript})
 	if err != nil {
 		return "", fmt.Errorf("exec: %w", err)
 	}
 
-	var stdout, stderr bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdout, &stderr, reader); err != nil {
+	out, err := readCombinedOutput(reader)
+	if err != nil {
 		return "", fmt.Errorf("read output: %w", err)
 	}
-	// combined output (stderr already merged into stdout via 2>&1 in the shell
-	// command, but we union both buffers for safety)
-	out := stdout.String() + stderr.String()
 
 	if exitCode != 0 {
 		return out, fmt.Errorf("exit %d", exitCode)
 	}
 	return out, nil
+}
+
+func readCombinedOutput(reader io.Reader) (string, error) {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return "", err
+	}
+
+	var stdout, stderr bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, bytes.NewReader(data)); err != nil {
+		if isUnrecognizedHeader(err) {
+			return string(data), nil
+		}
+		return "", err
+	}
+
+	return stdout.String() + stderr.String(), nil
+}
+
+func isUnrecognizedHeader(err error) bool {
+	var headerErr interface{ Error() string }
+	return errors.As(err, &headerErr) && strings.Contains(headerErr.Error(), "Unrecognized input header")
 }
 
 // shellEscape wraps s in single quotes, escaping any embedded single quotes.
