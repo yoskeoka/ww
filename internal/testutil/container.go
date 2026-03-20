@@ -6,7 +6,6 @@ package testutil
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -173,25 +172,45 @@ func (e *ContainerEnv) Exec(dir string, cmd string, args ...string) (string, err
 }
 
 func readCombinedOutput(reader io.Reader) (string, error) {
-	data, err := io.ReadAll(reader)
+	// Peek the first 8 bytes to detect Docker-multiplexed framing without
+	// loading the entire output into memory.
+	header := make([]byte, 8)
+	n, err := io.ReadFull(reader, header)
 	if err != nil {
-		return "", err
+		if err == io.EOF {
+			// Empty output.
+			return "", nil
+		}
+		if err != io.ErrUnexpectedEOF {
+			return "", err
+		}
+		// Fewer than 8 bytes total: definitely not Docker-multiplexed.
+		return string(header[:n]), nil
 	}
+
+	// Reconstruct the full stream from the peeked header + the remainder.
+	full := io.MultiReader(bytes.NewReader(header), reader)
 
 	var stdout, stderr bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdout, &stderr, bytes.NewReader(data)); err != nil {
-		if isUnrecognizedHeader(err) {
-			return string(data), nil
+	if isDockerMultiplexedHeader(header) {
+		if _, err := stdcopy.StdCopy(&stdout, &stderr, full); err != nil {
+			return "", err
 		}
-		return "", err
+		return stdout.String() + stderr.String(), nil
 	}
 
-	return stdout.String() + stderr.String(), nil
+	// Plain (non-multiplexed) stream – copy as-is.
+	if _, err := io.Copy(&stdout, full); err != nil {
+		return "", err
+	}
+	return stdout.String(), nil
 }
 
-func isUnrecognizedHeader(err error) bool {
-	var headerErr interface{ Error() string }
-	return errors.As(err, &headerErr) && strings.Contains(headerErr.Error(), "Unrecognized input header")
+// isDockerMultiplexedHeader returns true when h looks like a valid Docker
+// stream-multiplexing frame header: stream type byte 0–2 in h[0], three zero
+// padding bytes in h[1:4].
+func isDockerMultiplexedHeader(h []byte) bool {
+	return len(h) == 8 && h[0] <= 2 && h[1] == 0 && h[2] == 0 && h[3] == 0
 }
 
 // shellEscape wraps s in single quotes, escaping any embedded single quotes.
