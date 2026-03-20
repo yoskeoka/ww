@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"b95e6b8c2a0643896dd4f9b4ef45475ad4b5d2723004f96dfcc42daab4ab9eee","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"82008eeca494c4f57bfc3794781412b9bff9fe28b275672af898dfbd2324bfc4","compiler_version":"v0.59.0","strict":true}
 
 name: "Plan Review"
 "on":
@@ -1186,6 +1186,22 @@ jobs:
             const items = output.items.filter(i => i.type === 'submit_pr_review');
             for (const item of items) {
               try {
+                // Route A: Dismiss existing bot reviews before creating a new one
+                const reviews = await github.rest.pulls.listReviews({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                });
+                const botReviews = reviews.data.filter(r => r.user.login === 'github-actions[bot]' && r.state !== 'DISMISSED');
+                for (const rev of botReviews) {
+                  await github.rest.pulls.dismissReview({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                    review_id: rev.id,
+                    message: 'Superseded by updated review',
+                  });
+                }
                 await github.rest.pulls.createReview({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -1197,13 +1213,35 @@ jobs:
               } catch (err) {
                 core.warning(`Failed to submit ${item.event} review: ${err.message}. Falling back to PR comment.`);
                 const fixGuide = `> **Fix:** Go to **Settings → Actions → General → Workflow permissions** and check **"Allow GitHub Actions to create and approve pull requests"**.`;
-                await github.rest.issues.createComment({
+                const marker = '<!-- gh-aw:plan-review -->';
+                const commentBody = `${marker}\n**${item.event}** (posted as comment — review submission failed)\n\n${item.body}\n\n---\n${fixGuide}`;
+                // Route B: Find-and-update existing fallback comment
+                let existingId = null;
+                for await (const page of github.paginate.iterator(github.rest.issues.listComments, {
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  body: `**${item.event}** (posted as comment — review submission failed)\n\n${item.body}\n\n---\n${fixGuide}`
-                });
-                core.info(`Posted ${item.event} review as PR comment (fallback)`);
+                })) {
+                  const found = page.data.find(c => c.body.includes(marker));
+                  if (found) { existingId = found.id; break; }
+                }
+                if (existingId) {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: existingId,
+                    body: commentBody
+                  });
+                  core.info(`Updated existing ${item.event} review comment`);
+                } else {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: commentBody
+                  });
+                  core.info(`Posted ${item.event} review as PR comment (fallback)`);
+                }
               }
             }
 
