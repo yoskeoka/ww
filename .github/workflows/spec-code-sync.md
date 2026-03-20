@@ -29,6 +29,7 @@ safe-outputs:
       runs-on: ubuntu-latest
       permissions:
         pull-requests: write
+        issues: write
       inputs:
         event:
           description: "Review event: APPROVE or REQUEST_CHANGES"
@@ -47,45 +48,56 @@ safe-outputs:
               const fs = require('fs');
               const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
               const items = output.items.filter(i => i.type === 'submit_pr_review');
+              const marker = '<!-- gh-aw:spec-code-sync -->';
               for (const item of items) {
                 try {
-                  // Route A: Dismiss existing bot reviews before creating a new one
-                  const reviews = await github.rest.pulls.listReviews({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: context.issue.number,
-                  });
-                  const botReviews = reviews.data.filter(r => r.user.login === 'github-actions[bot]' && r.state !== 'DISMISSED');
-                  for (const rev of botReviews) {
-                    await github.rest.pulls.dismissReview({
+                  // Route A: Best-effort dismiss of prior reviews from this workflow only
+                  try {
+                    const botReviews = [];
+                    for await (const page of github.paginate.iterator(github.rest.pulls.listReviews, {
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       pull_number: context.issue.number,
-                      review_id: rev.id,
-                      message: 'Superseded by updated review',
-                    });
+                    })) {
+                      for (const r of page.data) {
+                        if (r.user && r.user.login === 'github-actions[bot]' &&
+                            r.state !== 'DISMISSED' && r.body.includes(marker)) {
+                          botReviews.push(r);
+                        }
+                      }
+                    }
+                    for (const rev of botReviews) {
+                      await github.rest.pulls.dismissReview({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.issue.number,
+                        review_id: rev.id,
+                        message: 'Superseded by updated review',
+                      });
+                    }
+                  } catch (dismissErr) {
+                    core.warning(`Failed to dismiss prior reviews (non-fatal): ${dismissErr.message}`);
                   }
                   await github.rest.pulls.createReview({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     pull_number: context.issue.number,
                     event: item.event,
-                    body: item.body
+                    body: `${item.body}\n\n${marker}`
                   });
                   core.info(`Submitted ${item.event} review`);
                 } catch (err) {
                   core.warning(`Failed to submit ${item.event} review: ${err.message}. Falling back to PR comment.`);
                   const fixGuide = `> **Fix:** Go to **Settings → Actions → General → Workflow permissions** and check **"Allow GitHub Actions to create and approve pull requests"**.`;
-                  const marker = '<!-- gh-aw:spec-code-sync -->';
                   const commentBody = `${marker}\n**${item.event}** (posted as comment — review submission failed)\n\n${item.body}\n\n---\n${fixGuide}`;
-                  // Route B: Find-and-update existing fallback comment
+                  // Route B: Find-and-update existing bot-authored fallback comment
                   let existingId = null;
                   for await (const page of github.paginate.iterator(github.rest.issues.listComments, {
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     issue_number: context.issue.number,
                   })) {
-                    const found = page.data.find(c => c.body.includes(marker));
+                    const found = page.data.find(c => c.user.login === 'github-actions[bot]' && c.body.includes(marker));
                     if (found) { existingId = found.id; break; }
                   }
                   if (existingId) {
