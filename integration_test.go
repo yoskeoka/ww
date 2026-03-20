@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -25,9 +26,12 @@ func TestMain(m *testing.M) {
 			fmt.Fprintf(os.Stderr, "FATAL: setup container env: %v\n", err)
 			os.Exit(1)
 		}
-		defer globalEnv.Terminate()
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	if globalEnv != nil {
+		globalEnv.Terminate()
+	}
+	os.Exit(code)
 }
 
 func setupRepo(t *testing.T) string {
@@ -123,8 +127,13 @@ func TestListJSON(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		if !strings.Contains(line, `"path"`) {
-			t.Errorf("JSON line missing 'path' field: %s", line)
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Errorf("invalid JSON line: %s\nerror: %v", line, err)
+			continue
+		}
+		if _, ok := obj["path"]; !ok {
+			t.Errorf("JSON object missing 'path' field: %s", line)
 		}
 	}
 }
