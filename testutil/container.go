@@ -43,8 +43,9 @@ func NewContainerEnv(ctx context.Context) (*ContainerEnv, error) {
 		Image: containerImage,
 		Cmd:   []string{"sleep", "infinity"},
 		Env: map[string]string{
-			// Prevent host git config from leaking into the container.
-			"GIT_CONFIG_GLOBAL": "/dev/null",
+			// Prevent host git config from leaking into the container, while still
+			// allowing git config --global to persist a deterministic identity.
+			"GIT_CONFIG_GLOBAL": "/tmp/gitconfig",
 		},
 		WaitingFor: wait.ForExec([]string{"true"}),
 	}
