@@ -42,5 +42,5 @@
 
 - **Mistake**: Route B found an existing fallback comment and updated it — but if multiple matching comments existed (e.g., from earlier workflow versions), older ones were left behind, still cluttering the PR.
 - **Pattern**: "Find and update" logic only works if there is at most one match. When multiple matches are possible (bot pushed before the de-duplication fix was deployed), the oldest ones pile up.
-- **Rule**: When implementing find-and-update for bot comments: collect ALL matches, update the **newest** one, and delete the rest (best-effort, wrapped in try/catch). Sort by `id` descending to identify newest.
+- **Rule**: When implementing find-and-update for bot comments: collect ALL matches, update the **newest** one, and delete the rest (best-effort, wrapped in try/catch). Sort by `id` ascending and treat the last element as newest.
 - **Applied**: Route B fallback comment logic in all `gh-aw` review workflows.
