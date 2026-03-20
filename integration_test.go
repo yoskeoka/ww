@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yoskeoka/ww/testutil"
+	"github.com/yoskeoka/ww/internal/testutil"
 )
 
 // globalEnv is the shared container environment for all integration tests.
