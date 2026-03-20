@@ -13,7 +13,7 @@
 
 ### L-002: Missing `issues: write` permission when using Issues Comments API
 
-- **Mistake**: Added `issues.listComments()` / `issues.deleteComment()` in a job that only had `pull-requests: write` — the API calls failed at runtime.
+- **Mistake**: Added `github.rest.issues.listComments()` / `github.rest.issues.deleteComment()` in a job that only had `pull-requests: write` — the API calls failed at runtime.
 - **Pattern**: PR comments and issue comments share the Issues API endpoint; `pull-requests: write` does not grant write access to the Issues API.
 - **Rule**: When a `github-script` step calls any `octokit.rest.issues.*` method that writes (createComment, deleteComment, updateComment), add `issues: write` to the job-level `permissions` block.
 - **Applied**: All `.github/workflows/*.md` jobs that use Route B (fallback comment find-and-update).
