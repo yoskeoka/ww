@@ -197,7 +197,14 @@ func buildWWBinary() (string, error) {
 	}
 	modDir := filepath.Dir(strings.TrimSpace(string(out)))
 
-	binPath := filepath.Join(os.TempDir(), "ww-test-linux")
+	tmpFile, err := os.CreateTemp("", "ww-test-linux-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp ww binary: %w", err)
+	}
+	binPath := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("close temp ww binary file: %w", err)
+	}
 
 	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/ww/")
 	cmd.Dir = modDir
