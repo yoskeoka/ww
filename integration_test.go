@@ -583,3 +583,41 @@ func TestCreateExistingPathRejected(t *testing.T) {
 		t.Errorf("error should say 'worktree already exists at': %s", out)
 	}
 }
+
+func TestWorkspaceCreateUsesCentralizedWorktreeDir(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	out, err := runWW(t, ws.RepoDirs[0], "create", "feat/workspace-path")
+	if err != nil {
+		t.Fatalf("ww create in workspace: %v\n%s", err, out)
+	}
+
+	wtPath := path.Join(ws.RootDir, ".worktrees", "repo1@feat-workspace-path")
+	if !globalEnv.PathExists(wtPath) {
+		t.Fatalf("workspace worktree path not created at %s", wtPath)
+	}
+}
+
+func TestNonGitWorkspaceRootRejectsWithoutRepoSelection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	out, err := runWW(t, ws.RootDir, "list")
+	if err == nil {
+		t.Fatalf("expected error from non-git workspace root, got: %s", out)
+	}
+	if !strings.Contains(out, "repo selection is not supported from a non-git workspace root") {
+		t.Errorf("error should mention repo selection support: %s", out)
+	}
+}

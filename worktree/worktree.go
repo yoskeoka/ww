@@ -12,6 +12,7 @@ import (
 
 	"github.com/yoskeoka/ww/git"
 	"github.com/yoskeoka/ww/validate"
+	"github.com/yoskeoka/ww/workspace"
 )
 
 // Config holds the configuration values that Manager needs to operate.
@@ -27,9 +28,10 @@ type Config struct {
 
 // Manager coordinates worktree operations.
 type Manager struct {
-	Git     *git.Runner
-	Config  Config
-	RepoDir string // absolute path to the main repository
+	Git       *git.Runner
+	Config    Config
+	RepoDir   string // absolute path to the main repository
+	Workspace *workspace.Workspace
 }
 
 // CreateOpts configures worktree creation.
@@ -68,21 +70,39 @@ func SanitizeBranch(branch string) string {
 	return strings.ReplaceAll(branch, "/", "-")
 }
 
-// WorktreePath computes the worktree directory path for a branch.
-func (m *Manager) WorktreePath(branch string) (string, error) {
+func (m *Manager) isWorkspaceMode() bool {
+	return m.Workspace != nil && m.Workspace.Mode == workspace.ModeWorkspace
+}
+
+func (m *Manager) worktreeLocation(branch string) (string, string, error) {
 	repoName := filepath.Base(m.RepoDir)
 	dirName := repoName + "@" + SanitizeBranch(branch)
+	repoParent := filepath.Dir(m.RepoDir)
 
 	if m.Config.WorktreeDir != "" {
 		base := m.Config.WorktreeDir
 		if !filepath.IsAbs(base) {
-			base = filepath.Join(filepath.Dir(m.RepoDir), base)
+			if m.isWorkspaceMode() {
+				base = filepath.Join(m.Workspace.Root, base)
+			} else {
+				base = filepath.Join(repoParent, base)
+			}
 		}
-		return filepath.Join(base, dirName), nil
+		return filepath.Join(base, dirName), base, nil
 	}
 
-	// Sibling layout
-	return filepath.Join(filepath.Dir(m.RepoDir), dirName), nil
+	if m.isWorkspaceMode() {
+		base := filepath.Join(m.Workspace.Root, ".worktrees")
+		return filepath.Join(base, dirName), m.Workspace.Root, nil
+	}
+
+	return filepath.Join(repoParent, dirName), m.RepoDir, nil
+}
+
+// WorktreePath computes the worktree directory path for a branch.
+func (m *Manager) WorktreePath(branch string) (string, error) {
+	path, _, err := m.worktreeLocation(branch)
+	return path, err
 }
 
 // Create creates a worktree for the given branch.
@@ -91,12 +111,12 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		return nil, nil, err
 	}
 
-	wtPath, err := m.WorktreePath(branch)
+	wtPath, validationRoot, err := m.worktreeLocation(branch)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if err := validate.WorktreePath(wtPath, m.RepoDir); err != nil {
+	if err := validate.WorktreePath(wtPath, validationRoot); err != nil {
 		return nil, nil, err
 	}
 

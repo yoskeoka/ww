@@ -28,7 +28,7 @@ post_create_hook = "npm install"
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `worktree_dir` | string | `""` | Parent directory for worktrees. Empty = sibling layout (worktrees created next to the repo). Non-empty = all worktrees under this directory. |
+| `worktree_dir` | string | mode-dependent | Parent directory for worktrees. In workspace mode the default is `.worktrees`; in single-repo mode the default is sibling layout next to the repo. An explicit value overrides the default in both modes. |
 | `default_base` | string | `""` | Base ref for new branches. Empty = auto-detect via `origin/HEAD`. |
 | `copy_files` | string[] | `[]` | Files/directories to deep-copy from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
@@ -49,11 +49,11 @@ post_create_hook = "npm install"
 
 ## Worktree Path Layout
 
-### Sibling layout (default, `worktree_dir = ""`)
+### Sibling layout (`worktree_dir = ""` in single-repo mode)
 
 Worktrees are created as siblings of the repo directory:
 
-```
+```text
 myapp/              # main repo
 myapp@feat-auth/    # worktree
 myapp@fix-bug/      # worktree
@@ -61,11 +61,11 @@ myapp@fix-bug/      # worktree
 
 Path formula: `<repo-parent>/<repo-name>@<sanitized-branch>`
 
-### Workspace layout (`worktree_dir = ".worktrees"`)
+### Workspace layout (`worktree_dir = ".worktrees"` in workspace mode)
 
 Worktrees are created under the specified directory:
 
-```
+```text
 workspace/
 ├── repo/                   # main repo
 ├── .worktrees/

@@ -44,3 +44,12 @@
 - **Pattern**: "Find and update" logic only works if there is at most one match. When multiple matches are possible (bot pushed before the de-duplication fix was deployed), the oldest ones pile up.
 - **Rule**: When implementing find-and-update for bot comments: collect ALL matches, update the **newest** one, and delete the rest (best-effort, wrapped in try/catch). Sort by `id` ascending and treat the last element as newest.
 - **Applied**: Route B fallback comment logic in all `gh-aw` review workflows.
+
+---
+
+### L-006: Workspace discovery must ignore worktree sibling markers
+
+- **Mistake**: Treated every `.git`-bearing sibling under the repo parent as a workspace member, which made an existing worktree sibling look like a second repo.
+- **Pattern**: Discovery logic counted repository markers without distinguishing main repo checkouts from git worktrees created by the tool itself.
+- **Rule**: When scanning candidate workspace members, treat `.git` files that point into `/.git/worktrees/` as worktree checkouts and exclude them from workspace membership checks. Add a test that creates a worktree sibling and verifies it does not flip the repo into workspace mode.
+- **Applied**: `workspace/workspace.go`, workspace detection tests, and any future path-discovery logic that scans parent directories for repo members.
