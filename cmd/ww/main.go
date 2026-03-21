@@ -11,6 +11,7 @@ import (
 
 	"github.com/yoskeoka/ww/git"
 	"github.com/yoskeoka/ww/internal/config"
+	"github.com/yoskeoka/ww/workspace"
 	"github.com/yoskeoka/ww/worktree"
 )
 
@@ -113,13 +114,21 @@ func newManager() (*worktree.Manager, error) {
 		return nil, err
 	}
 
+	ws, err := workspace.Detect(dir)
+	if err != nil {
+		return nil, err
+	}
+
 	runner := &git.Runner{Dir: dir}
 	mainDir, err := runner.MainWorktreeDir()
 	if err != nil {
+		if ws.Mode == workspace.ModeWorkspace && ws.Root == dir {
+			return nil, fmt.Errorf("repo selection is not supported from a non-git workspace root")
+		}
 		return nil, fmt.Errorf("not a git repository: %w", err)
 	}
 
-	cfg, err := config.Load(dir, mainDir)
+	cfg, err := config.Load(dir, mainDir, ws.Root)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
@@ -133,7 +142,8 @@ func newManager() (*worktree.Manager, error) {
 			SymlinkFiles:   cfg.SymlinkFiles,
 			PostCreateHook: cfg.PostCreateHook,
 		},
-		RepoDir: mainDir,
+		RepoDir:   mainDir,
+		Workspace: ws,
 	}, nil
 }
 
