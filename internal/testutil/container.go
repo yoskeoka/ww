@@ -16,7 +16,6 @@ import (
 
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/testcontainers/testcontainers-go"
-	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -156,23 +155,62 @@ func (e *ContainerEnv) Exec(dir string, cmd string, args ...string) (string, err
 		shellScript = shellJoin(fullArgs) + " 2>&1"
 	}
 
-	exitCode, reader, err := e.container.Exec(e.ctx, []string{"sh", "-c", shellScript}, tcexec.Multiplexed())
+	exitCode, reader, err := e.container.Exec(e.ctx, []string{"sh", "-c", shellScript})
 	if err != nil {
 		return "", fmt.Errorf("exec: %w", err)
 	}
 
-	var stdout, stderr bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdout, &stderr, reader); err != nil {
+	out, err := readCombinedOutput(reader)
+	if err != nil {
 		return "", fmt.Errorf("read output: %w", err)
 	}
-	// combined output (stderr already merged into stdout via 2>&1 in the shell
-	// command, but we union both buffers for safety)
-	out := stdout.String() + stderr.String()
 
 	if exitCode != 0 {
 		return out, fmt.Errorf("exit %d", exitCode)
 	}
 	return out, nil
+}
+
+func readCombinedOutput(reader io.Reader) (string, error) {
+	// Peek the first 8 bytes to detect Docker-multiplexed framing without
+	// loading the entire output into memory.
+	header := make([]byte, 8)
+	n, err := io.ReadFull(reader, header)
+	if err != nil {
+		if err == io.EOF {
+			// Empty output.
+			return "", nil
+		}
+		if err != io.ErrUnexpectedEOF {
+			return "", err
+		}
+		// Fewer than 8 bytes total: definitely not Docker-multiplexed.
+		return string(header[:n]), nil
+	}
+
+	// Reconstruct the full stream from the peeked header + the remainder.
+	full := io.MultiReader(bytes.NewReader(header), reader)
+
+	var stdout, stderr bytes.Buffer
+	if isDockerMultiplexedHeader(header) {
+		if _, err := stdcopy.StdCopy(&stdout, &stderr, full); err != nil {
+			return "", err
+		}
+		return stdout.String() + stderr.String(), nil
+	}
+
+	// Plain (non-multiplexed) stream – copy as-is.
+	if _, err := io.Copy(&stdout, full); err != nil {
+		return "", err
+	}
+	return stdout.String(), nil
+}
+
+// isDockerMultiplexedHeader returns true when h looks like a valid Docker
+// stream-multiplexing frame header: stream type byte 0–2 in h[0], three zero
+// padding bytes in h[1:4].
+func isDockerMultiplexedHeader(h []byte) bool {
+	return len(h) == 8 && h[0] <= 2 && h[1] == 0 && h[2] == 0 && h[3] == 0
 }
 
 // shellEscape wraps s in single quotes, escaping any embedded single quotes.
