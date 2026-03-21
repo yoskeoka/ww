@@ -3,7 +3,14 @@ package testutil
 import (
 	"fmt"
 	"path"
+	"sync"
 	"testing"
+)
+
+var (
+	repoSeedOnce sync.Once
+	repoSeedPath string
+	repoSeedErr  error
 )
 
 // RepoOpts configures a single test git repository.
@@ -42,6 +49,125 @@ func SetupRepo(t *testing.T, env *ContainerEnv, opts RepoOpts) string {
 	if opts.DefaultBranch == "" {
 		opts.DefaultBranch = "main"
 	}
+
+	if opts.Name == "myrepo" && opts.DefaultBranch == "main" {
+		seedRepo, err := ensureRepoSeed(env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cloneRepoSeed(t, env, seedRepo, opts)
+	}
+
+	return setupRepoFromScratch(t, env, opts)
+}
+
+func ensureRepoSeed(env *ContainerEnv) (string, error) {
+	repoSeedOnce.Do(func() {
+		repoSeedPath, repoSeedErr = createRepoSeed(env)
+	})
+	return repoSeedPath, repoSeedErr
+}
+
+func createRepoSeed(env *ContainerEnv) (string, error) {
+	baseDir, err := env.MkdirTemp("ww-seed")
+	if err != nil {
+		return "", err
+	}
+
+	repo := path.Join(baseDir, "myrepo")
+	if err := env.MkdirAll(repo); err != nil {
+		return "", err
+	}
+
+	git := func(args ...string) error {
+		if _, err := env.Git(repo, args...); err != nil {
+			return fmt.Errorf("git %v: %w", args, err)
+		}
+		return nil
+	}
+
+	writeFile := func(name, content string) error {
+		filePath := path.Join(repo, name)
+		if err := env.MkdirAll(path.Dir(filePath)); err != nil {
+			return err
+		}
+		if err := env.WriteFile(filePath, content); err != nil {
+			return fmt.Errorf("writeFile %s: %w", name, err)
+		}
+		return nil
+	}
+
+	if err := git("init", "-b", "main"); err != nil {
+		return "", err
+	}
+
+	// Commit 1: initial project structure
+	if err := writeFile("README.md", "# My Repo\n\nA test repository for ww integration tests.\n"); err != nil {
+		return "", err
+	}
+	if err := writeFile("go.mod", "module example.com/myrepo\n\ngo 1.23.0\n"); err != nil {
+		return "", err
+	}
+	if err := writeFile("main.go", "package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n"); err != nil {
+		return "", err
+	}
+	if err := git("add", "."); err != nil {
+		return "", err
+	}
+	if err := git("commit", "-m", "initial: project scaffold"); err != nil {
+		return "", err
+	}
+
+	// Commit 2: add utility package
+	if err := writeFile("internal/util.go", "package internal\n\nfunc Add(a, b int) int { return a + b }\n"); err != nil {
+		return "", err
+	}
+	if err := writeFile("internal/util_test.go", "package internal\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif Add(1, 2) != 3 {\n\t\tt.Fatal(\"bad\")\n\t}\n}\n"); err != nil {
+		return "", err
+	}
+	if err := git("add", "."); err != nil {
+		return "", err
+	}
+	if err := git("commit", "-m", "feat: add util package"); err != nil {
+		return "", err
+	}
+
+	// Commit 3: docs update
+	if err := writeFile("README.md", "# My Repo\n\nA test repository for ww integration tests.\n\n## Usage\n\nRun `go run main.go`\n"); err != nil {
+		return "", err
+	}
+	if err := git("add", "."); err != nil {
+		return "", err
+	}
+	if err := git("commit", "-m", "docs: update readme with usage"); err != nil {
+		return "", err
+	}
+
+	// Pre-existing branch for TestCreateExistingBranch.
+	if err := git("branch", "feat/existing"); err != nil {
+		return "", err
+	}
+
+	return repo, nil
+}
+
+func cloneRepoSeed(t *testing.T, env *ContainerEnv, seedRepo string, opts RepoOpts) string {
+	t.Helper()
+
+	baseDir, err := env.MkdirTemp("ww-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo := path.Join(baseDir, opts.Name)
+	if _, err := env.Git(baseDir, "clone", seedRepo, repo); err != nil {
+		t.Fatalf("git clone: %v", err)
+	}
+	return repo
+}
+
+func setupRepoFromScratch(t *testing.T, env *ContainerEnv, opts RepoOpts) string {
+	t.Helper()
 
 	baseDir, err := env.MkdirTemp("ww-test")
 	if err != nil {

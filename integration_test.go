@@ -55,6 +55,8 @@ func TestVersionCommand(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	dir, err := globalEnv.MkdirTemp("ww-ver")
 	if err != nil {
 		t.Fatal(err)
@@ -72,6 +74,8 @@ func TestCreateAndList(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -107,6 +111,8 @@ func TestListJSON(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -142,6 +148,8 @@ func TestCreateDryRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -163,6 +171,8 @@ func TestRemoveWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -188,6 +198,8 @@ func TestInvalidBranchName(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -201,6 +213,8 @@ func TestZeroConfig(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 
 	_, err := runWW(t, repo, "create", "feat/zero-config")
@@ -213,6 +227,8 @@ func TestNonGitDirectory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	dir, err := globalEnv.MkdirTemp("ww-nongit")
 	if err != nil {
 		t.Fatal(err)
@@ -231,6 +247,8 @@ func TestCopyFiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 
 	if err := globalEnv.WriteFile(path.Join(repo, ".env"), "SECRET=test123"); err != nil {
@@ -259,6 +277,8 @@ func TestSymlinkFiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 
 	if err := globalEnv.MkdirAll(path.Join(repo, "node_modules", "pkg")); err != nil {
@@ -281,6 +301,8 @@ func TestPostCreateHook(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 
 	writeConfig(t, repo, "default_base = \"main\"\npost_create_hook = \"echo hook-ran > hook-output.txt\"\n")
@@ -303,6 +325,8 @@ func TestRemoveMainWorktreeRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -319,6 +343,8 @@ func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -335,6 +361,8 @@ func TestRemoveNonexistentWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -351,6 +379,8 @@ func TestRemoveNonexistentWorktreeDryRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -367,6 +397,8 @@ func TestHelpFlag(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 
 	out, err := runWW(t, repo, "remove", "--help")
@@ -385,6 +417,8 @@ func TestRunFromWorktreeDir(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -422,6 +456,8 @@ func TestConfigFallbackFromWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -445,6 +481,8 @@ func TestCreateExistingBranch(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -466,6 +504,8 @@ func TestRemoveForceCleanWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -491,6 +531,8 @@ func TestRemoveForceDirtyWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 
@@ -524,6 +566,8 @@ func TestCreateExistingPathRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
+	t.Parallel()
+
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
 

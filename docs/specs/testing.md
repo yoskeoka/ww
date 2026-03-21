@@ -9,7 +9,7 @@
 
 ## Docker Integration Harness
 
-Integration tests execute `ww` and supporting shell commands inside a shared Docker container.
+Integration tests execute `ww` and supporting shell commands inside a shared Docker container. Each test gets its own cloned repository from a shared seeded fixture so the suite can run in parallel without rebuilding the seed data.
 
 The test helper must return combined command output for both success and failure cases. It must not depend on only one Docker exec stream encoding:
 
