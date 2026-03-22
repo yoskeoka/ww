@@ -82,11 +82,23 @@ func (m *Manager) worktreeLocation(branch string) (string, string, error) {
 	if m.Config.WorktreeDir != "" {
 		base := m.Config.WorktreeDir
 		if !filepath.IsAbs(base) {
+			var anchor string
 			if m.isWorkspaceMode() {
-				base = filepath.Join(m.Workspace.Root, base)
+				anchor = m.Workspace.Root
 			} else {
-				base = filepath.Join(repoParent, base)
+				anchor = repoParent
 			}
+			cleanAnchor := filepath.Clean(anchor)
+			base = filepath.Join(cleanAnchor, base)
+			// Reject relative paths that escape the anchor root via ".." traversal.
+			rel, relErr := filepath.Rel(cleanAnchor, base)
+			if relErr != nil || strings.HasPrefix(rel, "..") {
+				return "", "", fmt.Errorf("worktree_dir %q resolves outside the allowed area %q", m.Config.WorktreeDir, anchor)
+			}
+			if m.isWorkspaceMode() {
+				return filepath.Join(base, dirName), m.Workspace.Root, nil
+			}
+			return filepath.Join(base, dirName), m.RepoDir, nil
 		}
 		return filepath.Join(base, dirName), base, nil
 	}
