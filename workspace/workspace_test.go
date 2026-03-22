@@ -154,6 +154,35 @@ func TestDetectGitFileAndDirectoryMarkers(t *testing.T) {
 	}
 }
 
+func TestDetectIgnoresGitWorktreeFileSibling(t *testing.T) {
+	root := t.TempDir()
+	child := filepath.Join(root, "child")
+	sibling := filepath.Join(root, "sibling")
+
+	gitInit(t, child)
+	if err := os.MkdirAll(sibling, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a git worktree checkout whose .git file points into another repo's .git/worktrees directory.
+	gitFileContents := []byte("gitdir: /tmp/other-repo/.git/worktrees/wt-1")
+	if err := os.WriteFile(filepath.Join(sibling, ".git"), gitFileContents, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err := Detect(child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeSingleRepo {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeSingleRepo)
+	}
+	if ws.Root != child {
+		t.Fatalf("Root = %q, want %q", ws.Root, child)
+	}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child"}) {
+		t.Fatalf("Repos = %v, want [child]", got)
+	}
+}
 func TestDetectOrdersReposDeterministically(t *testing.T) {
 	root := t.TempDir()
 	zeta := filepath.Join(root, "zeta")
