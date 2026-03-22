@@ -7,7 +7,8 @@
 ## Prerequisites
 
 - `git` must be available in PATH. If not found, `ww` exits with a clear error: `git not found in PATH`.
-- `ww` must be run inside a git repository (or a worktree of one). If not, `ww` exits with: `not a git repository`.
+- `ww` may be started from a non-git workspace root, but commands that need a current repo still require repo selection. Until repo selection exists, `ww` exits with: `repo selection is not supported from a non-git workspace root`.
+- If the current directory is neither a git repository nor a detected workspace root, `ww` exits with: `not a git repository`.
 
 When run from a secondary worktree, `ww` resolves back to the main working tree for all path computations. This means all commands work identically regardless of which worktree the user is in.
 
@@ -33,12 +34,12 @@ Create a new worktree for the given branch.
 5. Create symlinks for files listed in `symlink_files` config.
 6. Run `post_create_hook` if configured.
 
-**Worktree path:** `<worktree_dir>/<repo>@<branch>` where slashes in branch names are replaced with `-`.
+**Worktree path:** mode-dependent default, or explicit `worktree_dir` override. Slashes in branch names are replaced with `-`.
 
 **Flags:** Inherits global flags only.
 
 **Output (text):**
-```
+```text
 Created worktree at /path/to/repo@branch (branch: feat/my-feature)
 ```
 
@@ -48,7 +49,7 @@ Created worktree at /path/to/repo@branch (branch: feat/my-feature)
 ```
 
 **Dry-run output (text):**
-```
+```text
 Would create worktree at /path/to/repo@branch (branch: feat/my-feature, base: origin/main)
 Would copy: .env, .vscode/settings.json
 Would symlink: node_modules
@@ -68,14 +69,14 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 **Flags:** Inherits global flags only.
 
 **Output (text):**
-```
+```text
 PATH                                  BRANCH              HEAD
 /path/to/repo (main worktree)        main                abc1234
 /path/to/repo@feat-auth              feat/auth           def5678
 ```
 
 **Output (JSON, NDJSON):**
-```
+```json
 {"path":"/path/to/repo","branch":"main","head":"abc1234","main":true}
 {"path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678"}
 ```
@@ -97,7 +98,7 @@ Remove the worktree for the given branch and optionally delete the branch.
 | `--keep-branch` | bool | false | Do not delete the branch after removing the worktree |
 
 **Output (text):**
-```
+```text
 Removed worktree at /path/to/repo@branch
 Deleted branch feat/my-feature
 ```
@@ -114,6 +115,6 @@ Deleted branch feat/my-feature
 Print the version (commit hash) and exit.
 
 **Output:**
-```
+```text
 ww version <commit-hash>
 ```
