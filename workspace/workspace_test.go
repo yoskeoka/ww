@@ -199,6 +199,31 @@ func TestDetectOrdersReposDeterministically(t *testing.T) {
 	}
 }
 
+func TestDetectWorktreeSiblingNotCountedAsWorkspaceMember(t *testing.T) {
+	root := t.TempDir()
+	repoA := filepath.Join(root, "repo-a")
+	gitInit(t, repoA)
+
+	// Simulate a ww-created worktree sibling: .git file points into .git/worktrees/
+	wtSibling := filepath.Join(root, "repo-a@feat-branch")
+	if err := os.MkdirAll(wtSibling, 0755); err != nil {
+		t.Fatal(err)
+	}
+	gitfileContent := "gitdir: " + repoA + "/.git/worktrees/feat-branch"
+	if err := os.WriteFile(filepath.Join(wtSibling, ".git"), []byte(gitfileContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only one real repo → should be single-repo, not workspace
+	ws, err := Detect(repoA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeSingleRepo {
+		t.Fatalf("Mode = %q, want %q — worktree sibling should not trigger workspace mode", ws.Mode, ModeSingleRepo)
+	}
+}
+
 func repoNames(repos []Repo) []string {
 	names := make([]string, len(repos))
 	for i, repo := range repos {
