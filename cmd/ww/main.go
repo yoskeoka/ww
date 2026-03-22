@@ -108,7 +108,7 @@ func runSubcmd(parentCmd string, subCommands []command, args []string, glOpts *g
 	return fmt.Errorf("unknown command: '%s' for '%s'", name, parentCmd)
 }
 
-func newManager() (*worktree.Manager, error) {
+func newManager(requireRepo bool) (*worktree.Manager, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -122,10 +122,13 @@ func newManager() (*worktree.Manager, error) {
 	runner := &git.Runner{Dir: dir}
 	mainDir, err := runner.MainWorktreeDir()
 	if err != nil {
-		if ws.Mode == workspace.ModeWorkspace && ws.Root == dir {
+		if ws.Mode == workspace.ModeWorkspace && ws.Root == dir && !requireRepo {
+			mainDir = ws.Root
+		} else if ws.Mode == workspace.ModeWorkspace && ws.Root == dir {
 			return nil, fmt.Errorf("repo selection is not supported from a non-git workspace root")
+		} else {
+			return nil, fmt.Errorf("not a git repository: %w", err)
 		}
-		return nil, fmt.Errorf("not a git repository: %w", err)
 	}
 
 	cfg, err := config.Load(dir, mainDir, ws.Root)

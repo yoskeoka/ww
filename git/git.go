@@ -32,6 +32,10 @@ func (r *Runner) gitBin() string {
 
 // Run executes a git command and returns stdout.
 func (r *Runner) Run(args ...string) (string, error) {
+	return r.run(args, false)
+}
+
+func (r *Runner) run(args []string, allowExitCode1 bool) (string, error) {
 	cmd := exec.Command(r.gitBin(), args...)
 	if r.Dir != "" {
 		cmd.Dir = r.Dir
@@ -43,6 +47,9 @@ func (r *Runner) Run(args ...string) (string, error) {
 			return "", fmt.Errorf("git not found in PATH: install git and try again")
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
+			if allowExitCode1 && exitErr.ExitCode() == 1 && len(exitErr.Stderr) == 0 {
+				return "", nil
+			}
 			return "", fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, string(exitErr.Stderr))
 		}
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
@@ -69,6 +76,47 @@ func (r *Runner) WorktreeList() ([]WorktreeEntry, error) {
 		return nil, err
 	}
 	return parseWorktreeList(out), nil
+}
+
+// MergedBranches returns local branches merged into base.
+func (r *Runner) MergedBranches(base string) ([]string, error) {
+	out, err := r.Run("branch", "--merged", base)
+	if err != nil {
+		return nil, err
+	}
+
+	var branches []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		line = strings.TrimLeft(line, "*+ ")
+		line = strings.TrimSpace(line)
+		if line != "" {
+			branches = append(branches, line)
+		}
+	}
+	return branches, nil
+}
+
+// BranchRemote returns the remote configured for branch, or empty string if
+// the branch has no tracking remote.
+func (r *Runner) BranchRemote(branch string) (string, error) {
+	out, err := r.run([]string{"config", "--get", "branch." + branch + ".remote"}, true)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// RemoteBranchExists reports whether remote/branch exists on the remote.
+func (r *Runner) RemoteBranchExists(remote, branch string) (bool, error) {
+	out, err := r.Run("ls-remote", "--heads", remote, branch)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
 }
 
 func parseWorktreeList(output string) []WorktreeEntry {

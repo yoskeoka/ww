@@ -53,3 +53,12 @@
 - **Pattern**: Discovery logic counted repository markers without distinguishing main repo checkouts from git worktrees created by the tool itself.
 - **Rule**: When scanning candidate workspace members, treat `.git` files that point into `/.git/worktrees/` as worktree checkouts and exclude them from workspace membership checks. Add a test that creates a worktree sibling and verifies it does not flip the repo into workspace mode.
 - **Applied**: `workspace/workspace.go`, workspace detection tests, and any future path-discovery logic that scans parent directories for repo members.
+
+---
+
+### L-007: `git branch --merged` marks other-worktree branches with `+`
+
+- **Mistake**: Parsed `git branch --merged <base>` assuming only the current worktree would be marked, which missed branches checked out in a different worktree.
+- **Pattern**: Git command output changes based on worktree ownership; the same branch can appear with `*` in the current worktree or `+` when it is active elsewhere.
+- **Rule**: When parsing merged-branch output, strip both `*` and `+` prefixes before comparing branch names. Add a test that keeps a branch checked out in a sibling worktree and verifies it still counts as merged.
+- **Applied**: `git/git.go::MergedBranches`, worktree status resolution, and any future parsers for branch lists from Git.

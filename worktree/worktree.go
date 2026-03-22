@@ -15,6 +15,12 @@ import (
 	"github.com/yoskeoka/ww/workspace"
 )
 
+const (
+	statusActive = "active"
+	statusMerged = "merged"
+	statusStale  = "stale"
+)
+
 // Config holds the configuration values that Manager needs to operate.
 // This is decoupled from the TOML config file format (internal/config)
 // so that library consumers can construct it directly.
@@ -50,6 +56,8 @@ type RemoveOpts struct {
 type WorktreeInfo struct {
 	Path    string `json:"path"`
 	Branch  string `json:"branch"`
+	Repo    string `json:"repo"`
+	Status  string `json:"status"`
 	Head    string `json:"head,omitempty"`
 	Bare    bool   `json:"bare,omitempty"`
 	Main    bool   `json:"main,omitempty"`
@@ -189,22 +197,95 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 // List returns all worktrees.
 func (m *Manager) List() ([]WorktreeInfo, error) {
-	entries, err := m.Git.WorktreeList()
+	if m.isWorkspaceMode() {
+		return m.listWorkspace()
+	}
+	return m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
+}
+
+func (m *Manager) listWorkspace() ([]WorktreeInfo, error) {
+	var infos []WorktreeInfo
+	for _, repo := range m.Workspace.Repos {
+		repoInfos, err := m.listRepo(repo.Name, repo.Path)
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, repoInfos...)
+	}
+	return infos, nil
+}
+
+func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
+	runner := &git.Runner{Dir: repoPath}
+	entries, err := runner.WorktreeList()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
 	}
 
-	var infos []WorktreeInfo
+	base, err := m.baseRef(runner)
+	if err != nil {
+		return nil, fmt.Errorf("resolving base branch for %s: %w", repoName, err)
+	}
+
+	merged, err := runner.MergedBranches(base)
+	if err != nil {
+		return nil, fmt.Errorf("listing merged branches for %s: %w", repoName, err)
+	}
+	mergedSet := make(map[string]struct{}, len(merged))
+	for _, branch := range merged {
+		mergedSet[branch] = struct{}{}
+	}
+
+	infos := make([]WorktreeInfo, 0, len(entries))
 	for _, e := range entries {
+		status, err := resolveStatus(runner, e, mergedSet)
+		if err != nil {
+			return nil, fmt.Errorf("resolving status for %s (%s): %w", e.Path, e.Branch, err)
+		}
 		infos = append(infos, WorktreeInfo{
 			Path:   e.Path,
 			Branch: e.Branch,
+			Repo:   repoName,
+			Status: status,
 			Head:   e.Head,
 			Bare:   e.Bare,
 			Main:   e.Main,
 		})
 	}
 	return infos, nil
+}
+
+func (m *Manager) baseRef(runner *git.Runner) (string, error) {
+	if m.Config.DefaultBase != "" {
+		return m.Config.DefaultBase, nil
+	}
+	return runner.DefaultBranch()
+}
+
+func resolveStatus(runner *git.Runner, entry git.WorktreeEntry, merged map[string]struct{}) (string, error) {
+	if entry.Main || entry.Branch == "" {
+		return statusActive, nil
+	}
+	if _, ok := merged[entry.Branch]; ok {
+		return statusMerged, nil
+	}
+
+	remote, err := runner.BranchRemote(entry.Branch)
+	if err != nil {
+		return "", err
+	}
+	if remote == "" {
+		return statusActive, nil
+	}
+
+	exists, err := runner.RemoteBranchExists(remote, entry.Branch)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return statusStale, nil
+	}
+	return statusActive, nil
 }
 
 // Remove removes a worktree and optionally its branch.

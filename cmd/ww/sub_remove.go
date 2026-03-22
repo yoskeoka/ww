@@ -32,7 +32,7 @@ func removeCmd() command {
 			}
 			branch := remaining[0]
 
-			mgr, err := newManager()
+			mgr, err := newManager(true)
 			if err != nil {
 				return err
 			}
