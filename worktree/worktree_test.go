@@ -74,6 +74,47 @@ func TestWorktreePathRelativeOverrideWorkspace(t *testing.T) {
 	}
 }
 
+func TestWorktreePathRelativeEscapeWorkspace(t *testing.T) {
+	m := &Manager{
+		Config:  Config{WorktreeDir: "../outside"},
+		RepoDir: "/tmp/workspace/repo",
+		Workspace: &workspace.Workspace{
+			Root: "/tmp/workspace",
+			Mode: workspace.ModeWorkspace,
+		},
+	}
+	_, err := m.WorktreePath("feat/my-feature")
+	if err == nil {
+		t.Fatal("expected error for relative worktree_dir that escapes workspace root, got nil")
+	}
+}
+
+func TestWorktreePathRelativeEscapeSingleRepo(t *testing.T) {
+	m := &Manager{
+		Config:  Config{WorktreeDir: "../../outside"},
+		RepoDir: "/tmp/project",
+	}
+	_, err := m.WorktreePath("feat/my-feature")
+	if err == nil {
+		t.Fatal("expected error for relative worktree_dir that escapes repo parent, got nil")
+	}
+}
+
+func TestWorktreePathRelativeOverrideSingleRepo(t *testing.T) {
+	m := &Manager{
+		Config:  Config{WorktreeDir: "worktrees"},
+		RepoDir: "/tmp/project",
+	}
+	got, err := m.WorktreePath("feat/my-feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join("/tmp", "worktrees", "project@feat-my-feature")
+	if got != want {
+		t.Fatalf("WorktreePath = %q, want %q", got, want)
+	}
+}
+
 func TestWorktreePathAbsoluteOverride(t *testing.T) {
 	m := &Manager{
 		Config:  Config{WorktreeDir: "/var/tmp/worktrees"},
