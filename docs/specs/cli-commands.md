@@ -153,6 +153,8 @@ from a non-git workspace root, it still cleans the workspace repositories.
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--force` | bool | false | Force removal even if the worktree is dirty and force-delete the branch (`git worktree remove --force` + `git branch -D`) |
+| `--dry-run` | bool | false | Show planned actions without executing |
+| `--json` | bool | false | Output NDJSON (one JSON object per line) |
 
 **Output (text):**
 ```text
