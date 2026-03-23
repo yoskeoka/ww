@@ -75,7 +75,7 @@ func listCmd() command {
 func filterCleanableWorktrees(infos []worktree.WorktreeInfo) []worktree.WorktreeInfo {
 	out := make([]worktree.WorktreeInfo, 0, len(infos))
 	for _, info := range infos {
-		if info.Status == "merged" || info.Status == "stale" {
+		if info.Status == worktree.StatusMerged || info.Status == worktree.StatusStale {
 			out = append(out, info)
 		}
 	}

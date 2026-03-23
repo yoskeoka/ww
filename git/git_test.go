@@ -86,6 +86,46 @@ func TestMergedBranches(t *testing.T) {
 	}
 }
 
+// TestMergedBranchesWorktreePrefix verifies that MergedBranches strips the "+"
+// prefix that git uses when a branch is currently checked out in another worktree.
+func TestMergedBranchesWorktreePrefix(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &Runner{Dir: repo}
+
+	// Create and merge feat/wt-merged
+	if _, err := runner.Run("checkout", "-b", "feat/wt-merged"); err != nil {
+		t.Fatal(err)
+	}
+	writeGitFile(t, repo, "wt-merged.txt", "wt-merged\n")
+	if _, err := runner.Run("add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "feat: wt-merged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("merge", "--ff-only", "feat/wt-merged"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a sibling worktree that checks out feat/wt-merged, causing git to
+	// display it as "+ feat/wt-merged" in branch listings.
+	sibling := t.TempDir()
+	if _, err := runner.Run("worktree", "add", sibling, "feat/wt-merged"); err != nil {
+		t.Fatal(err)
+	}
+
+	branches, err := runner.MergedBranches("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(branches, "feat/wt-merged") {
+		t.Fatalf("MergedBranches did not include feat/wt-merged (got %v); '+' prefix may not be stripped", branches)
+	}
+}
+
 func TestBranchRemote(t *testing.T) {
 	repo, remote := setupGitRepoWithRemote(t)
 	runner := &Runner{Dir: repo}
