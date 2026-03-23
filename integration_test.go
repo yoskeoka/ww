@@ -981,6 +981,9 @@ func TestRemoveForceDirtyWorktree(t *testing.T) {
 	if globalEnv.PathExists(wtPath) {
 		t.Error("dirty worktree directory should be removed with --force")
 	}
+	if _, err := globalEnv.Git(repo, "rev-parse", "--verify", "refs/heads/feat/force-dirty"); err == nil {
+		t.Error("force remove should delete the branch with git branch -D")
+	}
 }
 
 func TestCreateExistingPathRejected(t *testing.T) {

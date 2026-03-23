@@ -108,12 +108,13 @@ Remove the worktree for the given branch and optionally delete the branch.
 1. Look up the branch in `git worktree list` output. If no worktree entry exists for the branch, return an error: `no worktree found for branch "<branch>"`.
 2. If the matching entry is the main worktree (`Main == true`), reject with error: `cannot remove the main worktree`.
 3. Remove the git worktree using the path from the worktree list entry.
-4. Attempt to delete the branch (default behavior) using a safe delete (`git branch -d`). If deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
+4. Attempt to delete the branch unless `--keep-branch` is set. By default this uses a safe delete (`git branch -d`). When `--force` is set, it uses a force delete (`git branch -D`) to match the forced worktree removal behavior.
+5. If safe branch deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
 
 **Flags:**
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--force` | bool | false | Force removal even if the worktree is dirty (passes `--force` to `git worktree remove`) |
+| `--force` | bool | false | Force removal even if the worktree is dirty and force-delete the branch (`git worktree remove --force` + `git branch -D`) |
 | `--keep-branch` | bool | false | Do not delete the branch after removing the worktree |
 | `--dry-run` | bool | false | Show planned actions without executing |
 | `--json` | bool | false | Output NDJSON (one JSON object per line) |
@@ -130,6 +131,8 @@ Deleted branch feat/my-feature
 ```
 
 If safe branch deletion fails, JSON output includes `"branch_deleted":false` and a `branch_error` field with the git error message.
+
+When `--force` is used and branch deletion succeeds, JSON output still reports `"branch_deleted":true`; there is no separate field indicating whether safe or forced deletion was used.
 
 **Exit codes:** 0 on success, 1 on error.
 
