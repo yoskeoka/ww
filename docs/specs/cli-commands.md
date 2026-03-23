@@ -108,13 +108,16 @@ Remove the worktree for the given branch and optionally delete the branch.
 1. Look up the branch in `git worktree list` output. If no worktree entry exists for the branch, return an error: `no worktree found for branch "<branch>"`.
 2. If the matching entry is the main worktree (`Main == true`), reject with error: `cannot remove the main worktree`.
 3. Remove the git worktree using the path from the worktree list entry.
-4. Attempt to delete the branch (default behavior) using a safe delete (`git branch -d`). If deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
+4. Attempt to delete the branch unless `--keep-branch` is set. By default this uses a safe delete (`git branch -d`). When `--force` is set, it uses a force delete (`git branch -D`) to match the forced worktree removal behavior.
+5. If safe branch deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
 
 **Flags:**
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--force` | bool | false | Force removal even if the worktree is dirty (passes `--force` to `git worktree remove`) |
+| `--force` | bool | false | Force removal even if the worktree is dirty and force-delete the branch (`git worktree remove --force` + `git branch -D`) |
 | `--keep-branch` | bool | false | Do not delete the branch after removing the worktree |
+| `--dry-run` | bool | false | Show planned actions without executing |
+| `--json` | bool | false | Output NDJSON (one JSON object per line) |
 
 **Output (text):**
 ```text
@@ -127,7 +130,65 @@ Deleted branch feat/my-feature
 {"path":"/path/to/repo@branch","branch":"feat/my-feature","removed":true,"branch_deleted":true}
 ```
 
+If safe branch deletion fails, JSON output includes `"branch_deleted":false` and a `branch_error` field with the git error message.
+
+When `--force` is used and branch deletion succeeds, JSON output still reports `"branch_deleted":true`; there is no separate field indicating whether safe or forced deletion was used.
+
 **Exit codes:** 0 on success, 1 on error.
+
+### `ww clean`
+
+Remove all cleanable worktrees for the current repository or detected workspace.
+
+Cleanable worktrees are those whose `STATUS` is `merged` or `stale` in `ww list`.
+Main worktrees and `active` worktrees are never removed by this command.
+
+In workspace mode, `ww clean` operates across all detected repositories. When run
+from a non-git workspace root, it still cleans the workspace repositories.
+
+**Behavior:**
+1. List worktrees and determine their status using the same rules as `ww list`.
+2. Filter to worktrees with status `merged` or `stale`.
+3. For each cleanable worktree, remove the git worktree and delete the local branch.
+4. If safe branch deletion fails for a worktree, print a warning in text mode or include `branch_error` in JSON output, then continue. This does not make the command fail by itself.
+5. If one worktree fails to remove, report that failure, continue processing the remaining cleanable worktrees, and exit non-zero after all attempts complete.
+6. If there are no cleanable worktrees, exit successfully with no output.
+
+**Flags:**
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--force` | bool | false | Force removal even if the worktree is dirty and force-delete the branch (`git worktree remove --force` + `git branch -D`) |
+| `--dry-run` | bool | false | Show planned actions without executing |
+| `--json` | bool | false | Output NDJSON (one JSON object per line) |
+
+**Output (text):**
+```text
+Removed worktree at /path/to/repo@feat-old
+Deleted branch feat/old
+Removed worktree at /path/to/repo@feat-stale
+Deleted branch feat/stale
+```
+
+**Dry-run output (text):**
+```text
+Would remove worktree at /path/to/repo@feat-old
+Would delete branch feat/old
+Would remove worktree at /path/to/repo@feat-stale
+Would delete branch feat/stale
+```
+
+**Output (JSON, NDJSON):**
+```json
+{"repo":"repo","path":"/path/to/repo@feat-old","branch":"feat/old","status":"merged","removed":true,"branch_deleted":true}
+{"repo":"repo","path":"/path/to/repo@feat-stale","branch":"feat/stale","status":"stale","removed":true,"branch_deleted":false,"branch_error":"git branch -d feat/stale: ..."}
+```
+
+**Failure output (JSON, NDJSON):**
+```json
+{"repo":"repo","path":"/path/to/repo@feat-dirty","branch":"feat/dirty","status":"stale","removed":false,"branch_deleted":false,"error":"removing worktree: ..."}
+```
+
+**Exit codes:** 0 when all cleanable worktrees are processed successfully or none exist, 1 if any cleanable worktree fails.
 
 ### `ww version`
 

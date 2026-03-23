@@ -25,9 +25,10 @@ func main() {
 var mainCmdName = "ww"
 
 type globalOpts struct {
-	output io.Writer
-	json   bool
-	dryRun bool
+	output    io.Writer
+	errOutput io.Writer
+	json      bool
+	dryRun    bool
 }
 
 type command struct {
@@ -41,6 +42,7 @@ type command struct {
 func cliMain() int {
 	commands := []command{
 		createCmd(),
+		cleanCmd(),
 		listCmd(),
 		removeCmd(),
 		versionCmd(),
@@ -77,7 +79,7 @@ func cliMain() int {
 		return 1
 	}
 
-	glOpts := &globalOpts{output: os.Stdout}
+	glOpts := &globalOpts{output: os.Stdout, errOutput: os.Stderr}
 	if err := runSubcmd(mainCmdName, commands, args, glOpts); err != nil {
 		if errors.Is(err, errHelp) {
 			return 0
@@ -148,6 +150,32 @@ func newManager(requireRepo bool) (*worktree.Manager, error) {
 		RepoDir:   mainDir,
 		Workspace: ws,
 	}, nil
+}
+
+func managerForRepo(base *worktree.Manager, repoName string) (*worktree.Manager, error) {
+	if base.Workspace == nil || base.Workspace.Mode != workspace.ModeWorkspace {
+		return base, nil
+	}
+
+	for _, repo := range base.Workspace.Repos {
+		if repo.Name != repoName {
+			continue
+		}
+		return &worktree.Manager{
+			Git: &git.Runner{Dir: repo.Path},
+			Config: worktree.Config{
+				WorktreeDir:    base.Config.WorktreeDir,
+				DefaultBase:    base.Config.DefaultBase,
+				CopyFiles:      base.Config.CopyFiles,
+				SymlinkFiles:   base.Config.SymlinkFiles,
+				PostCreateHook: base.Config.PostCreateHook,
+			},
+			RepoDir:   repo.Path,
+			Workspace: base.Workspace,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("repo %q not found in workspace", repoName)
 }
 
 func outputJSON(w io.Writer, v any) error {

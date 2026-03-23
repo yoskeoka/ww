@@ -72,6 +72,7 @@ type RemoveResult struct {
 	Branch        string `json:"branch"`
 	Removed       bool   `json:"removed"`
 	BranchDeleted bool   `json:"branch_deleted"`
+	BranchError   string `json:"branch_error,omitempty"`
 }
 
 // SanitizeBranch converts a branch name into a safe directory name component.
@@ -353,8 +354,8 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 	result.Removed = true
 
 	if !opts.KeepBranch {
-		if err := m.Git.BranchDelete(branch); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not delete branch %s: %v\n", branch, err)
+		if err := m.Git.BranchDelete(branch, opts.Force); err != nil {
+			result.BranchError = err.Error()
 		} else {
 			result.BranchDeleted = true
 		}
