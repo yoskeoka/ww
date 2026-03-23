@@ -62,3 +62,12 @@
 - **Pattern**: Git command output changes based on worktree ownership; the same branch can appear with `*` in the current worktree or `+` when it is active elsewhere.
 - **Rule**: When parsing merged-branch output, strip both `*` and `+` prefixes before comparing branch names. Add a test that keeps a branch checked out in a sibling worktree and verifies it still counts as merged.
 - **Applied**: `git/git.go::MergedBranches`, worktree status resolution, and any future parsers for branch lists from Git.
+
+---
+
+### L-008: Shared CLI semantics must be decided before widening a reused flag
+
+- **Mistake**: Treated review feedback about `--force` on `ww remove` as a narrow spec-code mismatch, when the real question was whether `ww clean` and `ww remove` are contractually the same deletion operation at different scales.
+- **Pattern**: A new bulk command can quietly broaden an existing command's semantics if both commands reuse the same implementation path but the shared flag contract is not made explicit first.
+- **Rule**: When one command is intended to mean "bulk application of another command," decide and document whether shared flags are semantically identical before changing either implementation or spec. If the answer is yes, update both contracts together in the same change.
+- **Applied**: `ww clean` / `ww remove`, and any future single-item vs bulk command pairs that share flags or deletion semantics.
