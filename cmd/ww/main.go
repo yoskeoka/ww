@@ -25,9 +25,10 @@ func main() {
 var mainCmdName = "ww"
 
 type globalOpts struct {
-	output io.Writer
-	json   bool
-	dryRun bool
+	output    io.Writer
+	errOutput io.Writer
+	json      bool
+	dryRun    bool
 }
 
 type command struct {
@@ -78,7 +79,7 @@ func cliMain() int {
 		return 1
 	}
 
-	glOpts := &globalOpts{output: os.Stdout}
+	glOpts := &globalOpts{output: os.Stdout, errOutput: os.Stderr}
 	if err := runSubcmd(mainCmdName, commands, args, glOpts); err != nil {
 		if errors.Is(err, errHelp) {
 			return 0
