@@ -8,8 +8,19 @@ import (
 	"testing"
 )
 
+// evalTempDir resolves symlinks in t.TempDir() so that path comparisons
+// work on macOS where /tmp is a symlink to /private/tmp.
+func evalTempDir(t *testing.T) string {
+	t.Helper()
+	d, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
 func TestDetectStandaloneRepo(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	repo := filepath.Join(root, "repo")
 	gitInit(t, repo)
 
@@ -32,7 +43,7 @@ func TestDetectStandaloneRepo(t *testing.T) {
 }
 
 func TestDetectGitParentWithSiblings(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	gitInit(t, root)
 	childA := filepath.Join(root, "child-a")
 	childB := filepath.Join(root, "child-b")
@@ -56,7 +67,7 @@ func TestDetectGitParentWithSiblings(t *testing.T) {
 }
 
 func TestDetectNonGitParentWithSiblings(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	childB := filepath.Join(root, "child-b")
 	childA := filepath.Join(root, "child-a")
 	gitInit(t, childA)
@@ -79,7 +90,7 @@ func TestDetectNonGitParentWithSiblings(t *testing.T) {
 }
 
 func TestDetectNonGitWorkspaceRootWithChildren(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	childB := filepath.Join(root, "repo-b")
 	childA := filepath.Join(root, "repo-a")
 	gitInit(t, childA)
@@ -107,7 +118,7 @@ func TestDetectNonGitWorkspaceRootWithChildren(t *testing.T) {
 }
 
 func TestDetectNestedRepoStopsAtOneLevel(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	child := filepath.Join(root, "child")
 	sibling := filepath.Join(root, "sibling")
 	nested := filepath.Join(child, "nested")
@@ -131,7 +142,7 @@ func TestDetectNestedRepoStopsAtOneLevel(t *testing.T) {
 }
 
 func TestDetectGitFileAndDirectoryMarkers(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	childA := filepath.Join(root, "child-a")
 	childB := filepath.Join(root, "child-b")
 	gitInit(t, childA)
@@ -155,7 +166,7 @@ func TestDetectGitFileAndDirectoryMarkers(t *testing.T) {
 }
 
 func TestDetectIgnoresGitWorktreeFileSibling(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	child := filepath.Join(root, "child")
 	sibling := filepath.Join(root, "sibling")
 
@@ -184,7 +195,7 @@ func TestDetectIgnoresGitWorktreeFileSibling(t *testing.T) {
 	}
 }
 func TestDetectOrdersReposDeterministically(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	zeta := filepath.Join(root, "zeta")
 	alpha := filepath.Join(root, "alpha")
 	gitInit(t, zeta)
@@ -200,7 +211,7 @@ func TestDetectOrdersReposDeterministically(t *testing.T) {
 }
 
 func TestDetectWorktreeSiblingNotCountedAsWorkspaceMember(t *testing.T) {
-	root := t.TempDir()
+	root := evalTempDir(t)
 	repoA := filepath.Join(root, "repo-a")
 	gitInit(t, repoA)
 
