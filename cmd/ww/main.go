@@ -41,6 +41,7 @@ type command struct {
 func cliMain() int {
 	commands := []command{
 		createCmd(),
+		cleanCmd(),
 		listCmd(),
 		removeCmd(),
 		versionCmd(),
@@ -148,6 +149,32 @@ func newManager(requireRepo bool) (*worktree.Manager, error) {
 		RepoDir:   mainDir,
 		Workspace: ws,
 	}, nil
+}
+
+func managerForRepo(base *worktree.Manager, repoName string) (*worktree.Manager, error) {
+	if base.Workspace == nil || base.Workspace.Mode != workspace.ModeWorkspace {
+		return base, nil
+	}
+
+	for _, repo := range base.Workspace.Repos {
+		if repo.Name != repoName {
+			continue
+		}
+		return &worktree.Manager{
+			Git: &git.Runner{Dir: repo.Path},
+			Config: worktree.Config{
+				WorktreeDir:    base.Config.WorktreeDir,
+				DefaultBase:    base.Config.DefaultBase,
+				CopyFiles:      base.Config.CopyFiles,
+				SymlinkFiles:   base.Config.SymlinkFiles,
+				PostCreateHook: base.Config.PostCreateHook,
+			},
+			RepoDir:   repo.Path,
+			Workspace: base.Workspace,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("repo %q not found in workspace", repoName)
 }
 
 func outputJSON(w io.Writer, v any) error {

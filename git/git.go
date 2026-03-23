@@ -196,9 +196,13 @@ func (r *Runner) WorktreeRemove(path string, force bool) error {
 	return err
 }
 
-// BranchDelete deletes a local branch (safe delete).
-func (r *Runner) BranchDelete(branch string) error {
-	_, err := r.Run("branch", "-d", branch)
+// BranchDelete deletes a local branch.
+func (r *Runner) BranchDelete(branch string, force bool) error {
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	_, err := r.Run("branch", flag, branch)
 	return err
 }
 

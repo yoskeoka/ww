@@ -62,6 +62,8 @@ func removeCmd() command {
 			fmt.Fprintf(glOpts.output, "Removed worktree at %s\n", result.Path)
 			if result.BranchDeleted {
 				fmt.Fprintf(glOpts.output, "Deleted branch %s\n", result.Branch)
+			} else if result.BranchError != "" {
+				fmt.Fprintf(glOpts.output, "warning: could not delete branch %s: %s\n", result.Branch, result.BranchError)
 			}
 			return nil
 		},

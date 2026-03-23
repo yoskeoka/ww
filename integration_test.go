@@ -253,6 +253,267 @@ func TestListStatusesAndCleanable(t *testing.T) {
 	}
 }
 
+func TestCleanDryRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, repo, "create", "feat/beta"); err != nil {
+		t.Fatal(err)
+	}
+	makeStaleWorktree(t, repo, "feat/beta", false)
+
+	out, err := runWW(t, repo, "clean", "--dry-run")
+	if err != nil {
+		t.Fatalf("ww clean --dry-run: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Would remove worktree at "+worktreePath(repo, "feat/alpha")) {
+		t.Fatalf("dry-run output should mention merged worktree: %s", out)
+	}
+	if !strings.Contains(out, "Would remove worktree at "+worktreePath(repo, "feat/beta")) {
+		t.Fatalf("dry-run output should mention stale worktree: %s", out)
+	}
+	if !globalEnv.PathExists(worktreePath(repo, "feat/alpha")) || !globalEnv.PathExists(worktreePath(repo, "feat/beta")) {
+		t.Fatal("dry-run should not remove worktrees")
+	}
+}
+
+func TestCleanRemovesCleanable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, repo, "create", "feat/beta"); err != nil {
+		t.Fatal(err)
+	}
+	makeStaleWorktree(t, repo, "feat/beta", false)
+	if _, err := runWW(t, repo, "create", "feat/gamma"); err != nil {
+		t.Fatal(err)
+	}
+	activeWT := worktreePath(repo, "feat/gamma")
+	if err := globalEnv.WriteFile(path.Join(activeWT, "active.txt"), "active\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(activeWT, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(activeWT, "commit", "-m", "feat: active"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, repo, "clean")
+	if err != nil {
+		t.Fatalf("ww clean: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Deleted branch feat/alpha") {
+		t.Fatalf("clean output should report deleted merged branch: %s", out)
+	}
+	if !strings.Contains(out, "warning: could not delete branch feat/beta") {
+		t.Fatalf("clean output should warn when safe delete keeps a stale branch: %s", out)
+	}
+	if globalEnv.PathExists(worktreePath(repo, "feat/alpha")) || globalEnv.PathExists(worktreePath(repo, "feat/beta")) {
+		t.Fatal("clean should remove merged and stale worktrees")
+	}
+	if !globalEnv.PathExists(activeWT) {
+		t.Fatal("clean should leave active worktrees untouched")
+	}
+}
+
+func TestCleanForceDirtyWorktree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/dirty"); err != nil {
+		t.Fatal(err)
+	}
+	makeStaleWorktree(t, repo, "feat/dirty", true)
+
+	out, err := runWW(t, repo, "clean", "--force")
+	if err != nil {
+		t.Fatalf("ww clean --force: %v\n%s", err, out)
+	}
+	if globalEnv.PathExists(worktreePath(repo, "feat/dirty")) {
+		t.Fatal("force clean should remove dirty stale worktree")
+	}
+	if _, err := globalEnv.Git(repo, "rev-parse", "--verify", "refs/heads/feat/dirty"); err == nil {
+		t.Fatal("force clean should delete the branch")
+	}
+}
+
+func TestCleanJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, repo, "create", "feat/beta"); err != nil {
+		t.Fatal(err)
+	}
+	makeStaleWorktree(t, repo, "feat/beta", false)
+
+	out, err := runWW(t, repo, "clean", "--json")
+	if err != nil {
+		t.Fatalf("ww clean --json: %v\n%s", err, out)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines, got %d: %s", len(lines), out)
+	}
+	for _, line := range lines {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Fatalf("invalid JSON line %q: %v", line, err)
+		}
+		if obj["repo"] == "" || obj["branch"] == "" || obj["status"] == "" {
+			t.Fatalf("clean json should include repo, branch, and status: %s", line)
+		}
+		if obj["removed"] != true {
+			t.Fatalf("clean json should report worktree removal: %s", line)
+		}
+		if obj["status"] == "merged" && obj["branch_deleted"] != true {
+			t.Fatalf("merged clean json should report branch deletion: %s", line)
+		}
+		if obj["status"] == "stale" && obj["branch_deleted"] != false {
+			t.Fatalf("stale clean json should preserve branch_deleted=false with safe delete: %s", line)
+		}
+	}
+}
+
+func TestCleanWorkspaceModeFromRepo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	if _, err := runWW(t, ws.RepoDirs[0], "create", "feat/repo1-clean"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, ws.RepoDirs[1], "create", "feat/repo2-clean"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, ws.RepoDirs[0], "clean")
+	if err != nil {
+		t.Fatalf("ww clean from repo in workspace: %v\n%s", err, out)
+	}
+	if globalEnv.PathExists(path.Join(ws.RootDir, ".worktrees", "repo1@feat-repo1-clean")) {
+		t.Fatal("workspace clean should remove repo1 cleanable worktree")
+	}
+	if globalEnv.PathExists(path.Join(ws.RootDir, ".worktrees", "repo2@feat-repo2-clean")) {
+		t.Fatal("workspace clean should remove repo2 cleanable worktree")
+	}
+}
+
+func TestCleanWorkspaceModeFromRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	if _, err := runWW(t, ws.RepoDirs[0], "create", "feat/root1-clean"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, ws.RepoDirs[1], "create", "feat/root2-clean"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, ws.RootDir, "clean")
+	if err != nil {
+		t.Fatalf("ww clean from workspace root: %v\n%s", err, out)
+	}
+	if globalEnv.PathExists(path.Join(ws.RootDir, ".worktrees", "repo1@feat-root1-clean")) {
+		t.Fatal("workspace-root clean should remove repo1 cleanable worktree")
+	}
+	if globalEnv.PathExists(path.Join(ws.RootDir, ".worktrees", "repo2@feat-root2-clean")) {
+		t.Fatal("workspace-root clean should remove repo2 cleanable worktree")
+	}
+}
+
+func TestCleanEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	out, err := runWW(t, repo, "clean")
+	if err != nil {
+		t.Fatalf("ww clean empty case: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("clean with no cleanable worktrees should produce no output: %q", out)
+	}
+}
+
+func TestCleanContinuesAfterFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, repo, "create", "feat/beta"); err != nil {
+		t.Fatal(err)
+	}
+	makeStaleWorktree(t, repo, "feat/beta", true)
+
+	out, err := runWW(t, repo, "clean")
+	if err == nil {
+		t.Fatalf("expected ww clean to fail when a dirty cleanable worktree cannot be removed: %s", out)
+	}
+	if !strings.Contains(out, "Deleted branch feat/alpha") {
+		t.Fatalf("clean should still remove successful candidates before failing: %s", out)
+	}
+	if !strings.Contains(out, "Failed to clean feat/beta") {
+		t.Fatalf("clean should report the failed worktree: %s", out)
+	}
+	if globalEnv.PathExists(worktreePath(repo, "feat/alpha")) == true {
+		t.Fatal("successful cleanable worktrees should still be removed")
+	}
+	if !globalEnv.PathExists(worktreePath(repo, "feat/beta")) {
+		t.Fatal("failed dirty worktree should remain in place")
+	}
+}
+
 func TestCreateDryRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
@@ -467,6 +728,32 @@ func setupRepoWithBareRemote(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return repo
+}
+
+func makeStaleWorktree(t *testing.T, repo, branch string, dirty bool) {
+	t.Helper()
+
+	wtPath := worktreePath(repo, branch)
+	if err := globalEnv.WriteFile(path.Join(wtPath, "stale.txt"), "stale\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(wtPath, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(wtPath, "commit", "-m", "feat: stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "-u", "origin", branch); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "origin", ":"+branch); err != nil {
+		t.Fatal(err)
+	}
+	if dirty {
+		if err := globalEnv.WriteFile(path.Join(wtPath, "dirty.txt"), "dirty\n"); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func worktreePath(repo, branch string) string {
