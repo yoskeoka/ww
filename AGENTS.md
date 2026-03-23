@@ -4,8 +4,10 @@
 
 ```bash
 make build    # Build binary with version info
-make test     # Run all tests (unit + integration)
-make lint     # Run go vet
+make test     # Run only unit tests
+make test-all # Run all tests (unit + integration)
+make fmt      # Run formatter, use this instread of "go fmt"
+make lint     # Run all linters
 make clean    # Remove built binary
 ```
 
