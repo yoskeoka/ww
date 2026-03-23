@@ -115,6 +115,8 @@ Remove the worktree for the given branch and optionally delete the branch.
 |------|------|---------|-------------|
 | `--force` | bool | false | Force removal even if the worktree is dirty (passes `--force` to `git worktree remove`) |
 | `--keep-branch` | bool | false | Do not delete the branch after removing the worktree |
+| `--dry-run` | bool | false | Show planned actions without executing |
+| `--json` | bool | false | Output NDJSON (one JSON object per line) |
 
 **Output (text):**
 ```text

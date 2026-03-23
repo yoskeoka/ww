@@ -63,7 +63,7 @@ func removeCmd() command {
 			if result.BranchDeleted {
 				fmt.Fprintf(glOpts.output, "Deleted branch %s\n", result.Branch)
 			} else if result.BranchError != "" {
-				fmt.Fprintf(glOpts.output, "warning: could not delete branch %s: %s\n", result.Branch, result.BranchError)
+				fmt.Fprintf(glOpts.errOutput, "warning: could not delete branch %s: %s\n", result.Branch, result.BranchError)
 			}
 			return nil
 		},
