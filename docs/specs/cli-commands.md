@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - `git` must be available in PATH. If not found, `ww` exits with a clear error: `git not found in PATH`.
-- `ww` may be started from a non-git workspace root, but commands that need a current repo still require repo selection. Until repo selection exists, `ww` exits with: `repo selection is not supported from a non-git workspace root`.
+- `ww` may be started from a non-git workspace root, but commands that need a current repo still require repo selection. `ww list` is the exception and works from a detected workspace root. Until repo selection exists, other commands that need a current repo exit with: `repo selection is not supported from a non-git workspace root`.
 - If the current directory is neither a git repository nor a detected workspace root, `ww` exits with: `not a git repository`.
 
 When run from a secondary worktree, `ww` resolves back to the main working tree for all path computations. This means all commands work identically regardless of which worktree the user is in.
@@ -64,21 +64,40 @@ List all worktrees for the current repository, including the main working tree.
 
 The main working tree (the original repo checkout) is always included and marked with `(main worktree)` in text output or `"main":true` in JSON output. This distinguishes it from secondary worktrees created by `ww create`.
 
+In workspace mode, `ww list` includes worktrees from every detected repository. When run from a non-git workspace root, it still lists the workspace repositories.
+
 Note: `ww list` shows **worktrees**, not branches. Branches that do not have an associated worktree are not shown. Use `git branch` to see all branches.
 
-**Flags:** Inherits global flags only.
+**Flags:**
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--cleanable` | bool | false | Show only worktrees with `merged` or `stale` status |
+
+**Status values:**
+| Status | Meaning |
+|--------|---------|
+| `active` | Main worktree, or a branch that is neither merged nor stale |
+| `merged` | Branch is present in `git branch --merged <base>` |
+| `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
 
 **Output (text):**
 ```text
-PATH                                  BRANCH              HEAD
-/path/to/repo (main worktree)        main                abc1234
-/path/to/repo@feat-auth              feat/auth           def5678
+PATH                                  BRANCH              HEAD     STATUS
+/path/to/repo (main worktree)        main                abc1234  active
+/path/to/repo@feat-auth              feat/auth           def5678  merged
+```
+
+**Output (workspace mode text):**
+```text
+REPO  PATH                                  BRANCH              HEAD     STATUS
+ww    /path/to/workspace/.worktrees/ww@feat  feat                abc1234  active
+ai    /path/to/workspace/.worktrees/ai@done  done                def5678  stale
 ```
 
 **Output (JSON, NDJSON):**
 ```json
-{"path":"/path/to/repo","branch":"main","head":"abc1234","main":true}
-{"path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678"}
+{"repo":"repo","path":"/path/to/repo","branch":"main","head":"abc1234","main":true,"status":"active"}
+{"repo":"repo","path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678","status":"merged"}
 ```
 
 ### `ww remove <branch>`

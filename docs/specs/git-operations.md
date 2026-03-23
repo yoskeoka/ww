@@ -53,10 +53,31 @@ git branch -d <branch>
 
 Uses `-d` (safe delete) to prevent deleting unmerged branches. If the branch has unmerged work, git refuses and the error is surfaced to the user.
 
+**List merged branches:**
+```
+git branch --merged <base>
+```
+
+Returns the local branch names that are merged into `<base>`.
+
 **Check branch existence:**
 ```
 git rev-parse --verify refs/heads/<branch>
 ```
+
+**Read branch remote tracking:**
+```
+git config --get branch.<branch>.remote
+```
+
+Returns the configured remote name for a local branch. If no remote is configured, ww treats the branch as having no tracking remote.
+
+**Check remote branch existence:**
+```
+git ls-remote --heads <remote> <branch>
+```
+
+Returns whether a remote branch exists by checking for matching `refs/heads/<branch>` output.
 
 **Detect default branch:**
 ```

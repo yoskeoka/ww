@@ -105,6 +105,9 @@ func TestCreateAndList(t *testing.T) {
 	if !strings.Contains(out, "(main worktree)") {
 		t.Errorf("list output should mark the main worktree: %s", out)
 	}
+	if !strings.Contains(out, "STATUS") {
+		t.Errorf("list output should include STATUS column: %s", out)
+	}
 }
 
 func TestListJSON(t *testing.T) {
@@ -141,6 +144,112 @@ func TestListJSON(t *testing.T) {
 		if _, ok := obj["path"]; !ok {
 			t.Errorf("JSON object missing 'path' field: %s", line)
 		}
+		if _, ok := obj["repo"]; !ok {
+			t.Errorf("JSON object missing 'repo' field: %s", line)
+		}
+		if _, ok := obj["status"]; !ok {
+			t.Errorf("JSON object missing 'status' field: %s", line)
+		}
+	}
+}
+
+func TestListWorkspaceMode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	out, err := runWW(t, ws.RootDir, "list")
+	if err != nil {
+		t.Fatalf("ww list from workspace root: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "REPO") {
+		t.Fatalf("workspace list should include REPO column: %s", out)
+	}
+	if !strings.Contains(out, "repo1") || !strings.Contains(out, "repo2") {
+		t.Fatalf("workspace list should include both repos: %s", out)
+	}
+	if !strings.Contains(out, "STATUS") {
+		t.Fatalf("workspace list should include STATUS column: %s", out)
+	}
+}
+
+func TestListStatusesAndCleanable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/alpha"); err != nil {
+		t.Fatalf("ww create feat/alpha: %v", err)
+	}
+
+	if _, err := runWW(t, repo, "create", "feat/beta"); err != nil {
+		t.Fatalf("ww create feat/beta: %v", err)
+	}
+	staleWT := worktreePath(repo, "feat/beta")
+	if err := globalEnv.WriteFile(path.Join(staleWT, "stale.txt"), "stale\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(staleWT, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(staleWT, "commit", "-m", "feat: stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "-u", "origin", "feat/beta"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "origin", ":feat/beta"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := runWW(t, repo, "create", "feat/gamma"); err != nil {
+		t.Fatalf("ww create feat/gamma: %v", err)
+	}
+	activeWT := worktreePath(repo, "feat/gamma")
+	if err := globalEnv.WriteFile(path.Join(activeWT, "active.txt"), "active\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(activeWT, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(activeWT, "commit", "-m", "feat: active"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, repo, "list")
+	if err != nil {
+		t.Fatalf("ww list: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "feat/alpha") {
+		t.Fatalf("list output should include merged branch: %s", out)
+	}
+	if !strings.Contains(out, "merged") {
+		t.Fatalf("list output should include merged status: %s", out)
+	}
+	if !strings.Contains(out, "feat/beta") || !strings.Contains(out, "stale") {
+		t.Fatalf("list output should include stale status: %s", out)
+	}
+	if !strings.Contains(out, "feat/gamma") || !strings.Contains(out, "active") {
+		t.Fatalf("list output should include active status: %s", out)
+	}
+
+	out, err = runWW(t, repo, "list", "--cleanable")
+	if err != nil {
+		t.Fatalf("ww list --cleanable: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "feat/gamma") {
+		t.Fatalf("cleanable output should exclude active worktrees: %s", out)
+	}
+	if !strings.Contains(out, "feat/alpha") || !strings.Contains(out, "feat/beta") {
+		t.Fatalf("cleanable output should include merged and stale worktrees: %s", out)
 	}
 }
 
@@ -337,6 +446,31 @@ func TestRemoveMainWorktreeRejected(t *testing.T) {
 	if !strings.Contains(out, "cannot remove the main worktree") {
 		t.Errorf("error should say 'cannot remove the main worktree': %s", out)
 	}
+}
+
+func setupRepoWithBareRemote(t *testing.T) string {
+	t.Helper()
+
+	repo := setupRepo(t)
+	root, err := globalEnv.MkdirTemp("ww-bare-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := path.Join(root, "origin.git")
+	if _, err := globalEnv.Git(root, "init", "--bare", remote); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "remote", "set-url", "origin", remote); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "-u", "origin", "main"); err != nil {
+		t.Fatal(err)
+	}
+	return repo
+}
+
+func worktreePath(repo, branch string) string {
+	return path.Join(path.Dir(repo), "myrepo@"+strings.ReplaceAll(branch, "/", "-"))
 }
 
 func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {
@@ -614,10 +748,10 @@ func TestNonGitWorkspaceRootRejectsWithoutRepoSelection(t *testing.T) {
 	writeConfig(t, ws.RootDir, `default_base = "main"`)
 
 	out, err := runWW(t, ws.RootDir, "list")
-	if err == nil {
-		t.Fatalf("expected error from non-git workspace root, got: %s", out)
+	if err != nil {
+		t.Fatalf("expected list to succeed from non-git workspace root: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "repo selection is not supported from a non-git workspace root") {
-		t.Errorf("error should mention repo selection support: %s", out)
+	if !strings.Contains(out, "REPO") || !strings.Contains(out, "repo1") || !strings.Contains(out, "repo2") {
+		t.Fatalf("workspace-root list should include repo columns and both repos: %s", out)
 	}
 }

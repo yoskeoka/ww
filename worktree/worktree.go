@@ -15,6 +15,13 @@ import (
 	"github.com/yoskeoka/ww/workspace"
 )
 
+// Exported status constants for WorktreeInfo.Status.
+const (
+	StatusActive = "active"
+	StatusMerged = "merged"
+	StatusStale  = "stale"
+)
+
 // Config holds the configuration values that Manager needs to operate.
 // This is decoupled from the TOML config file format (internal/config)
 // so that library consumers can construct it directly.
@@ -50,6 +57,8 @@ type RemoveOpts struct {
 type WorktreeInfo struct {
 	Path    string `json:"path"`
 	Branch  string `json:"branch"`
+	Repo    string `json:"repo,omitempty"`
+	Status  string `json:"status,omitempty"`
 	Head    string `json:"head,omitempty"`
 	Bare    bool   `json:"bare,omitempty"`
 	Main    bool   `json:"main,omitempty"`
@@ -189,22 +198,111 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 // List returns all worktrees.
 func (m *Manager) List() ([]WorktreeInfo, error) {
-	entries, err := m.Git.WorktreeList()
+	if m.isWorkspaceMode() {
+		return m.listWorkspace()
+	}
+	return m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
+}
+
+func (m *Manager) listWorkspace() ([]WorktreeInfo, error) {
+	var infos []WorktreeInfo
+	for _, repo := range m.Workspace.Repos {
+		repoInfos, err := m.listRepo(repo.Name, repo.Path)
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, repoInfos...)
+	}
+	return infos, nil
+}
+
+func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
+	runner := &git.Runner{Dir: repoPath}
+	entries, err := runner.WorktreeList()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
 	}
 
-	var infos []WorktreeInfo
+	base, err := m.baseRef(runner)
+	if err != nil {
+		return nil, fmt.Errorf("resolving base branch for %s: %w", repoName, err)
+	}
+
+	merged, err := runner.MergedBranches(base)
+	if err != nil {
+		return nil, fmt.Errorf("listing merged branches for %s: %w", repoName, err)
+	}
+	mergedSet := make(map[string]struct{}, len(merged))
+	for _, branch := range merged {
+		mergedSet[branch] = struct{}{}
+	}
+	// The base branch itself is always active even though git reports it as merged.
+	delete(mergedSet, base)
+
+	// Precompute branch→remote and batch ls-remote calls (one per unique remote).
+	branchRemote := make(map[string]string)
+	remoteBranches := make(map[string]map[string]struct{})
 	for _, e := range entries {
+		if e.Main || e.Branch == "" {
+			continue
+		}
+		if _, ok := mergedSet[e.Branch]; ok {
+			continue
+		}
+		remote, err := runner.BranchRemote(e.Branch)
+		if err != nil {
+			return nil, fmt.Errorf("getting remote for %s: %w", e.Branch, err)
+		}
+		branchRemote[e.Branch] = remote
+		if remote != "" {
+			if _, cached := remoteBranches[remote]; !cached {
+				branches, err := runner.ListRemoteBranches(remote)
+				if err != nil {
+					return nil, fmt.Errorf("listing remote branches for %s: %w", remote, err)
+				}
+				remoteBranches[remote] = branches
+			}
+		}
+	}
+
+	infos := make([]WorktreeInfo, 0, len(entries))
+	for _, e := range entries {
+		status := resolveStatus(e, mergedSet, branchRemote, remoteBranches)
 		infos = append(infos, WorktreeInfo{
 			Path:   e.Path,
 			Branch: e.Branch,
+			Repo:   repoName,
+			Status: status,
 			Head:   e.Head,
 			Bare:   e.Bare,
 			Main:   e.Main,
 		})
 	}
 	return infos, nil
+}
+
+func (m *Manager) baseRef(runner *git.Runner) (string, error) {
+	if m.Config.DefaultBase != "" {
+		return m.Config.DefaultBase, nil
+	}
+	return runner.DefaultBranch()
+}
+
+func resolveStatus(entry git.WorktreeEntry, merged map[string]struct{}, branchRemote map[string]string, remoteBranches map[string]map[string]struct{}) string {
+	if entry.Main || entry.Branch == "" {
+		return StatusActive
+	}
+	if _, ok := merged[entry.Branch]; ok {
+		return StatusMerged
+	}
+	remote := branchRemote[entry.Branch]
+	if remote == "" {
+		return StatusActive
+	}
+	if _, exists := remoteBranches[remote][entry.Branch]; !exists {
+		return StatusStale
+	}
+	return StatusActive
 }
 
 // Remove removes a worktree and optionally its branch.
