@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - `git` must be available in PATH. If not found, `ww` exits with a clear error: `git not found in PATH`.
-- `ww` may be started from a non-git workspace root, but commands that need a current repo still require repo selection. `ww list` is the exception and works from a detected workspace root. Until repo selection exists, other commands that need a current repo exit with: `repo selection is not supported from a non-git workspace root`.
+- `ww` may be started from a non-git workspace root. `ww list` and `ww clean` work there without extra flags. `ww create` and `ww remove` require `--repo <name>` from that location; without it they exit with: `repo selection is not supported from a non-git workspace root`.
 - If the current directory is neither a git repository nor a detected workspace root, `ww` exits with: `not a git repository`.
 
 When run from a secondary worktree, `ww` resolves back to the main working tree for all path computations. This means all commands work identically regardless of which worktree the user is in.
@@ -27,16 +27,27 @@ When run from a secondary worktree, `ww` resolves back to the main working tree 
 Create a new worktree for the given branch.
 
 **Behavior:**
-1. If a worktree directory already exists at the target path, return an error: `worktree already exists at <path>`.
-2. If the branch does not exist: create a new branch from `default_base` (config) or `origin/HEAD` and add a worktree for it.
-3. If the branch already exists: add a worktree that checks out the existing branch.
-4. After worktree creation, copy files listed in `copy_files` config.
-5. Create symlinks for files listed in `symlink_files` config.
-6. Run `post_create_hook` if configured.
+1. Resolve the target repository:
+   - If `--repo <name>` is omitted, use the current repository exactly as in Phase 1.
+   - If `--repo <name>` is provided, require detected workspace mode, find the matching entry in the workspace child repo list by directory name, and operate on that repository.
+   - If `--repo` is provided outside workspace mode, return an error: `--repo can only be used inside a detected workspace`.
+   - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
+2. If a worktree directory already exists at the target path, return an error: `worktree already exists at <path>`.
+3. If the branch does not exist: create a new branch from `default_base` (config) or `origin/HEAD` and add a worktree for it.
+4. If the branch already exists: add a worktree that checks out the existing branch.
+5. After worktree creation, copy files listed in `copy_files` config.
+6. Create symlinks for files listed in `symlink_files` config.
+7. Run `post_create_hook` if configured.
 
 **Worktree path:** mode-dependent default, or explicit `worktree_dir` override. Slashes in branch names are replaced with `-`.
+In workspace mode with `--repo`, the default path remains centralized at `<workspace_root>/.worktrees/<repo>@<branch>`.
 
-**Flags:** Inherits global flags only.
+**Flags:**
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--repo` | string | empty | Target a detected workspace repository by name instead of the current repo |
+| `--dry-run` | bool | false | Show planned actions without executing |
+| `--json` | bool | false | Output NDJSON (one JSON object per line) |
 
 **Output (text):**
 ```text
@@ -105,15 +116,21 @@ ai    /path/to/workspace/.worktrees/ai@done  done                def5678  stale
 Remove the worktree for the given branch and optionally delete the branch.
 
 **Behavior:**
-1. Look up the branch in `git worktree list` output. If no worktree entry exists for the branch, return an error: `no worktree found for branch "<branch>"`.
-2. If the matching entry is the main worktree (`Main == true`), reject with error: `cannot remove the main worktree`.
-3. Remove the git worktree using the path from the worktree list entry.
-4. Attempt to delete the branch unless `--keep-branch` is set. By default this uses a safe delete (`git branch -d`). When `--force` is set, it uses a force delete (`git branch -D`) to match the forced worktree removal behavior.
-5. If safe branch deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
+1. Resolve the target repository:
+   - If `--repo <name>` is omitted, use the current repository exactly as in Phase 1.
+   - If `--repo <name>` is provided, require detected workspace mode, find the matching entry in the workspace child repo list by directory name, and operate on that repository.
+   - If `--repo` is provided outside workspace mode, return an error: `--repo can only be used inside a detected workspace`.
+   - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
+2. Look up the branch in `git worktree list` output. If no worktree entry exists for the branch, return an error: `no worktree found for branch "<branch>"`.
+3. If the matching entry is the main worktree (`Main == true`), reject with error: `cannot remove the main worktree`.
+4. Remove the git worktree using the path from the worktree list entry.
+5. Attempt to delete the branch unless `--keep-branch` is set. By default this uses a safe delete (`git branch -d`). When `--force` is set, it uses a force delete (`git branch -D`) to match the forced worktree removal behavior.
+6. If safe branch deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
 
 **Flags:**
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--repo` | string | empty | Target a detected workspace repository by name instead of the current repo |
 | `--force` | bool | false | Force removal even if the worktree is dirty and force-delete the branch (`git worktree remove --force` + `git branch -D`) |
 | `--keep-branch` | bool | false | Do not delete the branch after removing the worktree |
 | `--dry-run` | bool | false | Show planned actions without executing |

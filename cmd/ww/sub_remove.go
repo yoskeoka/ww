@@ -12,6 +12,7 @@ func removeCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" remove", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
+	repo := fset.String("repo", "", "Target a detected workspace repository by name")
 	force := fset.Bool("force", false, "Force removal even if the worktree is dirty")
 	keepBranch := fset.Bool("keep-branch", false, "Do not delete the branch")
 
@@ -32,7 +33,7 @@ func removeCmd() command {
 			}
 			branch := remaining[0]
 
-			mgr, err := newManager(true)
+			mgr, err := managerForSelectedRepo(*repo, true)
 			if err != nil {
 				return err
 			}
