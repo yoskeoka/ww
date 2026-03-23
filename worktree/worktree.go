@@ -354,7 +354,7 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 	result.Removed = true
 
 	if !opts.KeepBranch {
-		if err := m.Git.BranchDelete(branch, opts.Force); err != nil {
+		if err := m.Git.BranchDelete(branch, false); err != nil {
 			result.BranchError = err.Error()
 		} else {
 			result.BranchDeleted = true
