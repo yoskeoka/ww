@@ -119,6 +119,32 @@ func (r *Runner) RemoteBranchExists(remote, branch string) (bool, error) {
 	return strings.TrimSpace(out) != "", nil
 }
 
+// ListRemoteBranches returns the set of branch names present on a remote.
+// It makes a single ls-remote --heads call so callers can batch lookups.
+func (r *Runner) ListRemoteBranches(remote string) (map[string]struct{}, error) {
+	out, err := r.Run("ls-remote", "--heads", remote)
+	if err != nil {
+		return nil, err
+	}
+	branches := make(map[string]struct{})
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		// format: "<sha>\trefs/heads/<branch>"
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		ref := strings.TrimSpace(parts[1])
+		branch := strings.TrimPrefix(ref, "refs/heads/")
+		if branch != ref {
+			branches[branch] = struct{}{}
+		}
+	}
+	return branches, nil
+}
+
 func parseWorktreeList(output string) []WorktreeEntry {
 	var entries []WorktreeEntry
 	var current WorktreeEntry

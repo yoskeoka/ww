@@ -148,6 +148,31 @@ func TestResolveStatus(t *testing.T) {
 	for _, branch := range merged {
 		mergedSet[branch] = struct{}{}
 	}
+	delete(mergedSet, "main")
+
+	// Precompute branch→remote and remote branch sets.
+	allBranches := []string{"feat/merged", "feat/merged-stale", "feat/stale", "feat/local"}
+	branchRemote := make(map[string]string)
+	remoteBranches := make(map[string]map[string]struct{})
+	for _, branch := range allBranches {
+		if _, ok := mergedSet[branch]; ok {
+			continue
+		}
+		remote, err := runner.BranchRemote(branch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		branchRemote[branch] = remote
+		if remote != "" {
+			if _, cached := remoteBranches[remote]; !cached {
+				branches, err := runner.ListRemoteBranches(remote)
+				if err != nil {
+					t.Fatal(err)
+				}
+				remoteBranches[remote] = branches
+			}
+		}
+	}
 
 	tests := []struct {
 		name  string
@@ -157,36 +182,33 @@ func TestResolveStatus(t *testing.T) {
 		{
 			name:  "main worktree",
 			entry: git.WorktreeEntry{Branch: "main", Main: true},
-			want:  statusActive,
+			want:  StatusActive,
 		},
 		{
 			name:  "merged branch",
 			entry: git.WorktreeEntry{Branch: "feat/merged"},
-			want:  statusMerged,
+			want:  StatusMerged,
 		},
 		{
 			name:  "merged branch with deleted remote",
 			entry: git.WorktreeEntry{Branch: "feat/merged-stale"},
-			want:  statusMerged,
+			want:  StatusMerged,
 		},
 		{
 			name:  "stale tracked branch",
 			entry: git.WorktreeEntry{Branch: "feat/stale"},
-			want:  statusStale,
+			want:  StatusStale,
 		},
 		{
 			name:  "local-only branch",
 			entry: git.WorktreeEntry{Branch: "feat/local"},
-			want:  statusActive,
+			want:  StatusActive,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveStatus(runner, tt.entry, mergedSet)
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := resolveStatus(tt.entry, mergedSet, branchRemote, remoteBranches)
 			if got != tt.want {
 				t.Fatalf("resolveStatus(%+v) = %q, want %q", tt.entry, got, tt.want)
 			}

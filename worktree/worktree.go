@@ -15,10 +15,11 @@ import (
 	"github.com/yoskeoka/ww/workspace"
 )
 
+// Exported status constants for WorktreeInfo.Status.
 const (
-	statusActive = "active"
-	statusMerged = "merged"
-	statusStale  = "stale"
+	StatusActive = "active"
+	StatusMerged = "merged"
+	StatusStale  = "stale"
 )
 
 // Config holds the configuration values that Manager needs to operate.
@@ -56,8 +57,8 @@ type RemoveOpts struct {
 type WorktreeInfo struct {
 	Path    string `json:"path"`
 	Branch  string `json:"branch"`
-	Repo    string `json:"repo"`
-	Status  string `json:"status"`
+	Repo    string `json:"repo,omitempty"`
+	Status  string `json:"status,omitempty"`
 	Head    string `json:"head,omitempty"`
 	Bare    bool   `json:"bare,omitempty"`
 	Main    bool   `json:"main,omitempty"`
@@ -235,13 +236,38 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 	for _, branch := range merged {
 		mergedSet[branch] = struct{}{}
 	}
+	// The base branch itself is always active even though git reports it as merged.
+	delete(mergedSet, base)
+
+	// Precompute branch→remote and batch ls-remote calls (one per unique remote).
+	branchRemote := make(map[string]string)
+	remoteBranches := make(map[string]map[string]struct{})
+	for _, e := range entries {
+		if e.Main || e.Branch == "" {
+			continue
+		}
+		if _, ok := mergedSet[e.Branch]; ok {
+			continue
+		}
+		remote, err := runner.BranchRemote(e.Branch)
+		if err != nil {
+			return nil, fmt.Errorf("getting remote for %s: %w", e.Branch, err)
+		}
+		branchRemote[e.Branch] = remote
+		if remote != "" {
+			if _, cached := remoteBranches[remote]; !cached {
+				branches, err := runner.ListRemoteBranches(remote)
+				if err != nil {
+					return nil, fmt.Errorf("listing remote branches for %s: %w", remote, err)
+				}
+				remoteBranches[remote] = branches
+			}
+		}
+	}
 
 	infos := make([]WorktreeInfo, 0, len(entries))
 	for _, e := range entries {
-		status, err := resolveStatus(runner, e, mergedSet)
-		if err != nil {
-			return nil, fmt.Errorf("resolving status for %s (%s): %w", e.Path, e.Branch, err)
-		}
+		status := resolveStatus(e, mergedSet, branchRemote, remoteBranches)
 		infos = append(infos, WorktreeInfo{
 			Path:   e.Path,
 			Branch: e.Branch,
@@ -262,30 +288,21 @@ func (m *Manager) baseRef(runner *git.Runner) (string, error) {
 	return runner.DefaultBranch()
 }
 
-func resolveStatus(runner *git.Runner, entry git.WorktreeEntry, merged map[string]struct{}) (string, error) {
+func resolveStatus(entry git.WorktreeEntry, merged map[string]struct{}, branchRemote map[string]string, remoteBranches map[string]map[string]struct{}) string {
 	if entry.Main || entry.Branch == "" {
-		return statusActive, nil
+		return StatusActive
 	}
 	if _, ok := merged[entry.Branch]; ok {
-		return statusMerged, nil
+		return StatusMerged
 	}
-
-	remote, err := runner.BranchRemote(entry.Branch)
-	if err != nil {
-		return "", err
-	}
+	remote := branchRemote[entry.Branch]
 	if remote == "" {
-		return statusActive, nil
+		return StatusActive
 	}
-
-	exists, err := runner.RemoteBranchExists(remote, entry.Branch)
-	if err != nil {
-		return "", err
+	if _, exists := remoteBranches[remote][entry.Branch]; !exists {
+		return StatusStale
 	}
-	if !exists {
-		return statusStale, nil
-	}
-	return statusActive, nil
+	return StatusActive
 }
 
 // Remove removes a worktree and optionally its branch.
