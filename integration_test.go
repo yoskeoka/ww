@@ -289,7 +289,6 @@ func TestCleanRemovesCleanable(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -615,7 +614,6 @@ func TestRemoveWithRepoFlagUnknownRepoFromWorkspaceRoot(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
 
 	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 1})
 	writeConfig(t, ws.RootDir, `default_base = "main"`)
@@ -629,6 +627,9 @@ func TestRemoveWithRepoFlagUnknownRepoFromWorkspaceRoot(t *testing.T) {
 	out, err := runWW(t, ws.RootDir, "remove", "feat/remove-unknown", "--repo", "does-not-exist")
 	if err == nil {
 		t.Fatalf("expected ww remove with unknown --repo to fail, got output:\n%s", out)
+	}
+	if !strings.Contains(out, `repo "does-not-exist" not found in workspace`) {
+		t.Fatalf("expected unknown repo error, got output:\n%s", out)
 	}
 }
 
