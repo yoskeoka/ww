@@ -60,7 +60,7 @@ New design choices captured by this plan:
 - Batch or multi-select actions
 - A top-level `remove` menu
 - Custom fuzzy-scoring or fzf parity
-- JSON mode support inside `ww i`
+- JSON mode support inside `ww i`; for the MVP, invoking `ww i --json` MUST fail fast with a clear error explaining that interactive mode does not support `--json` and that users should use non-interactive commands for JSON output
 
 ## UX Specification
 
