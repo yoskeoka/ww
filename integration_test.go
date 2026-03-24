@@ -289,7 +289,6 @@ func TestCleanRemovesCleanable(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -537,6 +536,29 @@ func TestCreateDryRun(t *testing.T) {
 	}
 }
 
+func TestCreateWithRepoFlagFromWorkspaceRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	out, err := runWW(t, ws.RootDir, "create", "feat/repo-flag", "--repo", "repo2")
+	if err != nil {
+		t.Fatalf("ww create --repo from workspace root: %v\n%s", err, out)
+	}
+
+	wtPath := workspaceWorktreePath(ws.RootDir, "repo2", "feat/repo-flag")
+	if !globalEnv.PathExists(wtPath) {
+		t.Fatalf("expected workspace worktree at %s", wtPath)
+	}
+	if globalEnv.PathExists(workspaceWorktreePath(ws.RootDir, "repo1", "feat/repo-flag")) {
+		t.Fatal("create --repo should not create a worktree in another repo")
+	}
+}
+
 func TestRemoveWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
@@ -564,6 +586,73 @@ func TestRemoveWorktree(t *testing.T) {
 	}
 }
 
+func TestRemoveWithRepoFlagFromWorkspaceRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	if _, err := runWW(t, ws.RootDir, "create", "feat/remove-flag", "--repo", "repo2"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, ws.RootDir, "remove", "feat/remove-flag", "--repo", "repo2")
+	if err != nil {
+		t.Fatalf("ww remove --repo from workspace root: %v\n%s", err, out)
+	}
+
+	wtPath := workspaceWorktreePath(ws.RootDir, "repo2", "feat/remove-flag")
+	if globalEnv.PathExists(wtPath) {
+		t.Fatalf("expected workspace worktree to be removed at %s", wtPath)
+	}
+}
+
+func TestRemoveWithRepoFlagUnknownRepoFromWorkspaceRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 1})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	// Create a worktree in the known repo so that branch resolution itself works.
+	if _, err := runWW(t, ws.RootDir, "create", "feat/remove-unknown", "--repo", "repo1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to remove using a repo name that does not exist in the workspace.
+	out, err := runWW(t, ws.RootDir, "remove", "feat/remove-unknown", "--repo", "does-not-exist")
+	if err == nil {
+		t.Fatalf("expected ww remove with unknown --repo to fail, got output:\n%s", out)
+	}
+	if !strings.Contains(out, `repo "does-not-exist" not found in workspace`) {
+		t.Fatalf("expected unknown repo error, got output:\n%s", out)
+	}
+}
+
+func TestRemoveWithRepoFlagOutsideWorkspace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	// Create a worktree in a standalone repo (not a ww workspace).
+	if _, err := runWW(t, repo, "create", "feat/remove-outside"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Attempt to remove using --repo where it should not be valid (outside workspace).
+	out, err := runWW(t, repo, "remove", "feat/remove-outside", "--repo", "some-repo")
+	if err == nil {
+		t.Fatalf("expected ww remove --repo outside workspace to fail, got output:\n%s", out)
+	}
+}
 func TestInvalidBranchName(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
@@ -610,6 +699,42 @@ func TestNonGitDirectory(t *testing.T) {
 	}
 	if !strings.Contains(out, "not a git repository") {
 		t.Errorf("error should mention 'not a git repository': %s", out)
+	}
+}
+
+func TestCreateWithRepoFlagUnknownRepo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	out, err := runWW(t, ws.RootDir, "create", "feat/unknown", "--repo", "missing")
+	if err == nil {
+		t.Fatalf("expected error for unknown repo, got: %s", out)
+	}
+	if !strings.Contains(out, `repo "missing" not found in workspace`) {
+		t.Fatalf("expected unknown repo error, got: %s", out)
+	}
+}
+
+func TestCreateWithRepoFlagOutsideWorkspace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires Docker")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	out, err := runWW(t, repo, "create", "feat/outside", "--repo", "myrepo")
+	if err == nil {
+		t.Fatalf("expected error for --repo outside workspace, got: %s", out)
+	}
+	if !strings.Contains(out, "--repo can only be used inside a detected workspace") {
+		t.Fatalf("expected outside-workspace error, got: %s", out)
 	}
 }
 
@@ -758,6 +883,10 @@ func makeStaleWorktree(t *testing.T, repo, branch string, dirty bool) {
 
 func worktreePath(repo, branch string) string {
 	return path.Join(path.Dir(repo), "myrepo@"+strings.ReplaceAll(branch, "/", "-"))
+}
+
+func workspaceWorktreePath(root, repo, branch string) string {
+	return path.Join(root, ".worktrees", repo+"@"+strings.ReplaceAll(branch, "/", "-"))
 }
 
 func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {

@@ -10,6 +10,7 @@ func createCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" create", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
+	repo := fset.String("repo", "", "Target a detected workspace repository by name")
 
 	return command{
 		name:        "create",
@@ -28,7 +29,7 @@ func createCmd() command {
 			}
 			branch := remaining[0]
 
-			mgr, err := newManager(true)
+			mgr, err := managerForSelectedRepo(*repo, true)
 			if err != nil {
 				return err
 			}
