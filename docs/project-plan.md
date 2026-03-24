@@ -68,6 +68,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 - **FR-21**: Child repo `.ww.toml` override — child repos can override workspace-level `copy_files`, `post_create_hook` etc.
 - **FR-22**: Recursive workspace detection — respect `workspace = true` in child repos to support nested workspace structures.
 - **FR-23**: Time-based stale detection — mark worktrees as stale after N days since last commit. Configurable via `--stale-days`.
+- **FR-24**: Human interactive mode — provide a guided mode for people using `ww` directly, including interactive repo/branch selection, preview-oriented create/remove/clean flows, and confirmation for destructive actions without requiring shell composition or raw flag memorization.
 
 #### Agent-Friendly CLI Design
 
@@ -90,9 +91,10 @@ When working in a meta-repo environment with many child repositories, parallel d
 ## Milestones
 
 - [x] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling.
-- [ ] Phase 2: Workspace discovery (auto-detect parent/child git repos, `workspace = true`), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
+- [x] Phase 2: Workspace discovery (auto-detect parent/child git repos, `workspace = true`), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
 - [ ] Phase 3: Polish — shell integration (`ww cd`, `cd $(ww create feat/x)`), Homebrew formula, documentation.
-- [ ] Phase 4 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
+- [ ] Phase 4: Human interactive mode — add a people-first interactive flow for common operations such as create, list, remove, clean, and worktree selection without requiring users to remember the full flag surface.
+- [ ] Phase 5 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
 
 ## Design Principles
 
