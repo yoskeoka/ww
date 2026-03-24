@@ -1,10 +1,8 @@
 # Interactive Mode MVP (`ww i`)
 
-> **Execution**: Use `/execute-task` to implement this plan.
+> **Execution**: Use `/plan-execution` to split this plan into implementation-ready child plans before coding.
 
 **Objective:** Add a human-oriented interactive mode to `ww` via `ww i`, using a lightweight prompt flow that preserves workspace-wide visibility while guiding common operations for direct terminal users.
-
-**Depends on:** Project-plan update for Phase 4 / FR-24 (PR #71) merging to `main`
 
 ## Context
 
@@ -67,7 +65,7 @@ New design choices captured by this plan:
 ### Entry / Preconditions
 
 - `ww i` requires an interactive terminal for its interactive input and prompts. Standard input and the primary prompt/render stream MUST be TTYs.
-- `ww i` MAY be invoked with `stdout` redirected or non-TTY. When `stdout` is non-TTY, all interactive prompts and UI MUST be written to a TTY stream (e.g., `stderr`), and `stdout` MUST remain path-only for the `open` action so it is safe to use in command substitution / piping.
+- `ww i` MAY be invoked with `stdout` redirected or non-TTY. When `stdout` is non-TTY, all interactive prompts, context, menus, previews, confirmations, and human-readable errors MUST be written to `stderr`, and `stdout` MUST remain path-only for the `open` action so it is safe to use in command substitution / piping.
 - If no TTY is available for interactive input/prompts (for example, stdin is not a TTY and there is no TTY output stream), fail immediately with a clear error that tells the user to use standard commands and consult `ww --help`.
 - Workspace detection uses the existing Phase 2 logic. No separate workspace model is introduced.
 
@@ -125,7 +123,7 @@ Then prompt for one action:
    - UI clearly marks it as the main worktree
 7. `open` behavior:
    - print the selected path to `stdout` only
-   - keep human-readable guidance off `stdout`
+   - write all prompts, menus, context, confirmations, and human-readable guidance to `stderr`
 8. `remove` behavior:
    - show preview before deletion
    - require confirmation
