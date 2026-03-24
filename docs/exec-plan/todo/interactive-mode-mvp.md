@@ -66,8 +66,9 @@ New design choices captured by this plan:
 
 ### Entry / Preconditions
 
-- `ww i` requires an interactive terminal.
-- In non-TTY environments, fail immediately with a clear error that tells the user to use standard commands and consult `ww --help`.
+- `ww i` requires an interactive terminal for its interactive input and prompts. Standard input and the primary prompt/render stream MUST be TTYs.
+- `ww i` MAY be invoked with `stdout` redirected or non-TTY. When `stdout` is non-TTY, all interactive prompts and UI MUST be written to a TTY stream (e.g., `stderr`), and `stdout` MUST remain path-only for the `open` action so it is safe to use in command substitution / piping.
+- If no TTY is available for interactive input/prompts (for example, stdin is not a TTY and there is no TTY output stream), fail immediately with a clear error that tells the user to use standard commands and consult `ww --help`.
 - Workspace detection uses the existing Phase 2 logic. No separate workspace model is introduced.
 
 ### Initial Screen
