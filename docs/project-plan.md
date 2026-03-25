@@ -58,6 +58,10 @@ When working in a meta-repo environment with many child repositories, parallel d
 - **FR-9**: Single-repo mode — when no workspace is detected, `ww` works on the current repo only (Phase 1 compatible).
 - **FR-10**: Shell integration — output that enables `cd` into created worktrees (e.g., `cd $(ww create feat/x)`).
 
+#### Post-Phase 2
+
+- **FR-26**: `--no-upward-search` flag (or `.ww.toml` equivalent) — disable upward search for workspace detection and config discovery. In sandboxed environments (e.g., Claude Code), the process may not have permission to read parent directories or scan siblings. This flag constrains `ww` to the current repo only, skipping parent directory walks for `.ww.toml` config, workspace root detection, and sibling repo scanning. Implementation is small: skip the upward walk and sibling enumeration in the existing workspace discovery and config search logic.
+
 #### Future
 
 - **FR-16**: Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (e.g., AI agent orchestrators running long tasks). Configurable per-repo or per-command flag.
@@ -69,6 +73,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 - **FR-22**: Recursive workspace detection — respect `workspace = true` in child repos to support nested workspace structures.
 - **FR-23**: Time-based stale detection — mark worktrees as stale after N days since last commit. Configurable via `--stale-days`.
 - **FR-24**: Human interactive mode — provide a guided mode for people using `ww` directly, including interactive repo/branch selection, preview-oriented create/remove/clean flows, and confirmation for destructive actions without requiring shell composition or raw flag memorization.
+- **FR-25**: Sandboxed environment compatibility — enable `ww` to operate fully within filesystem-sandboxed AI agent environments (e.g., Claude Code). The core issue is that `git worktree add` fails on repos with submodules because the sandbox blocks creation of `.gitmodules` and writes to `.git/config` (`Operation not permitted`). This is not a `ww` bug but an interaction between the sandbox's filesystem restrictions and git's internal operations. **Precondition for work**: upstream Claude Code sandbox issues are resolved or root cause is definitively identified — [Issue #13195](https://github.com/anthropics/claude-code/issues/13195) (`.git/config` write blocked), [Issue #21942](https://github.com/anthropics/claude-code/issues/21942) (`com.apple.provenance` xattr causing EPERM). FR-24 (`--no-upward-search`) addresses one aspect (parent directory access), but the `.gitmodules`/`.git/config` write failures are outside `ww`'s control. See `docs/issues/sandbox-worktree-compatibility.md` for full investigation and reference links.
 
 #### Agent-Friendly CLI Design
 
@@ -92,9 +97,11 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 - [x] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling.
 - [x] Phase 2: Workspace discovery (auto-detect parent/child git repos, `workspace = true`), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
+- [ ] Post-Phase 2: `--no-upward-search` flag for sandboxed environments (FR-26). Small scope, independent of Phase 2 workspace discovery.
 - [ ] Phase 3: Polish — shell integration (`ww cd`, `cd $(ww create feat/x)`), Homebrew formula, documentation.
 - [ ] Phase 4: Human interactive mode — add a people-first interactive flow for common operations such as create, list, remove, clean, and worktree selection without requiring users to remember the full flag surface.
 - [ ] Phase 5 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
+- [ ] Future: Sandboxed environment full compatibility (FR-25). Blocked on upstream Claude Code sandbox issue resolution.
 
 ## Design Principles
 
