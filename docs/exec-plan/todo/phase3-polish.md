@@ -143,6 +143,11 @@ Publish end-user docs that match actual behavior:
 | `docs/specs/cli-commands.md` | Add `ww cd` and the chosen path-only create behavior |
 | `docs/specs/shell-integration.md` | New spec for path-printing contracts, stdout/stderr rules, and shell wrapper examples |
 | `docs/specs/release-versioning.md` | New spec for release tags, `ww version` output, and dev-vs-release build metadata |
+
+## Docs Changes
+
+| File | Change |
+|------|--------|
 | `docs/project-plan.md` | Freeze naming direction as `ww` and clarify the concrete contents of Phase 3 |
 
 ## Design Decision Changes
