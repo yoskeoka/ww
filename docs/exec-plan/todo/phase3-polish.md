@@ -1,6 +1,6 @@
 # Phase 3: Polish Scope, Naming Freeze, and Release Readiness
 
-> **Execution**: Use `/execute-task` to implement this plan.
+> **Execution**: Use `/plan-execution` to split this plan into child plans before implementation.
 
 **Objective:** Define the actual implementation scope for `ww` Phase 3, freeze the product name before first release work, and define the child-plan split for Phase 3 execution across shell integration, installation/distribution, and end-user documentation.
 
@@ -76,7 +76,7 @@ This keeps the CLI composable for shells and agents without silently changing th
 
 This file is a **parent phase plan**, not the final implementation unit.
 
-Before `/execute-task`, Phase 3 should be split into child plans so review stays focused and specs remain readable. The expected split is:
+Before `/plan-execution`, Phase 3 should be split into child plans so review stays focused and specs remain readable. The expected split is:
 
 - `phase3-shell-integration`
 - `phase3-install-and-versioning`
