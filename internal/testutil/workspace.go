@@ -160,7 +160,10 @@ func cloneRepoSeed(t *testing.T, env *ContainerEnv, seedRepo string, opts RepoOp
 	}
 
 	repo := path.Join(baseDir, opts.Name)
-	if _, err := env.Git(baseDir, "clone", seedRepo, repo); err != nil {
+	// --no-local prevents git from using alternates/hardlinks to the seed
+	// repo, ensuring each test clone is fully independent. This avoids
+	// potential lock contention when multiple tests clone concurrently.
+	if _, err := env.Git(baseDir, "clone", "--no-local", seedRepo, repo); err != nil {
 		t.Fatalf("git clone: %v", err)
 	}
 	return repo

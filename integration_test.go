@@ -181,7 +181,7 @@ func TestListStatusesAndCleanable(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: pushes/deletes remote branches, asserts merged/stale/active status.
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -257,7 +257,7 @@ func TestCleanDryRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: bare remote + worktree removal assertions.
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -336,7 +336,7 @@ func TestCleanForceDirtyWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: force-cleans dirty stale worktree, asserts branch deletion.
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -362,7 +362,7 @@ func TestCleanJSON(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: cleans worktrees and asserts on removal JSON output.
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -408,7 +408,7 @@ func TestCleanWorkspaceModeFromRepo(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: workspace-mode clean removes worktrees across repos.
 
 	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
 	writeConfig(t, ws.RootDir, `default_base = "main"`)
@@ -436,7 +436,7 @@ func TestCleanWorkspaceModeFromRoot(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: workspace-mode clean from root removes worktrees across repos.
 
 	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
 	writeConfig(t, ws.RootDir, `default_base = "main"`)
@@ -464,7 +464,7 @@ func TestCleanEmpty(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: clean command group — serialized for consistency.
 
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -482,7 +482,7 @@ func TestCleanContinuesAfterFailure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: partial clean failure with dirty worktree assertion.
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -563,7 +563,7 @@ func TestRemoveWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: creates and removes worktree, asserts directory removal.
 
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -590,7 +590,7 @@ func TestRemoveWithRepoFlagFromWorkspaceRoot(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: workspace create + remove with --repo flag.
 
 	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
 	writeConfig(t, ws.RootDir, `default_base = "main"`)
@@ -967,7 +967,7 @@ func TestRunFromWorktreeDir(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: creates 2 worktrees, runs ww from worktree directory.
 
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -1054,7 +1054,7 @@ func TestRemoveForceCleanWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: creates and force-removes clean worktree.
 
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -1081,7 +1081,7 @@ func TestRemoveForceDirtyWorktree(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: requires Docker")
 	}
-	t.Parallel()
+	// Stateful: creates dirty worktree, asserts rejection, then force-removes.
 
 	repo := setupRepo(t)
 	writeConfig(t, repo, `default_base = "main"`)
