@@ -23,6 +23,16 @@ The integration test suite runs inside a shared Docker container (`testcontainer
 - **Code complexity**: `readCombinedOutput` with Docker stream multiplexing detection, `ContainerEnv` abstraction layer
 - **Dependency**: Docker daemon must be running for `make test-all`
 
+## Evidence: serialization alone is insufficient
+
+PR #78 (serialize stateful tests) still failed on CI attempt 1, passed on attempt 2 (rerun):
+- **Failed run**: https://github.com/yoskeoka/ww/actions/runs/23614205395/attempts/1?pr=78
+- **Passed rerun**: https://github.com/yoskeoka/ww/actions/runs/23614205395?pr=78
+- **Failing test**: `TestInvalidBranchName` (a parallel test)
+- **Symptom**: Docker exec returned exit code 0 with pflag error in stdout (`unknown shorthand flag: 's' in -starts-with-dash`), but the test expected a non-zero exit code. The ww binary does return non-zero — Docker exec dropped the exit code under contention.
+
+This confirms that Docker exec contention affects even the parallel-safe tests. Serializing all tests would eliminate the issue but defeats the purpose of parallel execution. Removing Docker eliminates the root cause entirely.
+
 ## Proposed Approach
 
 Replace `ContainerEnv` (Docker-based) with a `HostEnv` that:
