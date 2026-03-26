@@ -84,6 +84,8 @@ Before `/plan-execution`, Phase 3 should be split into child plans so review sta
 
 If documentation stays tightly coupled to installation work, the latter two may be merged into one child plan. Shell integration should stay separate.
 
+Each child plan must inherit the explicit stdout/stderr separation rule from the "Shell Integration Design Choice" section above: path-oriented output on `stdout`, human-readable context on `stderr`. Do not relax or restate this rule in a way that opens ambiguity about which stream carries which content.
+
 ## Planned Deliverables
 
 ### Deliverable 1: Shell Integration
@@ -144,12 +146,6 @@ Publish end-user docs that match actual behavior:
 | `docs/specs/shell-integration.md` | New spec for path-printing contracts, stdout/stderr rules, and shell wrapper examples |
 | `docs/specs/release-versioning.md` | New spec for release tags, `ww version` output, and dev-vs-release build metadata |
 
-## Docs Changes
-
-| File | Change |
-|------|--------|
-| `docs/project-plan.md` | Freeze naming direction as `ww` and clarify the concrete contents of Phase 3 |
-
 ## Design Decision Changes
 
 | File | Change |
@@ -174,6 +170,7 @@ Exact packaging file names may depend on the chosen release approach, but the im
 
 | File | Change |
 |------|--------|
+| `docs/project-plan.md` | Freeze naming direction as `ww` and clarify the concrete contents of Phase 3 |
 | `README.md` | Add install, quick start, and shell integration examples |
 | `docs/spec-code-mapping.md` | Map new shell-integration and release-versioning specs to implementation |
 | `docs/specs/README.md` | Link the new shell-integration spec if needed |
@@ -184,6 +181,7 @@ Exact packaging file names may depend on the chosen release approach, but the im
 - [ ] [parallel] Add `docs/specs/shell-integration.md` and update `docs/specs/cli-commands.md` with the final shell contract
 - [ ] [parallel] Add `docs/specs/release-versioning.md` describing SemVer releases and commit-aware dev builds
 - [ ] [parallel] Append an ADR entry for explicit path-only shell integration
+- [ ] [parallel, depends on: spec changes] Update `docs/spec-code-mapping.md` to map new shell-integration and release-versioning specs to implementation
 - [ ] [depends on: shell specs, ADR] Implement `ww cd` path resolution
 - [ ] [depends on: shell specs] Add explicit path-only output mode to `ww create`
 - [ ] [depends on: naming freeze, release-versioning spec] Add installation/release files, Homebrew support, and release-aware version metadata
