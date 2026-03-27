@@ -107,10 +107,14 @@ Specify and implement a minimal shell-navigation surface:
 Make installation paths concrete:
 
 - verify and document `go install`
+- adopt **GoReleaser** for cross-platform builds and release automation
+  - `.goreleaser.yaml` handles cross-compilation (`GOOS`/`GOARCH`), GitHub Release creation, and Homebrew tap formula generation
+  - GitHub Actions triggers GoReleaser on SemVer tag push
+  - GoReleaser auto-generates and pushes the Homebrew formula to the tap repo
 - add Homebrew formula support via a **tap repository** (`yoskeoka/homebrew-ww`), not homebrew-core
   - Users install with: `brew tap yoskeoka/ww && brew install ww`
   - The `homebrew-` prefix is required by Homebrew convention for `brew tap` shorthand to work
-- add or document the release/versioning workflow needed to keep Homebrew metadata current
+- **Phase 3 scope**: Homebrew tap only. Native binary install script (`curl | sh`) is a future enhancement that GoReleaser's GitHub Release artifacts will already support
 
 ### Version Strategy
 
@@ -170,7 +174,8 @@ Publish end-user docs that match actual behavior:
 | `cmd/ww/sub_create.go` | Add `-q`/`--quiet` flag for path-only output |
 | `cmd/ww/helpers.go` | Share repo/workspace/path resolution logic as needed |
 | `worktree/` | Expose or refine path-resolution helpers needed by shell integration |
-| `.github/` and release metadata files | Add the minimal automation/files required for Homebrew distribution |
+| `.goreleaser.yaml` | GoReleaser config for cross-compilation, GitHub Release, and Homebrew tap formula generation |
+| `.github/workflows/release.yml` | GitHub Actions workflow to trigger GoReleaser on SemVer tag push |
 
 Exact packaging file names may depend on the chosen release approach, but the implementation must keep version injection and install metadata auditable in-repo.
 
@@ -192,7 +197,7 @@ Exact packaging file names may depend on the chosen release approach, but the im
 - [ ] [parallel, depends on: spec changes] Update `docs/spec-code-mapping.md` to map new shell-integration and release-versioning specs to implementation
 - [ ] [depends on: shell specs, ADR] Implement `ww cd` path resolution (mtime-based recency for no-arg mode)
 - [ ] [depends on: shell specs] Add `-q`/`--quiet` flag to `ww create` for path-only output
-- [ ] [depends on: naming freeze, release-versioning spec] Add installation/release files, Homebrew support, and release-aware version metadata
+- [ ] [depends on: naming freeze, release-versioning spec] Add GoReleaser config, release workflow, Homebrew tap setup, and release-aware version metadata
 - [ ] [depends on: shell specs] Write user-facing docs for shell setup, install, and common workflows
 - [ ] [depends on: implementation] Add or update tests covering path-only output, stdout/stderr separation, and release metadata validation
 
