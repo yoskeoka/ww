@@ -149,7 +149,9 @@ func buildWWBinaryHost() (string, error) {
 		return "", fmt.Errorf("create temp ww binary: %w", err)
 	}
 	binPath := tmpFile.Name()
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("close temp ww binary: %w", err)
+	}
 
 	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/ww/")
 	cmd.Dir = modDir
