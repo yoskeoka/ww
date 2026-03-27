@@ -39,7 +39,7 @@
 | `cmd/ww/version.go` | Add `var Version string` alongside existing `CommitHash`; update `printVersion()` to prefer `Version` when set, fall back to `dev+<hash>` |
 | `cmd/ww/sub_version.go` | Support `--json` flag for structured version output |
 | `cmd/ww/main.go` | Update top-level `--version` flag to use the new `printVersion()` |
-| `Makefile` | Add `-X main.Version=$(VERSION)` to ldflags; keep `CommitHash` injection; add `VERSION` variable defaulting to `dev` |
+| `Makefile` | Keep `CommitHash` injection via ldflags; optionally pass `-X main.Version=$(VERSION)` only for release targets so that non-release builds leave `Version` empty and use the `dev+<short-hash>` fallback |
 | `.goreleaser.yaml` | New file: GoReleaser config with cross-compilation (darwin/arm64, darwin/amd64, linux/arm64, linux/amd64), ldflags for Version+CommitHash, GitHub Release, Homebrew tap brew section pointing to `yoskeoka/homebrew-ww` |
 | `.github/workflows/release.yml` | New file: GitHub Actions workflow triggered on `v*` tag push, runs `goreleaser/goreleaser-action` |
 
