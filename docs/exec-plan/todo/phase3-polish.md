@@ -67,7 +67,11 @@ Phase 3 should prefer **explicit path-only interfaces** over changing the defaul
 Planned direction:
 
 - Add `ww cd` as a path-resolver command for navigation use cases.
-- Add a path-only flag to `ww create` so command substitution is explicit and non-breaking.
+  - **`ww cd` (no arguments)**: Print the absolute path of the most recently created worktree. Determine recency by checking the `mtime` of `.git/worktrees/<name>/` directories — git creates these at worktree creation time and they are not normally modified afterward.
+  - **`ww cd <name>`**: Print the absolute path of the specified worktree.
+  - The binary itself **cannot change the parent shell's cwd** (OS constraint). Docs must provide shell wrapper examples (e.g., `wcd() { cd "$(ww cd "$@")" }`) rather than promising in-process `cd`.
+- Add `-q` / `--quiet` flag to `ww create` to suppress human-readable output and print only the created worktree path on `stdout`. This enables `cd $(ww create -q feat/x)`.
+  - **Rejected alternatives**: `--path` (ambiguous — sounds like it specifies the creation location), `--print-path` (clear but too long for frequent shell use, and `-p` shorthand is confusing).
 - Keep human-readable status/progress on `stderr` whenever Phase 3 introduces shell-oriented `stdout` output.
 
 This keeps the CLI composable for shells and agents without silently changing the default contract of `ww create`.
@@ -92,16 +96,20 @@ Each child plan must inherit the explicit stdout/stderr separation rule from the
 
 Specify and implement a minimal shell-navigation surface:
 
-- `ww cd` resolves a destination and prints the absolute path only
-- `ww create` gains an explicit path-only mode for command substitution
-- docs include shell wrapper examples rather than promising impossible in-process `cd` behavior from the binary itself
+- `ww cd` prints the absolute path of a worktree to `stdout`
+  - No arguments: resolve the most recently created worktree via `.git/worktrees/<name>/` directory `mtime`
+  - With argument: resolve the named worktree
+- `ww create -q` / `--quiet` suppresses human-readable output and prints only the created path
+- docs include shell wrapper examples (e.g., `wcd() { cd "$(ww cd "$@")" }`) rather than promising impossible in-process `cd` behavior from the binary itself
 
 ### Deliverable 2: Installation / Distribution
 
 Make installation paths concrete:
 
 - verify and document `go install`
-- add Homebrew formula support
+- add Homebrew formula support via a **tap repository** (`yoskeoka/homebrew-ww`), not homebrew-core
+  - Users install with: `brew tap yoskeoka/ww && brew install ww`
+  - The `homebrew-` prefix is required by Homebrew convention for `brew tap` shorthand to work
 - add or document the release/versioning workflow needed to keep Homebrew metadata current
 
 ### Version Strategy
@@ -119,12 +127,12 @@ That is acceptable for local development, but it is not sufficient as the primar
 
 Phase 3 should adopt a **dual strategy**:
 
-- **Release artifacts**: SemVer tags, starting in the `v0.x.y` range until the CLI surface is considered stable
+- **Release artifacts**: SemVer tags, starting at **`v0.3.0`** (reflecting Phase 1–3 progression), incrementing within the `v0.x.y` range until the CLI surface is considered stable
 - **Dev / untagged builds**: retain commit-hash provenance
 
 Planned output direction:
 
-- tagged release build: `ww version v0.x.y`
+- tagged release build: `ww version v0.3.0`
 - dev build: `ww version dev+<short-hash>` or equivalent commit-identifiable form
 
 If desired, tagged builds may also include commit metadata in a secondary field or verbose form, but the primary public version identifier should be SemVer rather than a raw hash.
@@ -142,7 +150,7 @@ Publish end-user docs that match actual behavior:
 
 | File | Change |
 |------|--------|
-| `docs/specs/cli-commands.md` | Add `ww cd` and the chosen path-only create behavior |
+| `docs/specs/cli-commands.md` | Add `ww cd` (with mtime-based recency) and `ww create -q`/`--quiet` |
 | `docs/specs/shell-integration.md` | New spec for path-printing contracts, stdout/stderr rules, and shell wrapper examples |
 | `docs/specs/release-versioning.md` | New spec for release tags, `ww version` output, and dev-vs-release build metadata |
 
@@ -159,7 +167,7 @@ Publish end-user docs that match actual behavior:
 | `cmd/ww/main.go` | Register `cd` subcommand and any new create flags |
 | `cmd/ww/version.go` and `cmd/ww/main.go` | Extend version metadata from commit-hash-only to release-aware output |
 | `cmd/ww/sub_cd.go` | New subcommand for path resolution |
-| `cmd/ww/sub_create.go` | Add explicit path-only output mode |
+| `cmd/ww/sub_create.go` | Add `-q`/`--quiet` flag for path-only output |
 | `cmd/ww/helpers.go` | Share repo/workspace/path resolution logic as needed |
 | `worktree/` | Expose or refine path-resolution helpers needed by shell integration |
 | `.github/` and release metadata files | Add the minimal automation/files required for Homebrew distribution |
@@ -182,8 +190,8 @@ Exact packaging file names may depend on the chosen release approach, but the im
 - [ ] [parallel] Add `docs/specs/release-versioning.md` describing SemVer releases and commit-aware dev builds
 - [ ] [parallel] Append an ADR entry for explicit path-only shell integration
 - [ ] [parallel, depends on: spec changes] Update `docs/spec-code-mapping.md` to map new shell-integration and release-versioning specs to implementation
-- [ ] [depends on: shell specs, ADR] Implement `ww cd` path resolution
-- [ ] [depends on: shell specs] Add explicit path-only output mode to `ww create`
+- [ ] [depends on: shell specs, ADR] Implement `ww cd` path resolution (mtime-based recency for no-arg mode)
+- [ ] [depends on: shell specs] Add `-q`/`--quiet` flag to `ww create` for path-only output
 - [ ] [depends on: naming freeze, release-versioning spec] Add installation/release files, Homebrew support, and release-aware version metadata
 - [ ] [depends on: shell specs] Write user-facing docs for shell setup, install, and common workflows
 - [ ] [depends on: implementation] Add or update tests covering path-only output, stdout/stderr separation, and release metadata validation
@@ -206,9 +214,9 @@ Phase 3 execution should be split into child plans before implementation. The de
 ## Verification
 
 - `ww` remains the documented product/binary name across plan, specs, and user docs
-- `ww cd` prints only the resolved absolute path on success
-- `ww create` supports explicit command-substitution-friendly output without breaking existing default text usage
+- `ww cd` prints only the resolved absolute path on success; no-arg mode returns the most recently created worktree
+- `ww create -q` prints only the created worktree path, enabling `cd $(ww create -q feat/x)`
 - human-readable context for shell-oriented flows goes to `stderr`
 - tagged releases use SemVer, while untagged builds remain commit-identifiable
-- installation works via `go install` and the documented Homebrew path
+- installation works via `go install` and `brew tap yoskeoka/ww && brew install ww`
 - docs show an accurate end-to-end setup for single-repo and workspace modes
