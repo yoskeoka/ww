@@ -35,7 +35,10 @@ func NewHostEnv(ctx context.Context) (*HostEnv, error) {
 		return nil, fmt.Errorf("create temp gitconfig: %w", err)
 	}
 	gitConfigPath := gitCfg.Name()
-	gitCfg.Close()
+	if err := gitCfg.Close(); err != nil {
+		_ = os.Remove(gitConfigPath)
+		return nil, fmt.Errorf("close temp gitconfig: %w", err)
+	}
 
 	env := &HostEnv{
 		wwBinaryPath:  binPath,
