@@ -21,11 +21,11 @@ type RepoOpts struct {
 	DefaultBranch string
 }
 
-// Workspace represents a multi-repo workspace created inside the container.
+// Workspace represents a multi-repo workspace created on the host filesystem.
 type Workspace struct {
 	// RootDir is the parent directory containing all child repos.
 	RootDir string
-	// RepoDirs contains the absolute container path of each child repo.
+	// RepoDirs contains the absolute path of each child repo.
 	RepoDirs []string
 }
 
@@ -38,10 +38,9 @@ type WorkspaceOpts struct {
 	RepoOpts []RepoOpts
 }
 
-// SetupRepo creates a single git repository with realistic seed data inside the
-// container. It mirrors the host-based setupTestRepo helper used before Docker
-// migration. Returns the absolute container path to the repository.
-func SetupRepo(t *testing.T, env *ContainerEnv, opts RepoOpts) string {
+// SetupRepo creates a single git repository with realistic seed data.
+// Returns the absolute path to the repository.
+func SetupRepo(t *testing.T, env *HostEnv, opts RepoOpts) string {
 	t.Helper()
 	if opts.Name == "" {
 		opts.Name = "myrepo"
@@ -61,14 +60,14 @@ func SetupRepo(t *testing.T, env *ContainerEnv, opts RepoOpts) string {
 	return setupRepoFromScratch(t, env, opts)
 }
 
-func ensureRepoSeed(env *ContainerEnv) (string, error) {
+func ensureRepoSeed(env *HostEnv) (string, error) {
 	repoSeedOnce.Do(func() {
 		repoSeedPath, repoSeedErr = createRepoSeed(env)
 	})
 	return repoSeedPath, repoSeedErr
 }
 
-func createRepoSeed(env *ContainerEnv) (string, error) {
+func createRepoSeed(env *HostEnv) (string, error) {
 	baseDir, err := env.MkdirTemp("ww-seed")
 	if err != nil {
 		return "", err
@@ -151,7 +150,7 @@ func createRepoSeed(env *ContainerEnv) (string, error) {
 	return repo, nil
 }
 
-func cloneRepoSeed(t *testing.T, env *ContainerEnv, seedRepo string, opts RepoOpts) string {
+func cloneRepoSeed(t *testing.T, env *HostEnv, seedRepo string, opts RepoOpts) string {
 	t.Helper()
 
 	baseDir, err := env.MkdirTemp("ww-test")
@@ -166,7 +165,7 @@ func cloneRepoSeed(t *testing.T, env *ContainerEnv, seedRepo string, opts RepoOp
 	return repo
 }
 
-func setupRepoFromScratch(t *testing.T, env *ContainerEnv, opts RepoOpts) string {
+func setupRepoFromScratch(t *testing.T, env *HostEnv, opts RepoOpts) string {
 	t.Helper()
 
 	baseDir, err := env.MkdirTemp("ww-test")
@@ -226,7 +225,7 @@ func setupRepoFromScratch(t *testing.T, env *ContainerEnv, opts RepoOpts) string
 // SetupWorkspace creates a workspace root containing NumRepos child git
 // repositories, each with a single empty initial commit. This is intended for
 // Phase 2 workspace-mode tests (plans 009–011).
-func SetupWorkspace(t *testing.T, env *ContainerEnv, opts WorkspaceOpts) *Workspace {
+func SetupWorkspace(t *testing.T, env *HostEnv, opts WorkspaceOpts) *Workspace {
 	t.Helper()
 
 	root, err := env.MkdirTemp("ww-workspace")
@@ -256,7 +255,7 @@ func SetupWorkspace(t *testing.T, env *ContainerEnv, opts WorkspaceOpts) *Worksp
 // SetupNonGitWorkspace creates a workspace where the root directory is NOT a
 // git repository but contains NumRepos git child repositories. Intended for
 // Phase 2 workspace-mode tests.
-func SetupNonGitWorkspace(t *testing.T, env *ContainerEnv, opts WorkspaceOpts) *Workspace {
+func SetupNonGitWorkspace(t *testing.T, env *HostEnv, opts WorkspaceOpts) *Workspace {
 	t.Helper()
 
 	root, err := env.MkdirTemp("ww-nongit-workspace")

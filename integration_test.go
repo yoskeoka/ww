@@ -13,17 +13,17 @@ import (
 	"github.com/yoskeoka/ww/internal/testutil"
 )
 
-// globalEnv is the shared container environment for all integration tests.
+// globalEnv is the shared host environment for all integration tests.
 // It is nil when running in short mode (go test -short).
-var globalEnv *testutil.ContainerEnv
+var globalEnv *testutil.HostEnv
 
 func TestMain(m *testing.M) {
 	flag.Parse()
 	if !testing.Short() {
 		var err error
-		globalEnv, err = testutil.NewContainerEnv(context.Background())
+		globalEnv, err = testutil.NewHostEnv(context.Background())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "FATAL: setup container env: %v\n", err)
+			fmt.Fprintf(os.Stderr, "FATAL: setup host env: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -53,7 +53,7 @@ func runWW(t *testing.T, dir string, args ...string) (string, error) {
 
 func TestVersionCommand(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -72,7 +72,7 @@ func TestVersionCommand(t *testing.T) {
 
 func TestCreateAndList(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -112,7 +112,7 @@ func TestCreateAndList(t *testing.T) {
 
 func TestListJSON(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -155,7 +155,7 @@ func TestListJSON(t *testing.T) {
 
 func TestListWorkspaceMode(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -179,7 +179,7 @@ func TestListWorkspaceMode(t *testing.T) {
 
 func TestListStatusesAndCleanable(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -255,7 +255,7 @@ func TestListStatusesAndCleanable(t *testing.T) {
 
 func TestCleanDryRun(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -287,8 +287,9 @@ func TestCleanDryRun(t *testing.T) {
 
 func TestCleanRemovesCleanable(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
+	t.Parallel()
 
 	repo := setupRepoWithBareRemote(t)
 	writeConfig(t, repo, `default_base = "main"`)
@@ -334,7 +335,7 @@ func TestCleanRemovesCleanable(t *testing.T) {
 
 func TestCleanForceDirtyWorktree(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -360,7 +361,7 @@ func TestCleanForceDirtyWorktree(t *testing.T) {
 
 func TestCleanJSON(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -406,7 +407,7 @@ func TestCleanJSON(t *testing.T) {
 
 func TestCleanWorkspaceModeFromRepo(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -434,7 +435,7 @@ func TestCleanWorkspaceModeFromRepo(t *testing.T) {
 
 func TestCleanWorkspaceModeFromRoot(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -462,7 +463,7 @@ func TestCleanWorkspaceModeFromRoot(t *testing.T) {
 
 func TestCleanEmpty(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -480,7 +481,7 @@ func TestCleanEmpty(t *testing.T) {
 
 func TestCleanContinuesAfterFailure(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -515,7 +516,7 @@ func TestCleanContinuesAfterFailure(t *testing.T) {
 
 func TestCreateDryRun(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -538,7 +539,7 @@ func TestCreateDryRun(t *testing.T) {
 
 func TestCreateWithRepoFlagFromWorkspaceRoot(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -561,7 +562,7 @@ func TestCreateWithRepoFlagFromWorkspaceRoot(t *testing.T) {
 
 func TestRemoveWorktree(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -588,7 +589,7 @@ func TestRemoveWorktree(t *testing.T) {
 
 func TestRemoveWithRepoFlagFromWorkspaceRoot(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -612,8 +613,9 @@ func TestRemoveWithRepoFlagFromWorkspaceRoot(t *testing.T) {
 
 func TestRemoveWithRepoFlagUnknownRepoFromWorkspaceRoot(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
+	t.Parallel()
 
 	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 1})
 	writeConfig(t, ws.RootDir, `default_base = "main"`)
@@ -635,7 +637,7 @@ func TestRemoveWithRepoFlagUnknownRepoFromWorkspaceRoot(t *testing.T) {
 
 func TestRemoveWithRepoFlagOutsideWorkspace(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -655,7 +657,7 @@ func TestRemoveWithRepoFlagOutsideWorkspace(t *testing.T) {
 }
 func TestInvalidBranchName(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -670,7 +672,7 @@ func TestInvalidBranchName(t *testing.T) {
 
 func TestZeroConfig(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -684,7 +686,7 @@ func TestZeroConfig(t *testing.T) {
 
 func TestNonGitDirectory(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -704,7 +706,7 @@ func TestNonGitDirectory(t *testing.T) {
 
 func TestCreateWithRepoFlagUnknownRepo(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -722,7 +724,7 @@ func TestCreateWithRepoFlagUnknownRepo(t *testing.T) {
 
 func TestCreateWithRepoFlagOutsideWorkspace(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -740,7 +742,7 @@ func TestCreateWithRepoFlagOutsideWorkspace(t *testing.T) {
 
 func TestCopyFiles(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -770,7 +772,7 @@ func TestCopyFiles(t *testing.T) {
 
 func TestSymlinkFiles(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -794,7 +796,7 @@ func TestSymlinkFiles(t *testing.T) {
 
 func TestPostCreateHook(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -818,7 +820,7 @@ func TestPostCreateHook(t *testing.T) {
 
 func TestRemoveMainWorktreeRejected(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -891,7 +893,7 @@ func workspaceWorktreePath(root, repo, branch string) string {
 
 func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -909,7 +911,7 @@ func TestRemoveMainWorktreeDryRunRejected(t *testing.T) {
 
 func TestRemoveNonexistentWorktree(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -927,7 +929,7 @@ func TestRemoveNonexistentWorktree(t *testing.T) {
 
 func TestRemoveNonexistentWorktreeDryRun(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -945,7 +947,7 @@ func TestRemoveNonexistentWorktreeDryRun(t *testing.T) {
 
 func TestHelpFlag(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -965,7 +967,7 @@ func TestHelpFlag(t *testing.T) {
 
 func TestRunFromWorktreeDir(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -1004,7 +1006,7 @@ func TestRunFromWorktreeDir(t *testing.T) {
 
 func TestConfigFallbackFromWorktree(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -1029,7 +1031,7 @@ func TestConfigFallbackFromWorktree(t *testing.T) {
 
 func TestCreateExistingBranch(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -1052,7 +1054,7 @@ func TestCreateExistingBranch(t *testing.T) {
 
 func TestRemoveForceCleanWorktree(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -1079,7 +1081,7 @@ func TestRemoveForceCleanWorktree(t *testing.T) {
 
 func TestRemoveForceDirtyWorktree(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -1117,7 +1119,7 @@ func TestRemoveForceDirtyWorktree(t *testing.T) {
 
 func TestCreateExistingPathRejected(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -1139,7 +1141,7 @@ func TestCreateExistingPathRejected(t *testing.T) {
 
 func TestWorkspaceCreateUsesCentralizedWorktreeDir(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
@@ -1159,7 +1161,7 @@ func TestWorkspaceCreateUsesCentralizedWorktreeDir(t *testing.T) {
 
 func TestNonGitWorkspaceRootRejectsWithoutRepoSelection(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping: requires Docker")
+		t.Skip("skipping: integration test")
 	}
 	t.Parallel()
 
