@@ -13,7 +13,7 @@ The integration test suite runs inside a shared Docker container (`testcontainer
 | Filesystem isolation | Container boundary | `MkdirTemp` with random suffix (already used) |
 | Git config isolation | `GIT_CONFIG_GLOBAL=/tmp/gitconfig` in container | Set `GIT_CONFIG_GLOBAL` to a test-scoped temp file |
 | Prevent host side-effects | All ops in container | Tests only operate in temp dirs under `/tmp/` |
-| Consistent environment | `golang:1.23` image | CI runner spec (e.g., GitHub Actions `runs-on`) |
+| Consistent environment | `golang:<version>` image (matching `go.mod`) | CI runner spec (e.g., GitHub Actions `runs-on`) |
 
 ### Costs of Docker
 
