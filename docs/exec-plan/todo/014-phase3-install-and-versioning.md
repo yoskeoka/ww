@@ -15,9 +15,11 @@
 
 ### Version Output Spec
 
-- Tagged release build: `ww version v0.3.0`
-- Dev/untagged build: `ww version dev+<short-hash>`
-- `ww version --json`: `{"version": "v0.3.0", "commit": "<short-hash>"}` (or `{"version": "dev", "commit": "<short-hash>"}` for dev builds)
+- Tagged release build (text): `ww version v0.3.0`
+- Dev/untagged build (text): `ww version dev+<short-hash>`
+- `ww version --json` (release build): `{"version": "v0.3.0", "commit": "<short-hash>"}`
+- `ww version --json` (dev build): `{"version": "dev", "commit": "<short-hash>"}`
+  - Note: For dev builds, the human-readable text output concatenates the version and short hash (`dev+<short-hash>`), while the JSON output splits them into separate `version` and `commit` fields.
 
 ### Release Strategy Spec
 
