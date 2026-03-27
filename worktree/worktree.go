@@ -400,6 +400,7 @@ func (m *Manager) runPostCreateHook(wtPath, branch string) {
 	if m.Config.PostCreateHook == "" {
 		return
 	}
+	fmt.Printf("Running post_create_hook: %s\n", m.Config.PostCreateHook)
 	cmd := exec.Command("sh", "-c", m.Config.PostCreateHook)
 	cmd.Dir = wtPath
 	cmd.Env = append(os.Environ(),
