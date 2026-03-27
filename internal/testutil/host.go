@@ -125,7 +125,18 @@ func (e *HostEnv) Exec(dir string, cmd string, args ...string) (string, error) {
 	if dir != "" {
 		c.Dir = dir
 	}
-	c.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+e.gitConfigPath)
+	// Ensure our test git config path deterministically overrides any existing
+	// GIT_CONFIG_GLOBAL in the environment.
+	baseEnv := os.Environ()
+	env := make([]string, 0, len(baseEnv)+1)
+	for _, v := range baseEnv {
+		if strings.HasPrefix(v, "GIT_CONFIG_GLOBAL=") {
+			continue
+		}
+		env = append(env, v)
+	}
+	env = append(env, "GIT_CONFIG_GLOBAL="+e.gitConfigPath)
+	c.Env = env
 
 	out, err := c.CombinedOutput()
 	outStr := string(out)
