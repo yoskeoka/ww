@@ -838,6 +838,11 @@ func TestPostCreateHookAnnouncesCommand(t *testing.T) {
 	if !strings.Contains(out, "hook-ran") {
 		t.Errorf("create output should include hook output: %s", out)
 	}
+	announcementIdx := strings.Index(out, "Running post_create_hook:")
+	hookOutputIdx := strings.Index(out, "hook-ran")
+	if announcementIdx >= 0 && hookOutputIdx >= 0 && announcementIdx >= hookOutputIdx {
+		t.Errorf("hook announcement should appear before hook output; got:\n%s", out)
+	}
 }
 
 func TestRemoveMainWorktreeRejected(t *testing.T) {

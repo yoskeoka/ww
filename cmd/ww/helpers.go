@@ -13,7 +13,9 @@ import (
 
 func worktreeCreateOpts(glOpts *globalOpts) worktree.CreateOpts {
 	return worktree.CreateOpts{
-		DryRun: glOpts.dryRun,
+		DryRun:   glOpts.dryRun,
+		Output:   glOpts.output,
+		TextMode: !glOpts.json,
 	}
 }
 
