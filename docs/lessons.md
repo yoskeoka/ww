@@ -71,3 +71,12 @@
 - **Pattern**: A new bulk command can quietly broaden an existing command's semantics if both commands reuse the same implementation path but the shared flag contract is not made explicit first.
 - **Rule**: When one command is intended to mean "bulk application of another command," decide and document whether shared flags are semantically identical before changing either implementation or spec. If the answer is yes, update both contracts together in the same change.
 - **Applied**: `ww clean` / `ww remove`, and any future single-item vs bulk command pairs that share flags or deletion semantics.
+
+---
+
+### L-009: Follow-up execution must re-check whether the prerequisite PR is already merged
+
+- **Mistake**: Continued working from the assumption that PR `ww#87` was still pending, and only the user's correction made it explicit that the plan PR had already merged.
+- **Pattern**: Carrying state forward from the previous turn without re-verifying merge status can make workflow decisions stale, especially when the user has advanced the repository between turns.
+- **Rule**: At the start of any `/execute-task` follow-up, explicitly verify whether the referenced plan PR has already merged or whether `origin/main` already contains the prerequisite docs move, before deciding whether more planning work is needed.
+- **Applied**: Workflow transitions between `/plan-execution` and `/execute-task`, especially when a user references a recently created PR or says "it's already merged".

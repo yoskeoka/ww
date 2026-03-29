@@ -51,6 +51,11 @@ func runWW(t *testing.T, dir string, args ...string) (string, error) {
 	return globalEnv.RunWW(dir, args...)
 }
 
+func runWWSplit(t *testing.T, dir string, args ...string) (string, string, error) {
+	t.Helper()
+	return globalEnv.RunWWSplit(dir, args...)
+}
+
 func TestVersionCommand(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")
@@ -534,6 +539,241 @@ func TestCreateDryRun(t *testing.T) {
 	wtPath := path.Join(path.Dir(repo), "myrepo@feat-dry-test")
 	if globalEnv.PathExists(wtPath) {
 		t.Error("dry-run should not create worktree directory")
+	}
+}
+
+func TestCreateQuiet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	stdout, stderr, err := runWWSplit(t, repo, "create", "-q", "feat/quiet-test")
+	if err != nil {
+		t.Fatalf("ww create -q: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	wantPath := worktreePath(repo, "feat/quiet-test")
+	if strings.TrimSpace(stdout) != wantPath {
+		t.Fatalf("quiet stdout = %q, want %q", stdout, wantPath+"\n")
+	}
+	if strings.Contains(stderr, "Created worktree") {
+		t.Fatalf("quiet mode should not print human-readable success output to stderr: %s", stderr)
+	}
+}
+
+func TestCreateQuietDryRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	stdout, stderr, err := runWWSplit(t, repo, "create", "-q", "--dry-run", "feat/quiet-dry-run")
+	if err != nil {
+		t.Fatalf("ww create -q --dry-run: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	wantPath := worktreePath(repo, "feat/quiet-dry-run")
+	if strings.TrimSpace(stdout) != wantPath {
+		t.Fatalf("quiet dry-run stdout = %q, want %q", stdout, wantPath+"\n")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("quiet dry-run stderr should be empty, got: %s", stderr)
+	}
+	if globalEnv.PathExists(wantPath) {
+		t.Fatal("quiet dry-run should not create the worktree directory")
+	}
+}
+
+func TestCreateQuietJSONTakesPrecedence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	stdout, stderr, err := runWWSplit(t, repo, "create", "-q", "--json", "feat/quiet-json")
+	if err != nil {
+		t.Fatalf("ww create -q --json: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("quiet json output is not valid JSON: %v\n%s", err, stdout)
+	}
+	if obj["path"] != worktreePath(repo, "feat/quiet-json") {
+		t.Fatalf("json path = %v, want %q", obj["path"], worktreePath(repo, "feat/quiet-json"))
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("quiet json stderr should be empty, got: %s", stderr)
+	}
+}
+
+func TestCreateQuietSendsHookOutputToStderr(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, "default_base = \"main\"\npost_create_hook = \"echo hook-ran\"\n")
+
+	stdout, stderr, err := runWWSplit(t, repo, "create", "-q", "feat/quiet-hook")
+	if err != nil {
+		t.Fatalf("ww create -q: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	wantPath := worktreePath(repo, "feat/quiet-hook")
+	if strings.TrimSpace(stdout) != wantPath {
+		t.Fatalf("quiet hook stdout = %q, want %q", stdout, wantPath+"\n")
+	}
+	if !strings.Contains(stderr, "hook-ran") {
+		t.Fatalf("quiet hook should route hook output to stderr: %s", stderr)
+	}
+	if strings.Contains(stderr, "Running post_create_hook:") {
+		t.Fatalf("quiet hook should suppress human-readable hook announcement: %s", stderr)
+	}
+}
+
+func TestCdNoArg(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/cd-default"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runWWSplit(t, repo, "cd")
+	if err != nil {
+		t.Fatalf("ww cd: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	if strings.TrimSpace(stdout) != worktreePath(repo, "feat/cd-default") {
+		t.Fatalf("ww cd stdout = %q, want %q", stdout, worktreePath(repo, "feat/cd-default")+"\n")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("ww cd stderr should be empty, got: %s", stderr)
+	}
+}
+
+func TestCdNamed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/cd-alpha"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runWWSplit(t, repo, "cd", "refs/heads/feat/cd-alpha")
+	if err != nil {
+		t.Fatalf("ww cd refs/heads/...: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	if strings.TrimSpace(stdout) != worktreePath(repo, "feat/cd-alpha") {
+		t.Fatalf("ww cd named stdout = %q, want %q", stdout, worktreePath(repo, "feat/cd-alpha")+"\n")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("ww cd named stderr should be empty, got: %s", stderr)
+	}
+}
+
+func TestCdJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := runWW(t, repo, "create", "feat/cd-json"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runWWSplit(t, repo, "cd", "--json", "feat/cd-json")
+	if err != nil {
+		t.Fatalf("ww cd --json: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("cd json output is not valid JSON: %v\n%s", err, stdout)
+	}
+	if obj["path"] != worktreePath(repo, "feat/cd-json") {
+		t.Fatalf("cd json path = %v, want %q", obj["path"], worktreePath(repo, "feat/cd-json"))
+	}
+	if obj["branch"] != "feat/cd-json" {
+		t.Fatalf("cd json branch = %v, want %q", obj["branch"], "feat/cd-json")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("cd json stderr should be empty, got: %s", stderr)
+	}
+}
+
+func TestCdWithRepoFlagFromWorkspaceRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	if _, err := runWW(t, ws.RootDir, "create", "feat/shared-branch", "--repo", "repo1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, ws.RootDir, "create", "feat/shared-branch", "--repo", "repo2"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runWWSplit(t, ws.RootDir, "cd", "--repo", "repo2", "feat/shared-branch")
+	if err != nil {
+		t.Fatalf("ww cd --repo repo2: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	wantPath := workspaceWorktreePath(ws.RootDir, "repo2", "feat/shared-branch")
+	if strings.TrimSpace(stdout) != wantPath {
+		t.Fatalf("ww cd --repo stdout = %q, want %q", stdout, wantPath+"\n")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("ww cd --repo stderr should be empty, got: %s", stderr)
+	}
+}
+
+func TestCdErrorsWithoutSecondaryWorktrees(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	stdout, stderr, err := runWWSplit(t, repo, "cd")
+	if err == nil {
+		t.Fatalf("expected ww cd to fail without secondary worktrees, got stdout=%q stderr=%q", stdout, stderr)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("ww cd error should not write stdout, got: %s", stdout)
+	}
+	if !strings.Contains(stderr, "no secondary worktrees found") {
+		t.Fatalf("ww cd error should mention missing secondary worktrees: %s", stderr)
 	}
 }
 

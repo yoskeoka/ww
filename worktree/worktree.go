@@ -207,6 +207,89 @@ func (m *Manager) List() ([]WorktreeInfo, error) {
 	return m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
 }
 
+// FindByName returns the worktree whose branch matches name.
+// refs/heads/<branch> and <branch> are treated as equivalent.
+// When withStatus is true the returned WorktreeInfo includes the computed
+// Status field (requires merged-branch and remote-branch discovery).
+// When withStatus is false only path, branch, head, and structural fields
+// are populated, which is significantly faster.
+func (m *Manager) FindByName(name string, withStatus bool) (*WorktreeInfo, error) {
+	target := normalizeBranchName(name)
+	listFn := m.listRepoFast
+	if withStatus {
+		listFn = m.listRepo
+	}
+	infos, err := listFn(filepath.Base(m.RepoDir), m.RepoDir)
+	if err != nil {
+		return nil, err
+	}
+	for i := range infos {
+		if normalizeBranchName(infos[i].Branch) != target {
+			continue
+		}
+		info := infos[i]
+		return &info, nil
+	}
+	return nil, fmt.Errorf("no worktree found for branch %q", target)
+}
+
+// MostRecent returns the most recently created secondary worktree.
+// Recency is determined by the mtime of .git/worktrees/<name> admin dirs.
+// When withStatus is true the returned WorktreeInfo includes the computed
+// Status field (requires merged-branch and remote-branch discovery).
+// When withStatus is false only the Path field is guaranteed to be populated,
+// which avoids all additional git calls after the admin-dir scan.
+func (m *Manager) MostRecent(withStatus bool) (*WorktreeInfo, error) {
+	adminRoot := filepath.Join(m.RepoDir, ".git", "worktrees")
+	entries, err := os.ReadDir(adminRoot)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("no secondary worktrees found")
+		}
+		return nil, fmt.Errorf("reading worktree admin directory: %w", err)
+	}
+
+	var newestPath string
+	var newestTime int64
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, fmt.Errorf("reading worktree admin info for %s: %w", entry.Name(), err)
+		}
+		wtPath, err := worktreePathFromAdminDir(adminRoot, entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		if newestPath == "" || info.ModTime().UnixNano() > newestTime {
+			newestPath = wtPath
+			newestTime = info.ModTime().UnixNano()
+		}
+	}
+	if newestPath == "" {
+		return nil, fmt.Errorf("no secondary worktrees found")
+	}
+
+	if !withStatus {
+		return &WorktreeInfo{Path: newestPath}, nil
+	}
+
+	infos, err := m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
+	if err != nil {
+		return nil, err
+	}
+	for i := range infos {
+		if infos[i].Path != newestPath {
+			continue
+		}
+		info := infos[i]
+		return &info, nil
+	}
+	return nil, fmt.Errorf("no worktree found for path %q", newestPath)
+}
+
 func (m *Manager) listWorkspace() ([]WorktreeInfo, error) {
 	var infos []WorktreeInfo
 	for _, repo := range m.Workspace.Repos {
@@ -284,6 +367,30 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 	return infos, nil
 }
 
+// listRepoFast returns worktree entries without computing Status.
+// It calls git worktree list --porcelain once and skips merged-branch and
+// remote-branch discovery, making it safe for use when only path/branch/head
+// fields are needed.
+func (m *Manager) listRepoFast(repoName, repoPath string) ([]WorktreeInfo, error) {
+	runner := &git.Runner{Dir: repoPath}
+	entries, err := runner.WorktreeList()
+	if err != nil {
+		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
+	}
+	infos := make([]WorktreeInfo, 0, len(entries))
+	for _, e := range entries {
+		infos = append(infos, WorktreeInfo{
+			Path:   e.Path,
+			Branch: e.Branch,
+			Repo:   repoName,
+			Head:   e.Head,
+			Bare:   e.Bare,
+			Main:   e.Main,
+		})
+	}
+	return infos, nil
+}
+
 func (m *Manager) baseRef(runner *git.Runner) (string, error) {
 	if m.Config.DefaultBase != "" {
 		return m.Config.DefaultBase, nil
@@ -306,6 +413,23 @@ func resolveStatus(entry git.WorktreeEntry, merged map[string]struct{}, branchRe
 		return StatusStale
 	}
 	return StatusActive
+}
+
+func normalizeBranchName(name string) string {
+	return strings.TrimPrefix(name, "refs/heads/")
+}
+
+func worktreePathFromAdminDir(adminRoot, name string) (string, error) {
+	gitdirPath := filepath.Join(adminRoot, name, "gitdir")
+	data, err := os.ReadFile(gitdirPath)
+	if err != nil {
+		return "", fmt.Errorf("reading worktree admin gitdir for %s: %w", name, err)
+	}
+	gitdir := strings.TrimSpace(string(data))
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Clean(filepath.Join(adminRoot, name, gitdir))
+	}
+	return filepath.Dir(gitdir), nil
 }
 
 // Remove removes a worktree and optionally its branch.
