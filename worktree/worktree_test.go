@@ -236,7 +236,7 @@ func TestFindByName(t *testing.T) {
 		RepoDir: repo,
 	}
 
-	info, err := mgr.FindByName("refs/heads/feat/alpha")
+	info, err := mgr.FindByName("refs/heads/feat/alpha", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestMostRecentUsesWorktreeAdminMtime(t *testing.T) {
 		RepoDir: repo,
 	}
 
-	info, err := mgr.MostRecent()
+	info, err := mgr.MostRecent(false)
 	if err != nil {
 		t.Fatal(err)
 	}

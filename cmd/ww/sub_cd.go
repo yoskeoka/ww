@@ -35,9 +35,9 @@ func cdCmd() command {
 
 			var info *worktree.WorktreeInfo
 			if len(remaining) == 0 {
-				info, err = mgr.MostRecent()
+				info, err = mgr.MostRecent(glOpts.json)
 			} else {
-				info, err = mgr.FindByName(remaining[0])
+				info, err = mgr.FindByName(remaining[0], glOpts.json)
 			}
 			if err != nil {
 				return err

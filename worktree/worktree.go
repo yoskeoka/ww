@@ -209,9 +209,17 @@ func (m *Manager) List() ([]WorktreeInfo, error) {
 
 // FindByName returns the worktree whose branch matches name.
 // refs/heads/<branch> and <branch> are treated as equivalent.
-func (m *Manager) FindByName(name string) (*WorktreeInfo, error) {
+// When withStatus is true the returned WorktreeInfo includes the computed
+// Status field (requires merged-branch and remote-branch discovery).
+// When withStatus is false only path, branch, head, and structural fields
+// are populated, which is significantly faster.
+func (m *Manager) FindByName(name string, withStatus bool) (*WorktreeInfo, error) {
 	target := normalizeBranchName(name)
-	infos, err := m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
+	listFn := m.listRepoFast
+	if withStatus {
+		listFn = m.listRepo
+	}
+	infos, err := listFn(filepath.Base(m.RepoDir), m.RepoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +235,11 @@ func (m *Manager) FindByName(name string) (*WorktreeInfo, error) {
 
 // MostRecent returns the most recently created secondary worktree.
 // Recency is determined by the mtime of .git/worktrees/<name> admin dirs.
-func (m *Manager) MostRecent() (*WorktreeInfo, error) {
+// When withStatus is true the returned WorktreeInfo includes the computed
+// Status field (requires merged-branch and remote-branch discovery).
+// When withStatus is false only the Path field is guaranteed to be populated,
+// which avoids all additional git calls after the admin-dir scan.
+func (m *Manager) MostRecent(withStatus bool) (*WorktreeInfo, error) {
 	adminRoot := filepath.Join(m.RepoDir, ".git", "worktrees")
 	entries, err := os.ReadDir(adminRoot)
 	if err != nil {
@@ -258,6 +270,10 @@ func (m *Manager) MostRecent() (*WorktreeInfo, error) {
 	}
 	if newestPath == "" {
 		return nil, fmt.Errorf("no secondary worktrees found")
+	}
+
+	if !withStatus {
+		return &WorktreeInfo{Path: newestPath}, nil
 	}
 
 	infos, err := m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
@@ -343,6 +359,30 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 			Branch: e.Branch,
 			Repo:   repoName,
 			Status: status,
+			Head:   e.Head,
+			Bare:   e.Bare,
+			Main:   e.Main,
+		})
+	}
+	return infos, nil
+}
+
+// listRepoFast returns worktree entries without computing Status.
+// It calls git worktree list --porcelain once and skips merged-branch and
+// remote-branch discovery, making it safe for use when only path/branch/head
+// fields are needed.
+func (m *Manager) listRepoFast(repoName, repoPath string) ([]WorktreeInfo, error) {
+	runner := &git.Runner{Dir: repoPath}
+	entries, err := runner.WorktreeList()
+	if err != nil {
+		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
+	}
+	infos := make([]WorktreeInfo, 0, len(entries))
+	for _, e := range entries {
+		infos = append(infos, WorktreeInfo{
+			Path:   e.Path,
+			Branch: e.Branch,
+			Repo:   repoName,
 			Head:   e.Head,
 			Bare:   e.Bare,
 			Main:   e.Main,
