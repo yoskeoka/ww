@@ -41,6 +41,7 @@ type command struct {
 
 func cliMain() int {
 	commands := []command{
+		cdCmd(),
 		createCmd(),
 		cleanCmd(),
 		listCmd(),

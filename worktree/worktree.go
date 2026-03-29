@@ -207,6 +207,73 @@ func (m *Manager) List() ([]WorktreeInfo, error) {
 	return m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
 }
 
+// FindByName returns the worktree whose branch matches name.
+// refs/heads/<branch> and <branch> are treated as equivalent.
+func (m *Manager) FindByName(name string) (*WorktreeInfo, error) {
+	target := normalizeBranchName(name)
+	infos, err := m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
+	if err != nil {
+		return nil, err
+	}
+	for i := range infos {
+		if normalizeBranchName(infos[i].Branch) != target {
+			continue
+		}
+		info := infos[i]
+		return &info, nil
+	}
+	return nil, fmt.Errorf("no worktree found for branch %q", target)
+}
+
+// MostRecent returns the most recently created secondary worktree.
+// Recency is determined by the mtime of .git/worktrees/<name> admin dirs.
+func (m *Manager) MostRecent() (*WorktreeInfo, error) {
+	adminRoot := filepath.Join(m.RepoDir, ".git", "worktrees")
+	entries, err := os.ReadDir(adminRoot)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("no secondary worktrees found")
+		}
+		return nil, fmt.Errorf("reading worktree admin directory: %w", err)
+	}
+
+	var newestPath string
+	var newestTime int64
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, fmt.Errorf("reading worktree admin info for %s: %w", entry.Name(), err)
+		}
+		wtPath, err := worktreePathFromAdminDir(adminRoot, entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		if newestPath == "" || info.ModTime().UnixNano() > newestTime {
+			newestPath = wtPath
+			newestTime = info.ModTime().UnixNano()
+		}
+	}
+	if newestPath == "" {
+		return nil, fmt.Errorf("no secondary worktrees found")
+	}
+
+	infos, err := m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
+	if err != nil {
+		return nil, err
+	}
+	for i := range infos {
+		if infos[i].Path != newestPath {
+			continue
+		}
+		info := infos[i]
+		return &info, nil
+	}
+	return nil, fmt.Errorf("no worktree found for path %q", newestPath)
+}
+
 func (m *Manager) listWorkspace() ([]WorktreeInfo, error) {
 	var infos []WorktreeInfo
 	for _, repo := range m.Workspace.Repos {
@@ -306,6 +373,23 @@ func resolveStatus(entry git.WorktreeEntry, merged map[string]struct{}, branchRe
 		return StatusStale
 	}
 	return StatusActive
+}
+
+func normalizeBranchName(name string) string {
+	return strings.TrimPrefix(name, "refs/heads/")
+}
+
+func worktreePathFromAdminDir(adminRoot, name string) (string, error) {
+	gitdirPath := filepath.Join(adminRoot, name, "gitdir")
+	data, err := os.ReadFile(gitdirPath)
+	if err != nil {
+		return "", fmt.Errorf("reading worktree admin gitdir for %s: %w", name, err)
+	}
+	gitdir := strings.TrimSpace(string(data))
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Clean(filepath.Join(adminRoot, name, gitdir))
+	}
+	return filepath.Dir(gitdir), nil
 }
 
 // Remove removes a worktree and optionally its branch.

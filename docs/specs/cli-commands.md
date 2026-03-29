@@ -46,6 +46,7 @@ In workspace mode with `--repo`, the default path remains centralized at `<works
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--repo` | string | empty | Target a detected workspace repository by name instead of the current repo |
+| `-q`, `--quiet` | bool | false | Suppress human-readable output and print only the created worktree path on `stdout` |
 | `--dry-run` | bool | false | Show planned actions without executing |
 | `--json` | bool | false | Output NDJSON (one JSON object per line) |
 
@@ -53,6 +54,11 @@ In workspace mode with `--repo`, the default path remains centralized at `<works
 ```text
 Running post_create_hook: npm install
 Created worktree at /path/to/repo@branch (branch: feat/my-feature)
+```
+
+**Output (quiet text):**
+```text
+/path/to/repo@branch
 ```
 
 **Output (JSON):**
@@ -66,6 +72,46 @@ Would create worktree at /path/to/repo@branch (branch: feat/my-feature, base: or
 Would copy: .env, .vscode/settings.json
 Would symlink: node_modules
 Would run hook: npm install
+```
+
+**Dry-run output (quiet text):**
+```text
+/path/to/repo@branch
+```
+
+**Exit codes:** 0 on success, 1 on error.
+
+### `ww cd [branch]`
+
+Print the absolute path of a worktree for shell navigation.
+
+**Behavior:**
+1. Resolve the target repository:
+   - If `--repo <name>` is omitted, use the current repository exactly as in Phase 1.
+   - If `--repo <name>` is provided, require detected workspace mode, find the matching entry in the workspace child repo list by directory name, and operate on that repository.
+   - If `--repo` is provided outside workspace mode, return an error: `--repo can only be used inside a detected workspace`.
+   - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
+2. If no branch argument is provided, resolve the most recently created secondary worktree for the target repository.
+3. If a branch argument is provided, match it against worktree branch names. `refs/heads/<branch>` and `<branch>` are treated as equivalent.
+4. On success in text mode, print only the absolute path to `stdout`, terminated by a newline.
+5. If no matching secondary worktree exists, return an error:
+   - no-argument mode: `no secondary worktrees found`
+   - named mode: `no worktree found for branch "<branch>"`
+
+**Flags:**
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--repo` | string | empty | Target a detected workspace repository by name instead of the current repo |
+| `--json` | bool | false | Output a single JSON object describing the resolved worktree |
+
+**Output (text):**
+```text
+/path/to/repo@feat-my-feature
+```
+
+**Output (JSON):**
+```json
+{"repo":"repo","path":"/path/to/repo@feat-my-feature","branch":"feat/my-feature","head":"abc1234","status":"active"}
 ```
 
 **Exit codes:** 0 on success, 1 on error.
