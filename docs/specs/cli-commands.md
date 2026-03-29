@@ -37,7 +37,7 @@ Create a new worktree for the given branch.
 4. If the branch already exists: add a worktree that checks out the existing branch.
 5. After worktree creation, copy files listed in `copy_files` config.
 6. Create symlinks for files listed in `symlink_files` config.
-7. Run `post_create_hook` if configured.
+7. Run `post_create_hook` if configured. In text mode, print `Running post_create_hook: <command>` immediately before streaming the hook's own output.
 
 **Worktree path:** mode-dependent default, or explicit `worktree_dir` override. Slashes in branch names are replaced with `-`.
 In workspace mode with `--repo`, the default path remains centralized at `<workspace_root>/.worktrees/<repo>@<branch>`.
@@ -51,6 +51,7 @@ In workspace mode with `--repo`, the default path remains centralized at `<works
 
 **Output (text):**
 ```text
+Running post_create_hook: npm install
 Created worktree at /path/to/repo@branch (branch: feat/my-feature)
 ```
 

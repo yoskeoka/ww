@@ -818,6 +818,33 @@ func TestPostCreateHook(t *testing.T) {
 	}
 }
 
+func TestPostCreateHookAnnouncesCommand(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+
+	writeConfig(t, repo, "default_base = \"main\"\npost_create_hook = \"echo hook-ran\"\n")
+
+	out, err := runWW(t, repo, "create", "feat/hook-announce-test")
+	if err != nil {
+		t.Fatalf("ww create: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Running post_create_hook: echo hook-ran") {
+		t.Errorf("create output should announce post_create_hook: %s", out)
+	}
+	if !strings.Contains(out, "hook-ran") {
+		t.Errorf("create output should include hook output: %s", out)
+	}
+	announcementIdx := strings.Index(out, "Running post_create_hook:")
+	hookOutputIdx := strings.Index(out, "hook-ran")
+	if announcementIdx >= 0 && hookOutputIdx >= 0 && announcementIdx >= hookOutputIdx {
+		t.Errorf("hook announcement should appear before hook output; got:\n%s", out)
+	}
+}
+
 func TestRemoveMainWorktreeRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")

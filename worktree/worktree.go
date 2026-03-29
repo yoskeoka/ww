@@ -43,7 +43,9 @@ type Manager struct {
 
 // CreateOpts configures worktree creation.
 type CreateOpts struct {
-	DryRun bool
+	DryRun   bool
+	Output   io.Writer // destination for text-mode output (nil defaults to os.Stdout)
+	TextMode bool      // when true, print human-readable progress (e.g. hook announcement)
 }
 
 // RemoveOpts configures worktree removal.
@@ -191,7 +193,7 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	m.copyFiles(wtPath)
 	m.symlinkFiles(wtPath)
-	m.runPostCreateHook(wtPath, branch)
+	m.runPostCreateHook(wtPath, branch, opts)
 
 	info := &WorktreeInfo{Path: wtPath, Branch: branch, Created: true, Base: base}
 	return info, nil, nil
@@ -396,9 +398,16 @@ func (m *Manager) symlinkFiles(wtPath string) {
 	}
 }
 
-func (m *Manager) runPostCreateHook(wtPath, branch string) {
+func (m *Manager) runPostCreateHook(wtPath, branch string, opts CreateOpts) {
 	if m.Config.PostCreateHook == "" {
 		return
+	}
+	if opts.TextMode {
+		out := opts.Output
+		if out == nil {
+			out = os.Stdout
+		}
+		fmt.Fprintf(out, "Running post_create_hook: %s\n", m.Config.PostCreateHook)
 	}
 	cmd := exec.Command("sh", "-c", m.Config.PostCreateHook)
 	cmd.Dir = wtPath
@@ -406,7 +415,11 @@ func (m *Manager) runPostCreateHook(wtPath, branch string) {
 		"WW_BRANCH="+branch,
 		"WW_WORKTREE_PATH="+wtPath,
 	)
-	cmd.Stdout = os.Stdout
+	if opts.TextMode {
+		cmd.Stdout = os.Stdout
+	} else {
+		cmd.Stdout = os.Stderr
+	}
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: post-create hook failed: %v\n", err)
