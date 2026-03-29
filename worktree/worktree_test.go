@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/yoskeoka/ww/git"
 	"github.com/yoskeoka/ww/workspace"
@@ -216,6 +217,71 @@ func TestResolveStatus(t *testing.T) {
 	}
 }
 
+func TestFindByName(t *testing.T) {
+	repo := t.TempDir()
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+
+	wtPath := filepath.Join(filepath.Dir(repo), "repo@feat-alpha")
+	mustGit(t, runner, "worktree", "add", "-b", "feat/alpha", wtPath, "main")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{DefaultBase: "main"},
+		RepoDir: repo,
+	}
+
+	info, err := mgr.FindByName("refs/heads/feat/alpha", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Branch != "feat/alpha" {
+		t.Fatalf("FindByName returned branch %q, want %q", info.Branch, "feat/alpha")
+	}
+	if info.Path != wtPath {
+		t.Fatalf("FindByName returned path %q, want %q", info.Path, wtPath)
+	}
+}
+
+func TestMostRecentUsesWorktreeAdminMtime(t *testing.T) {
+	repo := t.TempDir()
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+
+	alphaPath := filepath.Join(filepath.Dir(repo), "repo@feat-alpha")
+	betaPath := filepath.Join(filepath.Dir(repo), "repo@feat-beta")
+	mustGit(t, runner, "worktree", "add", "-b", "feat/alpha", alphaPath, "main")
+	mustGit(t, runner, "worktree", "add", "-b", "feat/beta", betaPath, "main")
+
+	adminRoot := filepath.Join(repo, ".git", "worktrees")
+	setAdminMtime(t, adminRoot, alphaPath, time.Unix(100, 0))
+	setAdminMtime(t, adminRoot, betaPath, time.Unix(200, 0))
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{DefaultBase: "main"},
+		RepoDir: repo,
+	}
+
+	info, err := mgr.MostRecent(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Path != betaPath {
+		t.Fatalf("MostRecent returned path %q, want %q", info.Path, betaPath)
+	}
+}
+
 func setupStatusRepo(t *testing.T) (string, *git.Runner) {
 	t.Helper()
 
@@ -279,4 +345,31 @@ func writeStatusFile(t *testing.T, repo, name, content string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func setAdminMtime(t *testing.T, adminRoot, wantWorktreePath string, modTime time.Time) {
+	t.Helper()
+
+	entries, err := os.ReadDir(adminRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		gotPath, err := worktreePathFromAdminDir(adminRoot, entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gotPath != wantWorktreePath {
+			continue
+		}
+		adminDir := filepath.Join(adminRoot, entry.Name())
+		if err := os.Chtimes(adminDir, modTime, modTime); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	t.Fatalf("could not find admin dir for %s", wantWorktreePath)
 }

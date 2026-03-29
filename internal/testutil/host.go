@@ -4,6 +4,7 @@
 package testutil
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -117,6 +118,11 @@ func (e *HostEnv) RunWW(dir string, args ...string) (string, error) {
 	return e.Exec(dir, e.wwBinaryPath, args...)
 }
 
+// RunWWSplit runs the ww binary with stdout and stderr captured separately.
+func (e *HostEnv) RunWWSplit(dir string, args ...string) (string, string, error) {
+	return e.ExecSplit(dir, e.wwBinaryPath, args...)
+}
+
 // Exec runs cmd with args on the host, optionally in the given working
 // directory. Stdout and stderr are combined and returned. A non-zero exit code
 // is returned as an error.
@@ -148,6 +154,39 @@ func (e *HostEnv) Exec(dir string, cmd string, args ...string) (string, error) {
 		return outStr, err
 	}
 	return outStr, nil
+}
+
+// ExecSplit runs cmd with stdout and stderr captured separately.
+func (e *HostEnv) ExecSplit(dir string, cmd string, args ...string) (string, string, error) {
+	c := exec.CommandContext(e.ctx, cmd, args...)
+	if dir != "" {
+		c.Dir = dir
+	}
+
+	baseEnv := os.Environ()
+	env := make([]string, 0, len(baseEnv)+1)
+	for _, v := range baseEnv {
+		if strings.HasPrefix(v, "GIT_CONFIG_GLOBAL=") {
+			continue
+		}
+		env = append(env, v)
+	}
+	env = append(env, "GIT_CONFIG_GLOBAL="+e.gitConfigPath)
+	c.Env = env
+
+	var stdoutBuf bytes.Buffer
+	var stderrBuf bytes.Buffer
+	c.Stdout = &stdoutBuf
+	c.Stderr = &stderrBuf
+
+	err := c.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return stdoutBuf.String(), stderrBuf.String(), fmt.Errorf("exit %d", exitErr.ExitCode())
+		}
+		return stdoutBuf.String(), stderrBuf.String(), err
+	}
+	return stdoutBuf.String(), stderrBuf.String(), nil
 }
 
 // buildWWBinaryHost compiles ww for the host OS/arch.

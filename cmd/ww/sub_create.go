@@ -10,6 +10,7 @@ func createCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" create", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
+	quiet := fset.BoolP("quiet", "q", false, "Print only the worktree path")
 	repo := fset.String("repo", "", "Target a detected workspace repository by name")
 
 	return command{
@@ -34,7 +35,7 @@ func createCmd() command {
 				return err
 			}
 
-			info, dryLog, err := mgr.Create(branch, worktreeCreateOpts(glOpts))
+			info, dryLog, err := mgr.Create(branch, worktreeCreateOpts(glOpts, *quiet))
 			if err != nil {
 				return err
 			}
@@ -42,6 +43,10 @@ func createCmd() command {
 			if glOpts.dryRun {
 				if glOpts.json {
 					return outputJSON(glOpts.output, info)
+				}
+				if *quiet {
+					fmt.Fprintln(glOpts.output, info.Path)
+					return nil
 				}
 				for _, line := range dryLog {
 					fmt.Fprintln(glOpts.output, line)
@@ -51,6 +56,10 @@ func createCmd() command {
 
 			if glOpts.json {
 				return outputJSON(glOpts.output, info)
+			}
+			if *quiet {
+				fmt.Fprintln(glOpts.output, info.Path)
+				return nil
 			}
 			fmt.Fprintf(glOpts.output, "Created worktree at %s (branch: %s)\n", info.Path, info.Branch)
 			return nil
