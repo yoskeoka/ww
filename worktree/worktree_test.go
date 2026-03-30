@@ -217,6 +217,92 @@ func TestResolveStatus(t *testing.T) {
 	}
 }
 
+func TestListRepoUnknown(t *testing.T) {
+	entries := []git.WorktreeEntry{
+		{Path: "/repo", Branch: "main", Head: "abc1234", Main: true},
+		{Path: "/repo@feat-x", Branch: "feat/x", Head: "def5678"},
+		{Path: "/repo@feat-y", Branch: "feat/y", Head: "111aaaa"},
+	}
+	infos := listRepoUnknown(entries, "repo", "base-detect-failed")
+
+	if len(infos) != 3 {
+		t.Fatalf("expected 3 infos, got %d", len(infos))
+	}
+	// Main worktree should be active with no detail.
+	if infos[0].Status != StatusActive {
+		t.Errorf("main worktree status = %q, want %q", infos[0].Status, StatusActive)
+	}
+	if infos[0].StatusDetail != "" {
+		t.Errorf("main worktree status_detail = %q, want empty", infos[0].StatusDetail)
+	}
+	// Non-main worktrees should be unknown with detail.
+	for _, info := range infos[1:] {
+		if info.Status != StatusUnknown {
+			t.Errorf("worktree %s status = %q, want %q", info.Branch, info.Status, StatusUnknown)
+		}
+		if info.StatusDetail != "base-detect-failed" {
+			t.Errorf("worktree %s status_detail = %q, want %q", info.Branch, info.StatusDetail, "base-detect-failed")
+		}
+	}
+}
+
+func TestListRepoGracefulDegradation(t *testing.T) {
+	// Create a repo without a remote — no origin/HEAD, no default_base.
+	repo := t.TempDir()
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+
+	mustGit(t, runner, "checkout", "-b", "feat/local")
+	writeStatusFile(t, repo, "local.txt", "local\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "feat: local")
+	mustGit(t, runner, "checkout", "main")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{}, // No DefaultBase
+		RepoDir: repo,
+	}
+
+	// List should succeed (not error) with unknown status.
+	infos, err := mgr.List()
+	if err != nil {
+		t.Fatalf("List() should not fail when base is unresolvable, got: %v", err)
+	}
+	if len(infos) == 0 {
+		t.Fatal("expected at least one worktree info")
+	}
+
+	var mainFound, unknownFound bool
+	for _, info := range infos {
+		if info.Main {
+			mainFound = true
+			if info.Status != StatusActive {
+				t.Errorf("main worktree status = %q, want %q", info.Status, StatusActive)
+			}
+		} else {
+			unknownFound = true
+			if info.Status != StatusUnknown {
+				t.Errorf("worktree %s status = %q, want %q", info.Branch, info.Status, StatusUnknown)
+			}
+			if info.StatusDetail != "base-detect-failed" {
+				t.Errorf("worktree %s status_detail = %q, want %q", info.Branch, info.StatusDetail, "base-detect-failed")
+			}
+		}
+	}
+	if !mainFound {
+		t.Error("main worktree not found in list output")
+	}
+	// feat/local has no worktree (it's just a branch), so only main should be listed.
+	// This test verifies the graceful degradation path, not worktree creation.
+	_ = unknownFound
+}
+
 func TestFindByName(t *testing.T) {
 	repo := t.TempDir()
 	runner := &git.Runner{Dir: repo}

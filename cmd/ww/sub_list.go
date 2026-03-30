@@ -55,7 +55,7 @@ func listCmd() command {
 					if info.Main {
 						path += " (main worktree)"
 					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", info.Repo, path, info.Branch, info.Head, info.Status)
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", info.Repo, path, info.Branch, info.Head, displayStatus(info))
 				}
 			} else {
 				fmt.Fprintln(tw, "PATH\tBRANCH\tHEAD\tSTATUS")
@@ -64,12 +64,19 @@ func listCmd() command {
 					if info.Main {
 						path += " (main worktree)"
 					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", path, info.Branch, info.Head, info.Status)
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", path, info.Branch, info.Head, displayStatus(info))
 				}
 			}
 			return tw.Flush()
 		},
 	}
+}
+
+func displayStatus(info worktree.WorktreeInfo) string {
+	if info.StatusDetail != "" {
+		return fmt.Sprintf("%s(%s)", info.Status, info.StatusDetail)
+	}
+	return info.Status
 }
 
 func filterCleanableWorktrees(infos []worktree.WorktreeInfo) []worktree.WorktreeInfo {

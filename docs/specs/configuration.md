@@ -29,7 +29,7 @@ post_create_hook = "npm install"
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `worktree_dir` | string | mode-dependent | Parent directory for worktrees. In workspace mode the default is `.worktrees`; in single-repo mode the default is sibling layout next to the repo. An explicit value overrides the default in both modes. |
-| `default_base` | string | `""` | Base ref for new branches. Empty = auto-detect via `origin/HEAD`. |
+| `default_base` | string | `""` | Base ref for new branches. Empty = auto-detect via `origin/HEAD`. When set, this is the authoritative base for both branch creation and status classification. When empty and `origin/HEAD` cannot be detected, `ww list` degrades to `unknown` status instead of failing. |
 | `copy_files` | string[] | `[]` | Files/directories to deep-copy from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `post_create_hook` | string | `""` | Shell command to run in the new worktree directory after creation. Empty = no hook. |

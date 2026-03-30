@@ -84,7 +84,15 @@ Returns whether a remote branch exists by checking for matching `refs/heads/<bra
 git symbolic-ref refs/remotes/origin/HEAD
 ```
 
-Extracts the branch name (e.g., `refs/remotes/origin/main` → `origin/main`). Falls back to config `default_base` if origin/HEAD is not set.
+Extracts the branch name (e.g., `refs/remotes/origin/main` → `origin/main`).
+
+**Default base resolution order:**
+
+1. Explicit `default_base` from config (authoritative).
+2. `git symbolic-ref refs/remotes/origin/HEAD` (authoritative).
+3. If neither is available, base detection fails.
+
+When base detection fails, `ww list` and `ww clean` degrade gracefully: worktrees are still listed but receive `unknown` status instead of `merged`/`stale`/`active`. The `ww create` command still requires a resolvable base and returns an error if detection fails.
 
 ### Other
 

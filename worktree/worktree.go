@@ -17,9 +17,10 @@ import (
 
 // Exported status constants for WorktreeInfo.Status.
 const (
-	StatusActive = "active"
-	StatusMerged = "merged"
-	StatusStale  = "stale"
+	StatusActive  = "active"
+	StatusMerged  = "merged"
+	StatusStale   = "stale"
+	StatusUnknown = "unknown"
 )
 
 // Config holds the configuration values that Manager needs to operate.
@@ -57,15 +58,16 @@ type RemoveOpts struct {
 
 // WorktreeInfo holds information about a created/listed worktree.
 type WorktreeInfo struct {
-	Path    string `json:"path"`
-	Branch  string `json:"branch"`
-	Repo    string `json:"repo,omitempty"`
-	Status  string `json:"status,omitempty"`
-	Head    string `json:"head,omitempty"`
-	Bare    bool   `json:"bare,omitempty"`
-	Main    bool   `json:"main,omitempty"`
-	Created bool   `json:"created,omitempty"`
-	Base    string `json:"base,omitempty"`
+	Path         string `json:"path"`
+	Branch       string `json:"branch"`
+	Repo         string `json:"repo,omitempty"`
+	Status       string `json:"status,omitempty"`
+	StatusDetail string `json:"status_detail,omitempty"`
+	Head         string `json:"head,omitempty"`
+	Bare         bool   `json:"bare,omitempty"`
+	Main         bool   `json:"main,omitempty"`
+	Created      bool   `json:"created,omitempty"`
+	Base         string `json:"base,omitempty"`
 }
 
 // RemoveResult holds information about a removed worktree.
@@ -309,9 +311,10 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
 	}
 
-	base, err := m.baseRef(runner)
-	if err != nil {
-		return nil, fmt.Errorf("resolving base branch for %s: %w", repoName, err)
+	base, baseErr := m.baseRef(runner)
+	if baseErr != nil {
+		// Base branch could not be determined; degrade to unknown status.
+		return listRepoUnknown(entries, repoName, "base-detect-failed"), nil
 	}
 
 	merged, err := runner.MergedBranches(base)
@@ -396,6 +399,32 @@ func (m *Manager) baseRef(runner *git.Runner) (string, error) {
 		return m.Config.DefaultBase, nil
 	}
 	return runner.DefaultBranch()
+}
+
+// listRepoUnknown builds WorktreeInfo entries when the base branch cannot be
+// determined. Main worktrees get "active" status; all others get "unknown"
+// with the supplied detail string.
+func listRepoUnknown(entries []git.WorktreeEntry, repoName, detail string) []WorktreeInfo {
+	infos := make([]WorktreeInfo, 0, len(entries))
+	for _, e := range entries {
+		status := StatusUnknown
+		statusDetail := detail
+		if e.Main || e.Branch == "" {
+			status = StatusActive
+			statusDetail = ""
+		}
+		infos = append(infos, WorktreeInfo{
+			Path:         e.Path,
+			Branch:       e.Branch,
+			Repo:         repoName,
+			Status:       status,
+			StatusDetail: statusDetail,
+			Head:         e.Head,
+			Bare:         e.Bare,
+			Main:         e.Main,
+		})
+	}
+	return infos
 }
 
 func resolveStatus(entry git.WorktreeEntry, merged map[string]struct{}, branchRemote map[string]string, remoteBranches map[string]map[string]struct{}) string {

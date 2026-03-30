@@ -137,6 +137,13 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 | `active` | Main worktree, or a branch that is neither merged nor stale |
 | `merged` | Branch is present in `git branch --merged <base>` |
 | `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
+| `unknown` | Base branch could not be determined; status classification was skipped |
+
+When the base branch cannot be resolved (no `default_base` config and `origin/HEAD` detection fails), all non-main worktrees receive `unknown` status with a `status_detail` field indicating the reason (e.g., `base-detect-failed`).
+
+In text output, degraded statuses render as `unknown(<detail>)`. In JSON output, a separate `status_detail` field is emitted.
+
+`--cleanable` and `ww clean` only act on `merged` and `stale` worktrees. `unknown` worktrees are never eligible for cleanup.
 
 **Output (text):**
 ```text
@@ -156,6 +163,19 @@ ai    /path/to/workspace/.worktrees/ai@done  done                def5678  stale
 ```json
 {"repo":"repo","path":"/path/to/repo","branch":"main","head":"abc1234","main":true,"status":"active"}
 {"repo":"repo","path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678","status":"merged"}
+```
+
+**Output when base branch is unknown (text):**
+```text
+PATH                                  BRANCH              HEAD     STATUS
+/path/to/repo (main worktree)        main                abc1234  active
+/path/to/repo@feat-auth              feat/auth           def5678  unknown(base-detect-failed)
+```
+
+**Output when base branch is unknown (JSON):**
+```json
+{"repo":"repo","path":"/path/to/repo","branch":"main","head":"abc1234","main":true,"status":"active"}
+{"repo":"repo","path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678","status":"unknown","status_detail":"base-detect-failed"}
 ```
 
 ### `ww remove <branch>`
