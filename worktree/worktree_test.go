@@ -257,11 +257,9 @@ func TestListRepoGracefulDegradation(t *testing.T) {
 	mustGit(t, runner, "add", ".")
 	mustGit(t, runner, "commit", "-m", "initial")
 
-	mustGit(t, runner, "checkout", "-b", "feat/local")
-	writeStatusFile(t, repo, "local.txt", "local\n")
-	mustGit(t, runner, "add", ".")
-	mustGit(t, runner, "commit", "-m", "feat: local")
-	mustGit(t, runner, "checkout", "main")
+	// Create a secondary worktree so we can verify it gets unknown status.
+	wtPath := filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-local")
+	mustGit(t, runner, "worktree", "add", "-b", "feat/local", wtPath, "main")
 
 	mgr := &Manager{
 		Git:     runner,
@@ -298,9 +296,9 @@ func TestListRepoGracefulDegradation(t *testing.T) {
 	if !mainFound {
 		t.Error("main worktree not found in list output")
 	}
-	// feat/local has no worktree (it's just a branch), so only main should be listed.
-	// This test verifies the graceful degradation path, not worktree creation.
-	_ = unknownFound
+	if !unknownFound {
+		t.Error("expected at least one worktree with unknown status")
+	}
 }
 
 func TestFindByName(t *testing.T) {

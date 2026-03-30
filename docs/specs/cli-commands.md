@@ -139,7 +139,7 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 | `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
 | `unknown` | Base branch could not be determined; status classification was skipped |
 
-When the base branch cannot be resolved (no `default_base` config and `origin/HEAD` detection fails), all non-main worktrees receive `unknown` status with a `status_detail` field indicating the reason (e.g., `base-detect-failed`).
+When the base branch cannot be resolved (no `default_base` config and `origin/HEAD` detection fails), all non-main worktrees that have an associated branch receive `unknown` status with a `status_detail` field indicating the reason (e.g., `base-detect-failed`). Worktrees without an associated branch (for example, detached HEAD entries where `branch` is absent from `git worktree list --porcelain`) remain `active`.
 
 In text output, degraded statuses render as `unknown(<detail>)`. In JSON output, a separate `status_detail` field is emitted.
 
