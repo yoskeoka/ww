@@ -18,10 +18,16 @@ When `default_base` is unset and `origin/HEAD` fails:
 
 1. Check if local `main` branch tracks `origin/main` (`git config --get branch.main.remote` == `origin`)
 2. Check if any local branch tracks `origin/main` (scan `branch.*.remote` config)
-3. Check if remote ref `origin/main` exists (`git ls-remote --heads origin main`)
+3. Check if remote ref `origin/main` exists (`git ls-remote --heads origin main`); if not found, try `origin/master`
 4. If none succeed → `unknown(base-detect-failed)` (current behavior)
 
-If step 1-3 succeeds, use `origin/main` as the base and classify statuses normally.
+If step 1-3 succeeds, use the resolved ref (e.g., `origin/main` or `origin/master`) as the base and classify statuses normally.
+
+### Candidate branch names
+
+Steps 1-3 try `main` first, then `master`. This covers the vast majority of repositories (GitHub defaults to `main`, older repos and GitLab often use `master`). Other default branch names (`develop`, `trunk`, etc.) are not tried — those projects should set `default_base` explicitly in `.ww.toml`.
+
+This is an intentional simplification. The candidate list can be extended in the future if needed, but keeping it short avoids unnecessary `ls-remote` calls and keeps the heuristic predictable.
 
 ## Behavioral Rules
 
