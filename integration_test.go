@@ -1443,3 +1443,144 @@ func TestNonGitWorkspaceRootRejectsWithoutRepoSelection(t *testing.T) {
 		t.Fatalf("workspace-root list should include repo columns and both repos: %s", out)
 	}
 }
+
+func TestListUnknownStatusNoRemote(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	// Create a repo with no remote and no default_base config.
+	repo := testutil.SetupRepo(t, globalEnv, testutil.RepoOpts{Name: "no-remote-repo"})
+	// No writeConfig — no default_base, no remote → base detection fails.
+
+	// Create a worktree using an explicit branch (must exist already).
+	if _, err := globalEnv.Git(repo, "branch", "feat/test-unknown"); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := path.Join(path.Dir(repo), "no-remote-repo@feat-test-unknown")
+	if _, err := globalEnv.Git(repo, "worktree", "add", wtPath, "feat/test-unknown"); err != nil {
+		t.Fatal(err)
+	}
+
+	// ww list should succeed (not error) with unknown status.
+	out, err := runWW(t, repo, "list")
+	if err != nil {
+		t.Fatalf("ww list should succeed without remote: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "unknown(base-detect-failed)") {
+		t.Errorf("expected unknown(base-detect-failed) in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "active") {
+		t.Errorf("expected main worktree to show active, got:\n%s", out)
+	}
+}
+
+func TestListUnknownStatusJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := testutil.SetupRepo(t, globalEnv, testutil.RepoOpts{Name: "no-remote-json"})
+
+	if _, err := globalEnv.Git(repo, "branch", "feat/json-unknown"); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := path.Join(path.Dir(repo), "no-remote-json@feat-json-unknown")
+	if _, err := globalEnv.Git(repo, "worktree", "add", wtPath, "feat/json-unknown"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, repo, "list", "--json")
+	if err != nil {
+		t.Fatalf("ww list --json should succeed without remote: %v\n%s", err, out)
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		var obj map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Fatalf("invalid JSON line: %s", line)
+		}
+
+		isMain, _ := obj["main"].(bool)
+		status, _ := obj["status"].(string)
+		statusDetail, _ := obj["status_detail"].(string)
+
+		if isMain {
+			if status != "active" {
+				t.Errorf("main worktree status = %q, want active", status)
+			}
+			if statusDetail != "" {
+				t.Errorf("main worktree status_detail = %q, want empty", statusDetail)
+			}
+		} else {
+			if status != "unknown" {
+				t.Errorf("non-main worktree status = %q, want unknown", status)
+			}
+			if statusDetail != "base-detect-failed" {
+				t.Errorf("non-main worktree status_detail = %q, want base-detect-failed", statusDetail)
+			}
+		}
+	}
+}
+
+func TestListCleanableExcludesUnknown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := testutil.SetupRepo(t, globalEnv, testutil.RepoOpts{Name: "no-remote-cleanable"})
+
+	if _, err := globalEnv.Git(repo, "branch", "feat/not-cleanable"); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := path.Join(path.Dir(repo), "no-remote-cleanable@feat-not-cleanable")
+	if _, err := globalEnv.Git(repo, "worktree", "add", wtPath, "feat/not-cleanable"); err != nil {
+		t.Fatal(err)
+	}
+
+	// --cleanable should not include unknown worktrees.
+	out, err := runWW(t, repo, "list", "--cleanable", "--json")
+	if err != nil {
+		t.Fatalf("ww list --cleanable --json should succeed: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("expected no cleanable worktrees in JSON output, got:\n%s", out)
+	}
+}
+
+func TestCleanIgnoresUnknownWorktrees(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := testutil.SetupRepo(t, globalEnv, testutil.RepoOpts{Name: "no-remote-clean"})
+
+	if _, err := globalEnv.Git(repo, "branch", "feat/safe-from-clean"); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := path.Join(path.Dir(repo), "no-remote-clean@feat-safe-from-clean")
+	if _, err := globalEnv.Git(repo, "worktree", "add", wtPath, "feat/safe-from-clean"); err != nil {
+		t.Fatal(err)
+	}
+
+	// ww clean should succeed with no output (nothing to clean).
+	out, err := runWW(t, repo, "clean")
+	if err != nil {
+		t.Fatalf("ww clean should succeed: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("expected no output from clean, got:\n%s", out)
+	}
+
+	// Worktree should still exist.
+	if !globalEnv.PathExists(wtPath) {
+		t.Errorf("worktree should not have been cleaned: %s", wtPath)
+	}
+}
