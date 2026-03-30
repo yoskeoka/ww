@@ -302,7 +302,10 @@ func TestListRepoGracefulDegradation(t *testing.T) {
 }
 
 func TestFindByName(t *testing.T) {
-	repo := t.TempDir()
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	runner := &git.Runner{Dir: repo}
 	mustGit(t, runner, "init", "-b", "main")
 	mustGit(t, runner, "config", "user.email", "test@example.com")
@@ -333,7 +336,10 @@ func TestFindByName(t *testing.T) {
 }
 
 func TestMostRecentUsesWorktreeAdminMtime(t *testing.T) {
-	repo := t.TempDir()
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	runner := &git.Runner{Dir: repo}
 	mustGit(t, runner, "init", "-b", "main")
 	mustGit(t, runner, "config", "user.email", "test@example.com")
