@@ -2,7 +2,7 @@
 
 > **Execution**: Use `/execute-task` to implement this plan.
 
-**Objective**: Adopt the B design for workspace detection so `ww` resolves the nearest containing workspace root within a bounded 3-layer window. This aligns `ww list`, `ww clean`, and workspace-aware create/remove behavior with human expectations in 1-2-3 level directory layouts, while keeping detection deterministic and non-recursive.
+**Objective**: Adopt the B design for workspace detection so `ww` resolves the nearest containing workspace root within a bounded window (current directory plus the main repo root and up to two ancestors of the main repo root). This aligns `ww list`, `ww clean`, and workspace-aware create/remove behavior with human expectations in 1-2-3 level directory layouts, while keeping detection deterministic and non-recursive.
 
 ## Background
 
@@ -28,6 +28,7 @@ The accepted design is:
   - main repo root
   - parent of main repo root
   - grandparent of main repo root
+- State the containment-check order explicitly: current directory is tested first, then parent of main repo root, then grandparent of main repo root
 - Define "nearest containing workspace root" as the tie-break rule
 - Clarify that git worktrees are excluded from "real git repository" detection
 - Clarify that detection remains non-recursive beyond the bounded window
@@ -39,8 +40,8 @@ The accepted design is:
 
 ### `docs/specs/configuration.md`
 
-- Check whether configuration search wording assumes the older workspace detection behavior
-- Update only if the B detection rule changes how callers pass fallback directories
+- **Must check** whether configuration search wording assumes the older workspace detection behavior
+- Update if the B detection rule changes how callers pass fallback directories; do not skip this check
 
 ## Code Changes
 

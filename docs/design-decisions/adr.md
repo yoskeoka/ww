@@ -187,7 +187,7 @@ Several interface shapes were considered:
 
 ---
 
-## [2026-03-31] Workspace detection anchor: nearest containing workspace within a 3-layer window
+## [2026-03-31] Workspace detection anchor: nearest containing workspace within a bounded window (current dir + main root/parent/grandparent)
 
 ### Context
 
@@ -205,7 +205,7 @@ From `ww`, the intended workspace root is `parent-workspace`, but the grandparen
 Two approaches were considered:
 
 - **A. Strict one-up/one-down anchor**: Always reason from the current repo's main root; if its parent is a git repo, accept that parent immediately as the workspace root. This is simple and matches the original intuition, but it leaves less room for slightly deeper layouts where the containing workspace is one more level up.
-- **B. Nearest containing workspace within a bounded 3-layer window**: Resolve the current repo's main root, then search upward by at most two levels for workspace-root candidates. A candidate qualifies only if it contains the current main repo root and has at least two immediate child real git repositories. If multiple candidates qualify, pick the nearest one. If the current directory itself already qualifies as a workspace root, accept it immediately. This preserves locality while handling the practical "repo inside repo inside parent directory" cases without recursing arbitrarily.
+- **B. Nearest containing workspace within a bounded window**: Resolve the current repo's main root, then search upward by at most two levels for workspace-root candidates. A candidate qualifies only if it contains the current main repo root and has at least two immediate child real git repositories. Candidates are tested in order: current directory first, then parent of the main repo root, then grandparent of the main repo root. If multiple candidates qualify, pick the nearest one. If the current directory itself already qualifies as a workspace root, accept it immediately. This preserves locality while handling the practical "repo inside repo inside parent directory" cases without recursing arbitrarily.
 
 ### Decision
 
