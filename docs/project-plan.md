@@ -64,7 +64,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 #### Future
 
-- **FR-16**: Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (e.g., AI agent orchestrators running long tasks). Configurable per-repo or per-command flag.
+- **FR-16**: Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (e.g., AI agent orchestrators running long tasks). Configurable per-repo or per-command flag. To avoid clone-based workspaces being misdetected as real workspace member repos, `ww`-managed clones should carry an explicit managed marker such as `.ww-metadata`.
 - **FR-17**: Lifecycle hooks beyond post-create — support `pre-create`, `post-create`, `pre-remove`, and `post-remove` hooks per-repo. Enables container orchestration (e.g., `docker compose up` on create, DB cleanup + `docker compose down` on remove).
 - **FR-18**: Inject environment variables into hooks — `WW_BRANCH`, `WW_WORKTREE_PATH`, `WW_REPO_NAME`, `WW_WORKTREE_INDEX` (numeric, for port offset derivation). Enables worktree-aware compose files without hardcoding.
 - **FR-19**: Multi-repo batch worktree operations — `ww create feat/x --repos ai-arena,ww` to create worktrees across multiple repos simultaneously. Useful when child repos have dependencies on each other.
