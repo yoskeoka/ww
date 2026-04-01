@@ -23,24 +23,36 @@
 
 ## Detection Algorithm
 
-Detection uses a parent-scan strategy with immediate-child scanning only:
+Detection is anchored on the current repository's main working tree root and uses immediate-child scanning only.
 
-1. Scan the current directory's immediate children for git repository markers.
-2. Determine the current repository root via the main working tree path when inside git.
-3. Inspect the parent directory of the current repository root.
-4. If the parent has a `.git` entry and the grandparent does not expose multiple git child repos, treat the parent as the workspace root.
-5. If the parent is non-git and has two or more git child repos, treat the parent as the workspace root.
-6. If no parent workspace root was found and the current directory has git children, treat the current directory as the workspace root only when its parent is non-git.
-7. Otherwise, treat the current repository as a standalone single-repo workspace.
+When the start directory is not inside git:
+
+1. Scan the current directory's immediate children for real git repositories.
+2. If at least one child repository is found, treat the current directory as the workspace root.
+3. Otherwise, return `not a git repository`.
+
+When the start directory is inside git:
+
+1. Resolve the current repository's main working tree root.
+2. Build a bounded candidate window consisting of:
+   - the current directory
+   - the parent of the main repo root
+   - the grandparent of the main repo root
+3. Test candidates in that order and pick the first qualifying workspace root.
+4. A candidate qualifies only when:
+   - it contains the current main repo root
+   - it exposes at least two immediate child real git repositories
+5. If no candidate qualifies, treat the current repository as a standalone single-repo workspace.
 
 ## Edge Cases
 
 - `.git` files and `.git` directories both count as repository markers.
-- `.git` files that point into another repository's `.git/worktrees/` directory are ignored for workspace discovery because they are worktree checkouts, not workspace members.
-- Only immediate children are scanned; detection does not recurse through nested workspace structures.
-- Child repositories are never treated as workspace roots.
+- `.git` files that point into another repository's `.git/worktrees/` directory are ignored for workspace discovery because managed worktree checkouts are not real workspace members.
+- Only immediate children are scanned, and only within the bounded candidate window. Detection does not recurse through arbitrary ancestors or nested workspace structures.
+- The current directory is tested first. If it already qualifies as a workspace root, it is selected immediately.
+- If both the parent and grandparent of the main repo root qualify, the nearest containing candidate wins.
 - A workspace root may itself be a git repository; if so, it is included in `Repos`.
-- A non-git workspace root is valid when it contains two or more git child repositories, or when it is the current directory and contains git children.
+- A non-git workspace root is valid when it is the current directory and contains one or more git child repositories, or when it contains two or more git child repositories while being selected as a containing candidate for the current repo.
 
 ## Worktree Path Layout
 

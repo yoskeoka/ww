@@ -67,7 +67,7 @@ func Detect(startDir string) (*Workspace, error) {
 		return nil, err
 	}
 
-	if wsRoot, ok, err := detectParentWorkspace(mainRoot); err != nil {
+	if wsRoot, ok, err := detectContainingWorkspace(absStart, mainRoot); err != nil {
 		return nil, err
 	} else if ok {
 		repos, err := reposAtWorkspaceRoot(wsRoot)
@@ -95,34 +95,68 @@ func Detect(startDir string) (*Workspace, error) {
 	}, nil
 }
 
-func detectParentWorkspace(mainRoot string) (string, bool, error) {
-	parent := filepath.Dir(mainRoot)
-	if parent == mainRoot {
-		return "", false, nil
+func detectContainingWorkspace(startDir, mainRoot string) (string, bool, error) {
+	for _, candidate := range candidateDirs(startDir, mainRoot) {
+		ok, err := isContainingWorkspaceRoot(candidate, mainRoot)
+		if err != nil {
+			return "", false, err
+		}
+		if ok {
+			return candidate, true, nil
+		}
 	}
+	return "", false, nil
+}
 
-	if hasGitEntry(parent) {
-		grandparent := filepath.Dir(parent)
-		if grandparent != parent {
-			grandChildren, err := scanImmediateRepos(grandparent)
-			if err != nil {
-				return "", false, err
-			}
-			if len(grandChildren) > 1 {
-				return "", false, nil
+func candidateDirs(startDir, mainRoot string) []string {
+	parent := filepath.Dir(mainRoot)
+	grandparent := filepath.Dir(parent)
+
+	var dirs []string
+	add := func(dir string) {
+		if dir == "" {
+			return
+		}
+		for _, existing := range dirs {
+			if existing == dir {
+				return
 			}
 		}
-		return parent, true, nil
+		dirs = append(dirs, dir)
 	}
 
-	repos, err := scanImmediateRepos(parent)
+	add(startDir)
+	if parent != mainRoot {
+		add(parent)
+	}
+	if grandparent != parent {
+		add(grandparent)
+	}
+
+	return dirs
+}
+
+func isContainingWorkspaceRoot(candidate, mainRoot string) (bool, error) {
+	if !containsPath(candidate, mainRoot) {
+		return false, nil
+	}
+
+	repos, err := scanImmediateRepos(candidate)
 	if err != nil {
-		return "", false, err
+		return false, err
 	}
-	if len(repos) < 2 {
-		return "", false, nil
+	return len(repos) >= 2, nil
+}
+
+func containsPath(parent, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
 	}
-	return parent, true, nil
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func reposAtWorkspaceRoot(root string) ([]Repo, error) {

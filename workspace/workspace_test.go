@@ -66,6 +66,41 @@ func TestDetectGitParentWithSiblings(t *testing.T) {
 	}
 }
 
+func TestDetectNearestContainingGitWorkspaceWinsOverGrandparent(t *testing.T) {
+	root := evalTempDir(t)
+	grandparent := filepath.Join(root, "grandparent")
+	workspaceRoot := filepath.Join(grandparent, "workspace")
+	otherRepo := filepath.Join(grandparent, "other")
+	childA := filepath.Join(workspaceRoot, "child-a")
+	childB := filepath.Join(workspaceRoot, "child-b")
+
+	gitInit(t, grandparent)
+	gitInit(t, workspaceRoot)
+	gitInit(t, otherRepo)
+	gitInit(t, childA)
+	gitInit(t, childB)
+
+	nestedStart := filepath.Join(childA, "internal", "deep")
+	if err := os.MkdirAll(nestedStart, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err := Detect(nestedStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeWorkspace {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeWorkspace)
+	}
+	if ws.Root != workspaceRoot {
+		t.Fatalf("Root = %q, want %q", ws.Root, workspaceRoot)
+	}
+	want := []string{"child-a", "child-b", "workspace"}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Repos = %v, want %v", got, want)
+	}
+}
+
 func TestDetectNonGitParentWithSiblings(t *testing.T) {
 	root := evalTempDir(t)
 	childB := filepath.Join(root, "child-b")
@@ -117,7 +152,7 @@ func TestDetectNonGitWorkspaceRootWithChildren(t *testing.T) {
 	}
 }
 
-func TestDetectNestedRepoStopsAtOneLevel(t *testing.T) {
+func TestDetectNestedRepoCanResolveContainingGrandparentWorkspace(t *testing.T) {
 	root := evalTempDir(t)
 	child := filepath.Join(root, "child")
 	sibling := filepath.Join(root, "sibling")
@@ -130,14 +165,14 @@ func TestDetectNestedRepoStopsAtOneLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ws.Mode != ModeSingleRepo {
-		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeSingleRepo)
+	if ws.Mode != ModeWorkspace {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeWorkspace)
 	}
-	if ws.Root != nested {
-		t.Fatalf("Root = %q, want %q", ws.Root, nested)
+	if ws.Root != root {
+		t.Fatalf("Root = %q, want %q", ws.Root, root)
 	}
-	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"nested"}) {
-		t.Fatalf("Repos = %v, want [nested]", got)
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child", "sibling"}) {
+		t.Fatalf("Repos = %v, want [child sibling]", got)
 	}
 }
 
@@ -194,6 +229,37 @@ func TestDetectIgnoresGitWorktreeFileSibling(t *testing.T) {
 		t.Fatalf("Repos = %v, want [child]", got)
 	}
 }
+
+func TestDetectCurrentDirectoryWorkspaceWinsImmediately(t *testing.T) {
+	root := evalTempDir(t)
+	outer := filepath.Join(root, "outer")
+	workspaceRoot := filepath.Join(outer, "workspace")
+	otherRepo := filepath.Join(outer, "other")
+	childA := filepath.Join(workspaceRoot, "child-a")
+	childB := filepath.Join(workspaceRoot, "child-b")
+
+	gitInit(t, outer)
+	gitInit(t, workspaceRoot)
+	gitInit(t, otherRepo)
+	gitInit(t, childA)
+	gitInit(t, childB)
+
+	ws, err := Detect(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeWorkspace {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeWorkspace)
+	}
+	if ws.Root != workspaceRoot {
+		t.Fatalf("Root = %q, want %q", ws.Root, workspaceRoot)
+	}
+	want := []string{"child-a", "child-b", "workspace"}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Repos = %v, want %v", got, want)
+	}
+}
+
 func TestDetectOrdersReposDeterministically(t *testing.T) {
 	root := evalTempDir(t)
 	zeta := filepath.Join(root, "zeta")
