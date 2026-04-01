@@ -1,6 +1,6 @@
-**Execution**: Use `/execute-task` to implement this plan.
-
 # 018: Workspace detection via nearest containing root
+
+> **Execution**: Use `/execute-task` to implement this plan.
 
 **Objective**: Adopt the B design for workspace detection so `ww` resolves the nearest containing workspace root within a bounded 3-layer window. This aligns `ww list`, `ww clean`, and workspace-aware create/remove behavior with human expectations in 1-2-3 level directory layouts, while keeping detection deterministic and non-recursive.
 
