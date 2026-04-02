@@ -4,6 +4,12 @@
 
 `ww` detects whether the current directory is part of a workspace that contains multiple git repositories. Detection is convention-based and does not require a dedicated workspace config field.
 
+For workspace membership, a "real git repository" means an immediate child directory that:
+
+- is not itself a symlink
+- resolves its own git top-level to that child directory
+- is not a linked worktree checkout
+
 ## Public Types
 
 ### `workspace.Repo`
@@ -43,15 +49,19 @@ When the start directory is inside git:
 4. A candidate qualifies only when:
    - it contains the current main repo root
    - it exposes at least two immediate child real git repositories
+   - it is the current main repo root itself, or one of those immediate child repositories contains the current main repo root
 5. If no candidate qualifies, treat the current repository as a standalone single-repo workspace.
 
 ## Edge Cases
 
-- `.git` files and `.git` directories both count as repository markers.
-- `.git` files that point into another repository's `.git/worktrees/` directory are ignored for workspace discovery because managed worktree checkouts are not real workspace members.
+- `.git` presence alone is not sufficient for workspace membership. Candidate children are validated with git top-level and git-dir/common-dir resolution.
+- Immediate child symlink entries are ignored during workspace-member discovery. `ww` does not follow child symlinks by default.
+- Linked worktree checkouts are ignored for workspace discovery even when their top-level path matches the child directory, because managed worktree checkouts are not real workspace members.
+- Helper directories containing stray or partial `.git` contents do not count as repositories unless git resolves them as standalone repo roots.
 - Only immediate children are scanned, and only within the bounded candidate window. Detection does not recurse through arbitrary ancestors or nested workspace structures.
 - The current directory is tested first. If it already qualifies as a workspace root, it is selected immediately.
 - If both the parent and grandparent of the main repo root qualify, the nearest containing candidate wins.
+- Generic ancestors with unrelated repo children do not qualify. A containing candidate must be tied to the current repo through one of its immediate child repositories, unless the candidate is the current main repo root itself.
 - A workspace root may itself be a git repository; if so, it is included in `Repos`.
 - A non-git workspace root is valid when it is the current directory and contains one or more git child repositories, or when it contains two or more git child repositories while being selected as a containing candidate for the current repo.
 

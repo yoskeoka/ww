@@ -80,3 +80,12 @@
 - **Pattern**: Carrying state forward from the previous turn without re-verifying merge status can make workflow decisions stale, especially when the user has advanced the repository between turns.
 - **Rule**: At the start of any `/execute-task` follow-up, explicitly verify whether the referenced plan PR has already merged or whether `origin/main` already contains the prerequisite docs move, before deciding whether more planning work is needed.
 - **Applied**: Workflow transitions between `/plan-execution` and `/execute-task`, especially when a user references a recently created PR or says "it's already merged".
+
+---
+
+### L-010: Do not plan around unstable git internals when stable `rev-parse` contracts exist
+
+- **Mistake**: Considered using raw `.git` file-pointer inspection as part of the linked-worktree exclusion approach, even though the same distinction could be expressed through stable `git rev-parse` outputs.
+- **Pattern**: Reaching for filesystem implementation details first can make both plans and code depend on git's current storage format rather than its supported command interface.
+- **Rule**: When distinguishing repository states in `ww`, prefer stable git CLI contracts such as `rev-parse --show-toplevel`, `--git-dir`, and `--git-common-dir` over inspecting `.git` file contents directly. Only rely on raw `.git` internals when no stable git command can express the required distinction.
+- **Applied**: Workspace-member detection, linked-worktree exclusion, and any future repo-shape validation logic.

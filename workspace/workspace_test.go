@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/yoskeoka/ww/git"
 )
 
 // evalTempDir resolves symlinks in t.TempDir() so that path comparisons
@@ -129,12 +131,7 @@ func TestDetectNonGitWorkspaceRootWithChildren(t *testing.T) {
 	childB := filepath.Join(root, "repo-b")
 	childA := filepath.Join(root, "repo-a")
 	gitInit(t, childA)
-	if err := os.MkdirAll(childB, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(childB, ".git"), []byte("gitdir: /tmp/nowhere"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	gitInitSeparateGitDir(t, childB, filepath.Join(root, "repo-b.git"))
 
 	ws, err := Detect(root)
 	if err != nil {
@@ -176,17 +173,33 @@ func TestDetectNestedRepoCanResolveContainingGrandparentWorkspace(t *testing.T) 
 	}
 }
 
-func TestDetectGitFileAndDirectoryMarkers(t *testing.T) {
+func TestDetectIgnoresInvalidGitMarkerDirectory(t *testing.T) {
 	root := evalTempDir(t)
 	childA := filepath.Join(root, "child-a")
 	childB := filepath.Join(root, "child-b")
 	gitInit(t, childA)
-	if err := os.MkdirAll(childB, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(childB, ".git", "gk"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(childB, ".git"), []byte("gitdir: /tmp/example"), 0644); err != nil {
+
+	ws, err := Detect(root)
+	if err != nil {
 		t.Fatal(err)
 	}
+	if ws.Mode != ModeWorkspace {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeWorkspace)
+	}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child-a"}) {
+		t.Fatalf("Repos = %v, want [child-a]", got)
+	}
+}
+
+func TestDetectStandaloneRepoWithSeparateGitDirFileCounts(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	childB := filepath.Join(root, "child-b")
+	gitInit(t, childA)
+	gitInitSeparateGitDir(t, childB, filepath.Join(root, "child-b.git"))
 
 	ws, err := Detect(root)
 	if err != nil {
@@ -200,18 +213,16 @@ func TestDetectGitFileAndDirectoryMarkers(t *testing.T) {
 	}
 }
 
-func TestDetectIgnoresGitWorktreeFileSibling(t *testing.T) {
+func TestDetectIgnoresChildSymlinkToRepo(t *testing.T) {
 	root := evalTempDir(t)
 	child := filepath.Join(root, "child")
 	sibling := filepath.Join(root, "sibling")
 
 	gitInit(t, child)
-	if err := os.MkdirAll(sibling, 0755); err != nil {
-		t.Fatal(err)
-	}
-	// Simulate a git worktree checkout whose .git file points into another repo's .git/worktrees directory.
-	gitFileContents := []byte("gitdir: /tmp/other-repo/.git/worktrees/wt-1")
-	if err := os.WriteFile(filepath.Join(sibling, ".git"), gitFileContents, 0644); err != nil {
+	targetRoot := evalTempDir(t)
+	target := filepath.Join(targetRoot, "target")
+	gitInit(t, target)
+	if err := os.Symlink(target, sibling); err != nil {
 		t.Fatal(err)
 	}
 
@@ -224,6 +235,41 @@ func TestDetectIgnoresGitWorktreeFileSibling(t *testing.T) {
 	}
 	if ws.Root != child {
 		t.Fatalf("Root = %q, want %q", ws.Root, child)
+	}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child"}) {
+		t.Fatalf("Repos = %v, want [child]", got)
+	}
+}
+
+func TestDetectIgnoresLinkedWorktreeSibling(t *testing.T) {
+	root := evalTempDir(t)
+	child := filepath.Join(root, "child")
+	gitInit(t, child)
+
+	worktreePath := filepath.Join(root, "child-worktree")
+	runner := git.Runner{Dir: child}
+	if _, err := runner.Run("config", "user.email", "test@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("config", "user.name", "Test User"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "--allow-empty", "-m", "initial"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("branch", "feat/worktree"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("worktree", "add", worktreePath, "feat/worktree"); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err := Detect(child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeSingleRepo {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeSingleRepo)
 	}
 	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child"}) {
 		t.Fatalf("Repos = %v, want [child]", got)
@@ -351,5 +397,16 @@ func gitInit(t *testing.T, dir string) {
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init in %s: %v\n%s", dir, err, string(out))
+	}
+}
+
+func gitInitSeparateGitDir(t *testing.T, dir, gitDir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(gitDir), 0755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "init", "--separate-git-dir", gitDir, "-b", "main", dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init --separate-git-dir in %s: %v\n%s", dir, err, string(out))
 	}
 }

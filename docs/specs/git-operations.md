@@ -18,6 +18,23 @@ git rev-parse --path-format=absolute --git-common-dir
 
 This returns the shared `.git` directory; its parent is the main working tree root. The repository name is derived from this path.
 
+## Workspace Member Validation
+
+When validating whether an immediate child directory is a standalone workspace repository, `ww` uses git's resolved paths rather than trusting `.git` markers alone:
+
+```text
+git rev-parse --path-format=absolute --show-toplevel
+git rev-parse --path-format=absolute --git-dir
+git rev-parse --path-format=absolute --git-common-dir
+```
+
+A child counts as a standalone repository only when:
+
+- the resolved top-level path matches the child directory
+- the resolved git dir equals the resolved git common dir
+
+This excludes linked worktree checkouts while still allowing valid standalone repositories whose git metadata is represented by a `.git` file rather than a `.git` directory.
+
 ## Operations
 
 ### Worktree Management

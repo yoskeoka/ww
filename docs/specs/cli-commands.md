@@ -8,6 +8,7 @@
 
 - `git` must be available in PATH. If not found, `ww` exits with a clear error: `git not found in PATH`.
 - Workspace-sensitive commands use the nearest containing workspace root selected by the workspace discovery algorithm.
+- Detected workspace repositories are limited to real child repo roots. Immediate child symlinks, linked worktree checkouts, and helper directories with stray `.git` markers are excluded from workspace membership.
 - `ww` may be started from a non-git workspace root. `ww list` and `ww clean` work there without extra flags. `ww create` and `ww remove` require `--repo <name>` from that location; without it they exit with: `repo selection is not supported from a non-git workspace root`.
 - If the current directory is neither a git repository nor a detected workspace root, `ww` exits with: `not a git repository`.
 
