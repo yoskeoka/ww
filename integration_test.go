@@ -1444,6 +1444,45 @@ func TestNonGitWorkspaceRootRejectsWithoutRepoSelection(t *testing.T) {
 	}
 }
 
+func TestListUsesNearestContainingWorkspaceRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	outer, err := globalEnv.MkdirTemp("ww-meta-workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	initEmptyRepo(t, outer)
+
+	otherRepo := path.Join(outer, "other")
+	initEmptyRepo(t, otherRepo)
+
+	workspaceRoot := path.Join(outer, "workspace")
+	initEmptyRepo(t, workspaceRoot)
+	writeConfig(t, workspaceRoot, `default_base = "main"`)
+
+	repo1 := path.Join(workspaceRoot, "repo1")
+	repo2 := path.Join(workspaceRoot, "repo2")
+	initEmptyRepo(t, repo1)
+	initEmptyRepo(t, repo2)
+
+	out, err := runWW(t, repo1, "list")
+	if err != nil {
+		t.Fatalf("ww list from nested workspace repo: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "REPO") || !strings.Contains(out, "STATUS") {
+		t.Fatalf("workspace list should include REPO and STATUS columns: %s", out)
+	}
+	if !strings.Contains(out, "workspace") || !strings.Contains(out, "repo1") || !strings.Contains(out, "repo2") {
+		t.Fatalf("workspace list should resolve the nearest containing workspace root, got:\n%s", out)
+	}
+	if strings.Contains(out, "other") {
+		t.Fatalf("workspace list should not include repos from the grandparent workspace, got:\n%s", out)
+	}
+}
+
 func TestListUnknownStatusNoRemote(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")
@@ -1473,6 +1512,19 @@ func TestListUnknownStatusNoRemote(t *testing.T) {
 	}
 	if !strings.Contains(out, "active") {
 		t.Errorf("expected main worktree to show active, got:\n%s", out)
+	}
+}
+
+func initEmptyRepo(t *testing.T, dir string) {
+	t.Helper()
+	if err := globalEnv.MkdirAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(dir, "init", "-b", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(dir, "commit", "--allow-empty", "-m", "initial"); err != nil {
+		t.Fatal(err)
 	}
 }
 
