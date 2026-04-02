@@ -126,6 +126,7 @@ func candidateDirs(startDir, mainRoot string) []string {
 	}
 
 	add(startDir)
+	add(mainRoot)
 	if parent != mainRoot {
 		add(parent)
 	}

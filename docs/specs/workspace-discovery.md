@@ -36,6 +36,7 @@ When the start directory is inside git:
 1. Resolve the current repository's main working tree root.
 2. Build a bounded candidate window consisting of:
    - the current directory
+   - the main repo root
    - the parent of the main repo root
    - the grandparent of the main repo root
 3. Test candidates in that order and pick the first qualifying workspace root.
