@@ -77,9 +77,11 @@ func Detect(startDir string) (*Workspace, error) {
 		return &Workspace{Root: wsRoot, Repos: repos, Mode: ModeWorkspace}, nil
 	}
 
-	if len(childRepos) > 0 && !hasGitEntry(filepath.Dir(absStart)) {
+	if len(childRepos) > 0 && !isRepoMarker(filepath.Dir(absStart)) {
 		repos := childRepos
-		if hasGitEntry(absStart) {
+		if ok, err := isStandaloneRepoRoot(absStart); err != nil {
+			return nil, err
+		} else if ok {
 			repos = append(repos, Repo{Name: filepath.Base(absStart), Path: absStart})
 		}
 		return &Workspace{Root: absStart, Repos: normalizeRepos(repos), Mode: ModeWorkspace}, nil
@@ -146,7 +148,18 @@ func isContainingWorkspaceRoot(candidate, mainRoot string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return len(repos) >= 2, nil
+	if len(repos) < 2 {
+		return false, nil
+	}
+	if filepath.Clean(candidate) == filepath.Clean(mainRoot) {
+		return true, nil
+	}
+	for _, repo := range repos {
+		if containsPath(repo.Path, mainRoot) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func containsPath(parent, child string) bool {
@@ -165,7 +178,9 @@ func reposAtWorkspaceRoot(root string) ([]Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	if hasGitEntry(root) {
+	if ok, err := isStandaloneRepoRoot(root); err != nil {
+		return nil, err
+	} else if ok {
 		repos = append(repos, Repo{Name: filepath.Base(root), Path: root})
 	}
 	return normalizeRepos(repos), nil
@@ -180,14 +195,67 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 	var repos []Repo
 	for _, entry := range entries {
 		candidate := filepath.Join(dir, entry.Name())
-		if hasGitEntry(candidate) {
+		if ok, err := isImmediateChildRepo(candidate); err != nil {
+			return nil, err
+		} else if ok {
 			repos = append(repos, Repo{Name: entry.Name(), Path: candidate})
 		}
 	}
 	return repos, nil
 }
 
-func hasGitEntry(dir string) bool {
+func isImmediateChildRepo(dir string) (bool, error) {
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return false, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false, nil
+	}
+	return isStandaloneRepoRoot(dir)
+}
+
+func isStandaloneRepoRoot(dir string) (bool, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return false, err
+	}
+
+	runner := &git.Runner{Dir: absDir}
+
+	topLevel, err := runner.TopLevelDir()
+	if err != nil {
+		if isGitBinaryMissing(err) {
+			return false, err
+		}
+		return false, nil
+	}
+	if filepath.Clean(topLevel) != filepath.Clean(absDir) {
+		return false, nil
+	}
+
+	gitDir, err := runner.GitDir()
+	if err != nil {
+		if isGitBinaryMissing(err) {
+			return false, err
+		}
+		return false, nil
+	}
+	gitCommonDir, err := runner.GitCommonDir()
+	if err != nil {
+		if isGitBinaryMissing(err) {
+			return false, err
+		}
+		return false, nil
+	}
+	if filepath.Clean(gitDir) != filepath.Clean(gitCommonDir) {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func isRepoMarker(dir string) bool {
 	gitPath := filepath.Join(dir, ".git")
 	info, err := os.Stat(gitPath)
 	if err != nil {

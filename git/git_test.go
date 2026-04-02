@@ -185,6 +185,69 @@ func TestBranchRemoteMissingTracking(t *testing.T) {
 	}
 }
 
+func TestRepoPathHelpersStandaloneRepo(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &Runner{Dir: repo}
+
+	topLevel, err := runner.TopLevelDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topLevel != repo {
+		t.Fatalf("TopLevelDir() = %q, want %q", topLevel, repo)
+	}
+
+	gitDir, err := runner.GitDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gitDir != filepath.Join(repo, ".git") {
+		t.Fatalf("GitDir() = %q, want %q", gitDir, filepath.Join(repo, ".git"))
+	}
+
+	gitCommonDir, err := runner.GitCommonDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gitCommonDir != filepath.Join(repo, ".git") {
+		t.Fatalf("GitCommonDir() = %q, want %q", gitCommonDir, filepath.Join(repo, ".git"))
+	}
+}
+
+func TestRepoPathHelpersLinkedWorktree(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &Runner{Dir: repo}
+
+	if _, err := runner.Run("branch", "feat/worktree-paths"); err != nil {
+		t.Fatal(err)
+	}
+	worktree := filepath.Join(t.TempDir(), "wt")
+	if _, err := runner.Run("worktree", "add", worktree, "feat/worktree-paths"); err != nil {
+		t.Fatal(err)
+	}
+
+	wtRunner := &Runner{Dir: worktree}
+	topLevel, err := wtRunner.TopLevelDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topLevel != worktree {
+		t.Fatalf("TopLevelDir() = %q, want %q", topLevel, worktree)
+	}
+
+	gitDir, err := wtRunner.GitDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitCommonDir, err := wtRunner.GitCommonDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gitDir == gitCommonDir {
+		t.Fatalf("linked worktree should not have gitDir == gitCommonDir (got %q)", gitDir)
+	}
+}
+
 func setupGitRepo(t *testing.T) string {
 	t.Helper()
 

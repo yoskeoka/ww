@@ -232,12 +232,27 @@ func (r *Runner) Fetch() error {
 // MainWorktreeDir returns the absolute path of the main working tree.
 // This works correctly even when called from inside a secondary worktree.
 func (r *Runner) MainWorktreeDir() (string, error) {
-	out, err := r.Run("rev-parse", "--path-format=absolute", "--git-common-dir")
+	out, err := r.GitCommonDir()
 	if err != nil {
 		return "", err
 	}
 	// --git-common-dir returns the .git directory; parent is the repo root
 	return filepath.Dir(out), nil
+}
+
+// TopLevelDir returns the absolute path of the current repository worktree root.
+func (r *Runner) TopLevelDir() (string, error) {
+	return r.Run("rev-parse", "--path-format=absolute", "--show-toplevel")
+}
+
+// GitDir returns the absolute path to the current repository git dir.
+func (r *Runner) GitDir() (string, error) {
+	return r.Run("rev-parse", "--path-format=absolute", "--git-dir")
+}
+
+// GitCommonDir returns the absolute path to the current repository shared git dir.
+func (r *Runner) GitCommonDir() (string, error) {
+	return r.Run("rev-parse", "--path-format=absolute", "--git-common-dir")
 }
 
 // RepoName returns the repository directory name.

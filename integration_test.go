@@ -182,6 +182,40 @@ func TestListWorkspaceMode(t *testing.T) {
 	}
 }
 
+func TestListWorkspaceModeIgnoresHelperDirsAndChildSymlinks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	helper := path.Join(ws.RootDir, ".claude")
+	if err := globalEnv.MkdirAll(path.Join(helper, ".git", "gk")); err != nil {
+		t.Fatal(err)
+	}
+
+	symlinkChild := path.Join(ws.RootDir, ".gemini")
+	if err := os.Symlink(ws.RepoDirs[0], symlinkChild); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, ws.RootDir, "list")
+	if err != nil {
+		t.Fatalf("ww list from workspace root with helper dirs: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "repo1") || !strings.Contains(out, "repo2") {
+		t.Fatalf("workspace list should include both real repos: %s", out)
+	}
+	if strings.Contains(out, ".claude") {
+		t.Fatalf("workspace list should ignore helper dir with stray .git contents: %s", out)
+	}
+	if strings.Contains(out, ".gemini") {
+		t.Fatalf("workspace list should ignore symlinked child entry: %s", out)
+	}
+}
+
 func TestListStatusesAndCleanable(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")
