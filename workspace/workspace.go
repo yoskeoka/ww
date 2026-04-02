@@ -195,6 +195,15 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 	var repos []Repo
 	for _, entry := range entries {
 		candidate := filepath.Join(dir, entry.Name())
+		if !entry.IsDir() {
+			info, err := os.Lstat(candidate)
+			if err != nil {
+				return nil, err
+			}
+			if info.Mode()&os.ModeSymlink == 0 {
+				continue
+			}
+		}
 		if ok, err := isImmediateChildRepo(candidate); err != nil {
 			return nil, err
 		} else if ok {
@@ -220,8 +229,12 @@ func isStandaloneRepoRoot(dir string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	canonicalDir, err := canonicalPath(absDir)
+	if err != nil {
+		return false, err
+	}
 
-	runner := &git.Runner{Dir: absDir}
+	runner := &git.Runner{Dir: canonicalDir}
 
 	topLevel, err := runner.TopLevelDir()
 	if err != nil {
@@ -230,7 +243,11 @@ func isStandaloneRepoRoot(dir string) (bool, error) {
 		}
 		return false, nil
 	}
-	if filepath.Clean(topLevel) != filepath.Clean(absDir) {
+	topLevel, err = canonicalPath(topLevel)
+	if err != nil {
+		return false, err
+	}
+	if filepath.Clean(topLevel) != filepath.Clean(canonicalDir) {
 		return false, nil
 	}
 
@@ -248,6 +265,14 @@ func isStandaloneRepoRoot(dir string) (bool, error) {
 		}
 		return false, nil
 	}
+	gitDir, err = canonicalPath(gitDir)
+	if err != nil {
+		return false, err
+	}
+	gitCommonDir, err = canonicalPath(gitCommonDir)
+	if err != nil {
+		return false, err
+	}
 	if filepath.Clean(gitDir) != filepath.Clean(gitCommonDir) {
 		return false, nil
 	}
@@ -264,18 +289,22 @@ func isRepoMarker(dir string) bool {
 	if info.IsDir() {
 		return true
 	}
-	if info.Mode().IsRegular() {
-		data, err := os.ReadFile(gitPath)
-		if err != nil {
-			return false
-		}
-		return !strings.Contains(string(data), ".git/worktrees/")
-	}
-	return true
+	return info.Mode().IsRegular()
 }
 
 func isGitBinaryMissing(err error) bool {
 	return strings.Contains(err.Error(), "git not found in PATH")
+}
+
+func canonicalPath(path string) (string, error) {
+	evaluated, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return filepath.Clean(path), nil
+		}
+		return "", err
+	}
+	return filepath.Clean(evaluated), nil
 }
 
 func normalizeRepos(repos []Repo) []Repo {
