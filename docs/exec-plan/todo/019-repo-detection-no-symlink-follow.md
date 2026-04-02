@@ -19,7 +19,7 @@ The desired behavior is stricter:
 - Child symlink entries are not followed by default.
 - Managed git worktrees remain excluded from workspace-member detection.
 
-This aligns with the existing design principle of correctness over speed: workspace discovery should prefer fewer false positives even if the check is slightly more expensive.
+This favors stricter, more accurate workspace detection: workspace discovery should prefer fewer false positives even if the check is slightly more expensive.
 
 ## Design Direction
 
@@ -30,7 +30,8 @@ For this plan, "real child git repository" should mean:
 - the immediate child entry itself is not a symlink
 - `git -C <child> rev-parse --show-toplevel` succeeds
 - the resolved top-level path matches the child directory itself
-- worktree checkouts that resolve elsewhere must not count as workspace members
+- the child is explicitly rejected if it is a linked worktree checkout, even when the top-level path matches the child directory
+- linked-worktree exclusion should be implemented with `git -C <child> rev-parse --git-dir` and `git -C <child> rev-parse --git-common-dir`, treating `git-dir == git-common-dir` as required for a standalone child repository
 
 Future-facing note:
 
@@ -64,7 +65,8 @@ Future-facing note:
 - Replace `hasGitEntry()`-style child classification with a stricter repository validation helper
 - Ignore immediate child entries that are symlinks
 - Validate candidate child repositories by asking git for the child's top-level path and comparing it to the child path
-- Preserve graceful behavior when git is unavailable or a candidate is not a valid repository
+- Explicitly exclude linked worktree checkouts using `rev-parse --git-dir` and `--git-common-dir`
+- Preserve graceful behavior for per-candidate failures (for example, a child that is not a valid repository), while keeping the existing missing-`git` behavior unchanged
 - Keep the bounded-window and nearest-containing-workspace-root logic unchanged apart from the stricter child-repo test
 
 ### `git/git.go`
@@ -84,6 +86,7 @@ Future-facing note:
 - Add unit test: child with a stray `.git` directory but no valid repo structure is ignored
 - Add unit test: child symlink pointing at a real repository is ignored by default
 - Add unit test: child with a `.git` file or directory that resolves to its own top-level still counts as a repository
+- Add unit test: linked worktree checkout whose top-level matches the child directory is still excluded
 - Keep or update existing tests that ensure git worktree checkouts are excluded
 
 ### `integration_test.go`
