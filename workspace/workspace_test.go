@@ -260,6 +260,39 @@ func TestDetectCurrentDirectoryWorkspaceWinsImmediately(t *testing.T) {
 	}
 }
 
+func TestDetectGitWorkspaceRootSelectedFromNestedPath(t *testing.T) {
+	root := evalTempDir(t)
+	outer := filepath.Join(root, "outer")
+	workspaceRoot := filepath.Join(outer, "workspace")
+	otherRepo := filepath.Join(outer, "other")
+	childA := filepath.Join(workspaceRoot, "child-a")
+	childB := filepath.Join(workspaceRoot, "child-b")
+	internal := filepath.Join(workspaceRoot, "internal")
+
+	gitInit(t, outer)
+	gitInit(t, workspaceRoot)
+	gitInit(t, otherRepo)
+	gitInit(t, childA)
+	gitInit(t, childB)
+	if err := os.MkdirAll(internal, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err := Detect(internal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeWorkspace {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeWorkspace)
+	}
+	if ws.Root != workspaceRoot {
+		t.Fatalf("Root = %q, want %q", ws.Root, workspaceRoot)
+	}
+	want := []string{"child-a", "child-b", "workspace"}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Repos = %v, want %v", got, want)
+	}
+}
 func TestDetectOrdersReposDeterministically(t *testing.T) {
 	root := evalTempDir(t)
 	zeta := filepath.Join(root, "zeta")
