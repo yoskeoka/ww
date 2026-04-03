@@ -2,10 +2,7 @@
 
 ## Naming
 
-Current name: **ww** (workspace worktree). Alternatives considered — can rename before first release:
-
-- **gww** (git workspace worktree) — 3 chars, smooth typing rhythm, no clashes
-- **wwm** (workspace worktree manager) — 3 chars, sounds like a proper tool name, no clashes
+Public command name is frozen as **ww** (workspace worktree) for the first release line starting at `v0.3.0`.
 
 ## Goal
 
@@ -98,7 +95,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 - [x] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling.
 - [x] Phase 2: Workspace discovery (auto-detect parent/child git repos, `workspace = true`), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
 - [ ] Post-Phase 2: `--no-upward-search` flag for sandboxed environments (FR-26). Small scope, independent of Phase 2 workspace discovery.
-- [ ] Phase 3: Polish — shell integration (`ww cd`, `cd $(ww create feat/x)`), Homebrew formula, documentation.
+- [ ] Phase 3: Polish — shell integration (`ww cd`, `cd $(ww create feat/x)`), SemVer release automation starting at `v0.3.0`, Homebrew tap distribution, documentation.
 - [ ] Phase 4: Human interactive mode — add a people-first interactive flow for common operations such as create, list, remove, clean, and worktree selection without requiring users to remember the full flag surface.
 - [ ] Phase 5 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
 - [ ] Future: Sandboxed environment full compatibility (FR-25). Blocked on upstream Claude Code sandbox issue resolution.

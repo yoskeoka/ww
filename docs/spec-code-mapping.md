@@ -5,6 +5,7 @@
 | docs/specs/cli-commands.md | cmd/ww/, worktree/, git/, workspace/ | ./integration_test.go |
 | docs/specs/git-operations.md | git/ | ./git/git_test.go |
 | docs/specs/configuration.md | internal/config/ | ./internal/config/config_test.go |
+| docs/specs/release-versioning.md | cmd/ww/version.go, cmd/ww/sub_version.go, Makefile, .goreleaser.yaml, .github/workflows/release.yml | ./cmd/ww/version_test.go, ./integration_test.go |
 | docs/specs/workspace-discovery.md | workspace/, worktree/, cmd/ww/ | ./workspace/workspace_test.go |
 | docs/specs/shell-integration.md | cmd/ww/, worktree/ | ./integration_test.go |
 | docs/specs/testing.md | internal/testutil/ | ./integration_test.go |

@@ -158,11 +158,3 @@ func outputJSON(w io.Writer, v any) error {
 	enc.SetEscapeHTML(false)
 	return enc.Encode(v)
 }
-
-func printVersion(w io.Writer) {
-	hash := CommitHash
-	if hash == "" {
-		hash = "dev"
-	}
-	fmt.Fprintf(w, "ww version %s\n", hash)
-}

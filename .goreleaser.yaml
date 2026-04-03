@@ -1,0 +1,40 @@
+version: 2
+
+project_name: ww
+
+builds:
+  - binary: ww
+    main: ./cmd/ww
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.Version={{ .Version }} -X main.CommitHash={{ .ShortCommit }}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: darwin
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: yoskeoka
+    name: ww
+
+brews:
+  - repository:
+      owner: yoskeoka
+      name: homebrew-ww
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/yoskeoka/ww
+    description: Workspace-aware git worktree manager
+    install: |
+      bin.install "ww"
