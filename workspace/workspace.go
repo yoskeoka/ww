@@ -198,6 +198,9 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 		if !entry.IsDir() {
 			info, err := os.Lstat(candidate)
 			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
 				return nil, err
 			}
 			if info.Mode()&os.ModeSymlink == 0 {
@@ -216,6 +219,9 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 func isImmediateChildRepo(dir string) (bool, error) {
 	info, err := os.Lstat(dir)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
 		return false, err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
