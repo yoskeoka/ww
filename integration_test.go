@@ -75,6 +75,34 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestVersionCommandJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	dir, err := globalEnv.MkdirTemp("ww-ver-json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, dir, "version", "--json")
+	if err != nil {
+		t.Fatalf("ww version --json: %v\n%s", err, out)
+	}
+
+	var got map[string]string
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if got["version"] != "dev" {
+		t.Fatalf("version = %q, want dev", got["version"])
+	}
+	if got["commit"] == "" {
+		t.Fatal("commit should not be empty")
+	}
+}
+
 func TestCreateAndList(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")

@@ -278,9 +278,31 @@ Would delete branch feat/stale
 
 ### `ww version`
 
-Print the version (commit hash) and exit.
+Print version information and exit.
 
-**Output:**
+Tagged release builds print the SemVer tag. Untagged builds print a dev identifier plus the short commit hash.
+
+**Flags:**
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | bool | false | Output JSON |
+
+**Output (text, tagged release build):**
 ```text
-ww version <commit-hash>
+ww version v0.3.0
+```
+
+**Output (text, dev build):**
+```text
+ww version dev+abc1234
+```
+
+**Output (JSON, tagged release build):**
+```json
+{"version":"v0.3.0","commit":"abc1234"}
+```
+
+**Output (JSON, dev build):**
+```json
+{"version":"dev","commit":"abc1234"}
 ```
