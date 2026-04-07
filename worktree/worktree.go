@@ -70,6 +70,11 @@ type WorktreeInfo struct {
 	Base         string `json:"base,omitempty"`
 }
 
+type baseRefInfo struct {
+	Ref          string
+	StatusDetail string
+}
+
 // RemoveResult holds information about a removed worktree.
 type RemoveResult struct {
 	Path          string `json:"path"`
@@ -311,13 +316,13 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
 	}
 
-	base, baseErr := m.baseRef(runner)
+	baseInfo, baseErr := m.baseRef(runner)
 	if baseErr != nil {
 		// Base branch could not be determined; degrade to unknown status.
 		return listRepoUnknown(entries, repoName, "base-detect-failed"), nil
 	}
 
-	merged, err := runner.MergedBranches(base)
+	merged, err := runner.MergedBranches(baseInfo.Ref)
 	if err != nil {
 		return nil, fmt.Errorf("listing merged branches for %s: %w", repoName, err)
 	}
@@ -326,7 +331,7 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		mergedSet[branch] = struct{}{}
 	}
 	// The base branch itself is always active even though git reports it as merged.
-	delete(mergedSet, base)
+	delete(mergedSet, baseInfo.Ref)
 
 	// Precompute branch→remote and batch ls-remote calls (one per unique remote).
 	branchRemote := make(map[string]string)
@@ -358,13 +363,14 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 	for _, e := range entries {
 		status := resolveStatus(e, mergedSet, branchRemote, remoteBranches)
 		infos = append(infos, WorktreeInfo{
-			Path:   e.Path,
-			Branch: e.Branch,
-			Repo:   repoName,
-			Status: status,
-			Head:   e.Head,
-			Bare:   e.Bare,
-			Main:   e.Main,
+			Path:         e.Path,
+			Branch:       e.Branch,
+			Repo:         repoName,
+			Status:       status,
+			StatusDetail: baseInfo.StatusDetail,
+			Head:         e.Head,
+			Bare:         e.Bare,
+			Main:         e.Main,
 		})
 	}
 	return infos, nil
@@ -394,11 +400,22 @@ func (m *Manager) listRepoFast(repoName, repoPath string) ([]WorktreeInfo, error
 	return infos, nil
 }
 
-func (m *Manager) baseRef(runner *git.Runner) (string, error) {
+func (m *Manager) baseRef(runner *git.Runner) (baseRefInfo, error) {
 	if m.Config.DefaultBase != "" {
-		return m.Config.DefaultBase, nil
+		return baseRefInfo{Ref: m.Config.DefaultBase}, nil
 	}
-	return runner.DefaultBranch()
+	ref, err := runner.DefaultBranch()
+	if err == nil {
+		return baseRefInfo{Ref: ref}, nil
+	}
+	ref, ok, heuristicErr := runner.HeuristicDefaultBranch()
+	if heuristicErr != nil {
+		return baseRefInfo{}, heuristicErr
+	}
+	if ok {
+		return baseRefInfo{Ref: ref, StatusDetail: "heuristic-base"}, nil
+	}
+	return baseRefInfo{}, err
 }
 
 // listRepoUnknown builds WorktreeInfo entries when the base branch cannot be

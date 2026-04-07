@@ -1183,6 +1183,9 @@ func setupRepoWithBareRemote(t *testing.T) string {
 	if _, err := globalEnv.Git(repo, "push", "-u", "origin", "main"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := globalEnv.Git(repo, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD"); err != nil {
+		t.Fatal(err)
+	}
 	return repo
 }
 
@@ -1639,6 +1642,145 @@ func TestListUnknownStatusJSON(t *testing.T) {
 				t.Errorf("non-main worktree status_detail = %q, want base-detect-failed", statusDetail)
 			}
 		}
+	}
+}
+
+func TestHeuristicBaseResolutionListAndClean(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+
+	mergedWT := worktreePath(repo, "feat/merged")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/merged"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "merged.txt"), "merged\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: merged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "merge", "--ff-only", "feat/merged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "origin", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", mergedWT, "feat/merged"); err != nil {
+		t.Fatal(err)
+	}
+
+	staleWT := worktreePath(repo, "feat/stale")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "stale.txt"), "stale\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "-u", "origin", "feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "origin", ":feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", staleWT, "feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+
+	activeWT := worktreePath(repo, "feat/active")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/active"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "active.txt"), "active\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: active"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", activeWT, "feat/active"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, repo, "list", "--json")
+	if err != nil {
+		t.Fatalf("ww list --json should succeed with heuristic base: %v\n%s", err, out)
+	}
+
+	seenStatuses := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		var obj map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Fatalf("invalid JSON line: %s", line)
+		}
+		branch, _ := obj["branch"].(string)
+		status, _ := obj["status"].(string)
+		statusDetail, _ := obj["status_detail"].(string)
+		if statusDetail != "heuristic-base" {
+			t.Fatalf("branch %q status_detail = %q, want heuristic-base", branch, statusDetail)
+		}
+		seenStatuses[branch] = status
+	}
+
+	if seenStatuses["main"] != "active" {
+		t.Fatalf("main status = %q, want active", seenStatuses["main"])
+	}
+	if seenStatuses["feat/merged"] != "merged" {
+		t.Fatalf("feat/merged status = %q, want merged", seenStatuses["feat/merged"])
+	}
+	if seenStatuses["feat/stale"] != "stale" {
+		t.Fatalf("feat/stale status = %q, want stale", seenStatuses["feat/stale"])
+	}
+	if seenStatuses["feat/active"] != "active" {
+		t.Fatalf("feat/active status = %q, want active", seenStatuses["feat/active"])
+	}
+
+	out, err = runWW(t, repo, "list", "--cleanable", "--json")
+	if err != nil {
+		t.Fatalf("ww list --cleanable --json should succeed with heuristic base: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, `"branch":"feat/merged"`) || !strings.Contains(out, `"branch":"feat/stale"`) {
+		t.Fatalf("cleanable output should include merged and stale heuristic worktrees: %s", out)
+	}
+	if strings.Contains(out, `"branch":"feat/active"`) {
+		t.Fatalf("cleanable output should exclude active heuristic worktrees: %s", out)
+	}
+
+	out, err = runWW(t, repo, "clean")
+	if err != nil {
+		t.Fatalf("ww clean should succeed with heuristic base: %v\n%s", err, out)
+	}
+	if globalEnv.PathExists(mergedWT) || globalEnv.PathExists(staleWT) {
+		t.Fatal("ww clean should remove heuristic merged/stale worktrees")
+	}
+	if !globalEnv.PathExists(activeWT) {
+		t.Fatal("ww clean should preserve active heuristic worktrees")
 	}
 }
 
