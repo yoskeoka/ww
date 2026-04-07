@@ -141,7 +141,7 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 | `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
 | `unknown` | Base branch could not be determined; status classification was skipped |
 
-When the base branch is resolved heuristically (for example, by inferring `origin/main` after `origin/HEAD` lookup fails), `ww list` still emits normal `active` / `merged` / `stale` statuses. In text output, those render as `active(heuristic-base)`, `merged(heuristic-base)`, or `stale(heuristic-base)`. In JSON output, the `status` value remains `active`, `merged`, or `stale`, and `status_detail=heuristic-base` is emitted separately for every listed worktree entry.
+When the base branch is resolved heuristically according to [git-operations.md](git-operations.md), `ww list` still emits normal `active` / `merged` / `stale` statuses. In text output, those render as `active(heuristic-base)`, `merged(heuristic-base)`, or `stale(heuristic-base)`. In JSON output, the `status` value remains `active`, `merged`, or `stale`, and `status_detail=heuristic-base` is emitted separately for every listed worktree entry.
 
 When the base branch cannot be resolved at all (no `default_base` config, `origin/HEAD` detection fails, and heuristic fallback fails), all non-main worktrees that have an associated branch receive `unknown` status with a `status_detail` field indicating the reason (e.g., `base-detect-failed`). Worktrees without an associated branch (for example, detached HEAD entries where `branch` is absent from `git worktree list --porcelain`) remain `active`.
 
