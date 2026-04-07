@@ -162,6 +162,8 @@ non-interactive `ww` command equivalent.
      status, shortened path, and a main-worktree marker when applicable
    - support case-insensitive filtering across repo, branch, status text, and
      full path
+   - use keyboard-first prompt controls; at minimum arrow keys / `j` / `k`
+     navigate the selector and `q` exits the interactive session
    - after selection, offer `open`, `remove`, or `back`
    - for main worktrees, omit `remove` and allow only `open` or `back`
 8. `open` behavior:

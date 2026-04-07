@@ -55,12 +55,12 @@ func interactiveCmd() command {
 			}
 
 			prompt := interactive.PromptOutput(glOpts.output, glOpts.errOutput)
-			session := interactive.NewLineSession(os.Stdin, prompt)
+			session := interactive.NewHuhSession(os.Stdin, prompt)
+			listUI := interactive.NewHuhListUI(os.Stdin, prompt)
 			flows := interactiveFlows{
 				prompt: prompt,
 				list: interactive.ListFlow{
-					Prompt:  prompt,
-					Session: session,
+					UI: listUI,
 					Load: func() ([]interactive.WorktreeItem, error) {
 						infos, err := mgr.List()
 						if err != nil {

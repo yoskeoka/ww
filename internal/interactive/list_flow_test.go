@@ -1,30 +1,52 @@
 package interactive
 
 import (
-	"bytes"
 	"fmt"
-	"strings"
 	"testing"
 )
 
-type scriptedPrompter struct {
-	inputs []string
-	index  int
-	output *bytes.Buffer
+type fakeListUI struct {
+	selectedItems  []*WorktreeItem
+	selectIndex    int
+	nextFilter     string
+	actions        []ListAction
+	actionIndex    int
+	confirm        bool
+	selectErr      error
+	actionErr      error
+	confirmErr     error
+	selectedFilter string
+	actionsSeen    []ListAction
 }
 
-func (s *scriptedPrompter) ReadLine(prompt string) (string, error) {
-	if s.output != nil {
-		if _, err := s.output.WriteString(prompt); err != nil {
-			return "", err
-		}
+func (f *fakeListUI) SelectWorktree(_ []WorktreeItem, filter string) (*WorktreeItem, string, error) {
+	f.selectedFilter = filter
+	if f.selectErr != nil {
+		return nil, f.nextFilter, f.selectErr
 	}
-	if s.index >= len(s.inputs) {
-		return "", fmt.Errorf("unexpected prompt read")
+	if f.selectIndex >= len(f.selectedItems) {
+		return nil, f.nextFilter, nil
 	}
-	value := s.inputs[s.index]
-	s.index++
-	return value, nil
+	item := f.selectedItems[f.selectIndex]
+	f.selectIndex++
+	return item, f.nextFilter, nil
+}
+
+func (f *fakeListUI) SelectListAction(_ WorktreeItem, actions []ListAction) (ListAction, error) {
+	f.actionsSeen = append([]ListAction(nil), actions...)
+	if f.actionErr != nil {
+		return "", f.actionErr
+	}
+	if f.actionIndex >= len(f.actions) {
+		return "", fmt.Errorf("unexpected action prompt")
+	}
+	action := f.actions[f.actionIndex]
+	f.actionIndex++
+	return action, nil
+}
+
+func (f *fakeListUI) ConfirmRemove(_ WorktreeItem) (bool, error) {
+	return f.confirm, f.confirmErr
 }
 
 func TestFilterWorktreeItemsMatchesExpectedFields(t *testing.T) {
@@ -63,23 +85,29 @@ func TestFilterWorktreeItemsMatchesExpectedFields(t *testing.T) {
 }
 
 func TestListFlowOpenReturnsSessionComplete(t *testing.T) {
-	var prompt bytes.Buffer
-	var stdout bytes.Buffer
+	item := WorktreeItem{
+		Repo:        "repo1",
+		Branch:      "feat/alpha",
+		Status:      "active",
+		Path:        "/tmp/repo1@feat-alpha",
+		DisplayPath: "/tmp/repo1@feat-alpha",
+	}
+	ui := &fakeListUI{
+		selectedItems: []*WorktreeItem{&item},
+		actions:       []ListAction{ListActionOpen},
+	}
+	openCalls := 0
 	flow := ListFlow{
-		Prompt:  &prompt,
-		Session: &scriptedPrompter{inputs: []string{"1", "open"}, output: &prompt},
+		UI: ui,
 		Load: func() ([]WorktreeItem, error) {
-			return []WorktreeItem{{
-				Repo:        "repo1",
-				Branch:      "feat/alpha",
-				Status:      "active",
-				Path:        "/tmp/repo1@feat-alpha",
-				DisplayPath: "/tmp/repo1@feat-alpha",
-			}}, nil
+			return []WorktreeItem{item}, nil
 		},
-		Open: func(item WorktreeItem) error {
-			_, err := fmt.Fprintln(&stdout, item.Path)
-			return err
+		Open: func(got WorktreeItem) error {
+			openCalls++
+			if got.Path != item.Path {
+				t.Fatalf("Open() path = %q, want %q", got.Path, item.Path)
+			}
+			return nil
 		},
 		Remove: func(WorktreeItem) error {
 			t.Fatal("remove should not be called")
@@ -91,26 +119,29 @@ func TestListFlowOpenReturnsSessionComplete(t *testing.T) {
 	if err != ErrSessionComplete {
 		t.Fatalf("ListFlow.Run() error = %v, want ErrSessionComplete", err)
 	}
-	if got := stdout.String(); got != "/tmp/repo1@feat-alpha\n" {
-		t.Fatalf("stdout = %q, want selected path only", got)
+	if openCalls != 1 {
+		t.Fatalf("openCalls = %d, want 1", openCalls)
 	}
 }
 
 func TestListFlowDoesNotOfferRemoveForMainWorktree(t *testing.T) {
-	var prompt bytes.Buffer
+	item := WorktreeItem{
+		Repo:        "repo1",
+		Branch:      "main",
+		Status:      "active",
+		Path:        "/tmp/repo1",
+		DisplayPath: "/tmp/repo1",
+		Main:        true,
+	}
+	ui := &fakeListUI{
+		selectedItems: []*WorktreeItem{&item, nil},
+		actions:       []ListAction{ListActionBack},
+	}
 	removeCalls := 0
 	flow := ListFlow{
-		Prompt:  &prompt,
-		Session: &scriptedPrompter{inputs: []string{"1", "remove", "back", "back"}, output: &prompt},
+		UI: ui,
 		Load: func() ([]WorktreeItem, error) {
-			return []WorktreeItem{{
-				Repo:        "repo1",
-				Branch:      "main",
-				Status:      "active",
-				Path:        "/tmp/repo1",
-				DisplayPath: "/tmp/repo1",
-				Main:        true,
-			}}, nil
+			return []WorktreeItem{item}, nil
 		},
 		Open: func(WorktreeItem) error { return nil },
 		Remove: func(WorktreeItem) error {
@@ -125,34 +156,39 @@ func TestListFlowDoesNotOfferRemoveForMainWorktree(t *testing.T) {
 	if removeCalls != 0 {
 		t.Fatalf("removeCalls = %d, want 0", removeCalls)
 	}
-	if !strings.Contains(prompt.String(), "Select action [open/back]: ") {
-		t.Fatalf("prompt should omit remove for main worktree:\n%s", prompt.String())
+	if len(ui.actionsSeen) != 2 || ui.actionsSeen[0] != ListActionOpen || ui.actionsSeen[1] != ListActionBack {
+		t.Fatalf("actionsSeen = %v, want [open back]", ui.actionsSeen)
 	}
 }
 
 func TestListFlowRemoveConfirmsAndReloads(t *testing.T) {
-	var prompt bytes.Buffer
+	item := WorktreeItem{
+		Repo:        "repo1",
+		Branch:      "feat/remove-me",
+		Status:      "merged",
+		Path:        "/tmp/repo1@feat-remove-me",
+		DisplayPath: "/tmp/repo1@feat-remove-me",
+	}
+	ui := &fakeListUI{
+		selectedItems: []*WorktreeItem{&item, nil},
+		nextFilter:    "repo1",
+		actions:       []ListAction{ListActionRemove},
+		confirm:       true,
+	}
 	removeCalls := 0
 	flow := ListFlow{
-		Prompt:  &prompt,
-		Session: &scriptedPrompter{inputs: []string{"1", "remove", "yes"}, output: &prompt},
+		UI: ui,
 		Load: func() ([]WorktreeItem, error) {
 			if removeCalls > 0 {
-				return nil, nil
+				return []WorktreeItem{item}, nil
 			}
-			return []WorktreeItem{{
-				Repo:        "repo1",
-				Branch:      "feat/remove-me",
-				Status:      "merged",
-				Path:        "/tmp/repo1@feat-remove-me",
-				DisplayPath: "/tmp/repo1@feat-remove-me",
-			}}, nil
+			return []WorktreeItem{item}, nil
 		},
 		Open: func(WorktreeItem) error { return nil },
-		Remove: func(item WorktreeItem) error {
+		Remove: func(got WorktreeItem) error {
 			removeCalls++
-			if item.Branch != "feat/remove-me" {
-				t.Fatalf("Remove() branch = %q, want feat/remove-me", item.Branch)
+			if got.Branch != item.Branch {
+				t.Fatalf("Remove() branch = %q, want %q", got.Branch, item.Branch)
 			}
 			return nil
 		},
@@ -164,8 +200,8 @@ func TestListFlowRemoveConfirmsAndReloads(t *testing.T) {
 	if removeCalls != 1 {
 		t.Fatalf("removeCalls = %d, want 1", removeCalls)
 	}
-	if !strings.Contains(prompt.String(), "Remove worktree /tmp/repo1@feat-remove-me (branch: feat/remove-me)? [y/N]: ") {
-		t.Fatalf("prompt should include removal preview:\n%s", prompt.String())
+	if ui.selectedFilter != "repo1" {
+		t.Fatalf("selectedFilter = %q, want repo1 after reload", ui.selectedFilter)
 	}
 }
 
@@ -173,5 +209,18 @@ func TestAvailableListActionsDetachedWorktreeAllowsBackOnly(t *testing.T) {
 	actions := AvailableListActions(WorktreeItem{Repo: "repo1", Path: "/tmp/detached"})
 	if len(actions) != 1 || actions[0] != ListActionBack {
 		t.Fatalf("AvailableListActions(detached) = %v, want [back]", actions)
+	}
+}
+
+func TestListFlowReturnsSelectError(t *testing.T) {
+	wantErr := fmt.Errorf("boom")
+	flow := ListFlow{
+		UI: &fakeListUI{selectErr: wantErr},
+		Load: func() ([]WorktreeItem, error) {
+			return []WorktreeItem{{Repo: "repo1", Branch: "main", Path: "/tmp/repo1"}}, nil
+		},
+	}
+	if err := flow.Run(); err != wantErr {
+		t.Fatalf("ListFlow.Run() error = %v, want %v", err, wantErr)
 	}
 }

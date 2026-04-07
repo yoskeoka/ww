@@ -9,6 +9,10 @@ Interactive mode is an orchestration surface, not a separate capability
 surface. Every externally observable action must map to an equivalent standard
 `ww` command.
 
+The implementation direction for this prompt flow is `huh`, matching the parent
+plan and ADR choice for a lightweight grouped-step UI rather than a full-screen
+TUI or ad hoc line prompts.
+
 ## Non-Negotiable Invariant
 
 - Interactive mode must not expose a mutation or path-selection capability that
@@ -65,6 +69,7 @@ The current implementation step defines:
 - shared action and session abstractions for later child flows
 - the `list` child flow
 - placeholder dispatch for `create` and `clean`
+- `huh`-based prompt rendering for the implemented flows
 
 The current implementation step does not implement the actual `create` or
 `clean` interactive subflows yet.
@@ -116,6 +121,12 @@ The list flow must:
 
 The shortened path is a human-oriented display field only. Filtering still uses
 the full absolute path.
+
+The selector UX is keyboard-first:
+
+- arrow keys and `j`/`k` navigate visible options
+- `/` enters in-selector filtering over the visible option labels
+- `q` exits the interactive session
 
 After selecting a worktree, the action menu is:
 
