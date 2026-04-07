@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var heuristicDefaultBranchCandidates = []string{"main", "master"}
+
 // Runner executes git commands by shelling out to the git binary.
 type Runner struct {
 	GitBin string // path to git binary, defaults to "git"
@@ -108,6 +110,25 @@ func (r *Runner) BranchRemote(branch string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// BranchMergeRef returns the merge ref configured for branch, or empty string if
+// the branch has no configured upstream merge target.
+func (r *Runner) BranchMergeRef(branch string) (string, error) {
+	out, err := r.run([]string{"config", "--get", "branch." + branch + ".merge"}, true)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// HasRemote reports whether a remote is configured locally.
+func (r *Runner) HasRemote(remote string) (bool, error) {
+	out, err := r.run([]string{"config", "--get", "remote." + remote + ".url"}, true)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
 }
 
 // RemoteBranchExists reports whether remote/branch exists on the remote.
@@ -221,6 +242,78 @@ func (r *Runner) DefaultBranch() (string, error) {
 	// refs/remotes/origin/main -> origin/main
 	ref := strings.TrimPrefix(out, "refs/remotes/")
 	return ref, nil
+}
+
+// HeuristicDefaultBranch attempts to infer a usable base ref when origin/HEAD
+// is unavailable. It returns the resolved remote ref and true on success.
+func (r *Runner) HeuristicDefaultBranch() (string, bool, error) {
+	hasOrigin, err := r.HasRemote("origin")
+	if err != nil {
+		return "", false, err
+	}
+	if !hasOrigin {
+		return "", false, nil
+	}
+
+	for _, candidate := range heuristicDefaultBranchCandidates {
+		mergeRef := "refs/heads/" + candidate
+		if remote, err := r.BranchRemote(candidate); err != nil {
+			return "", false, err
+		} else if remote == "origin" {
+			merge, err := r.BranchMergeRef(candidate)
+			if err != nil {
+				return "", false, err
+			}
+			if merge == mergeRef {
+				return "origin/" + candidate, true, nil
+			}
+		}
+
+		refs, err := r.run([]string{"config", "--get-regexp", `^branch\..*\.remote$`}, true)
+		if err != nil {
+			return "", false, err
+		}
+		if tracksRemoteBranch(r, refs, "origin", mergeRef) {
+			return "origin/" + candidate, true, nil
+		}
+
+		exists, err := r.RemoteBranchExists("origin", candidate)
+		if err != nil {
+			return "", false, err
+		}
+		if exists {
+			return "origin/" + candidate, true, nil
+		}
+	}
+
+	return "", false, nil
+}
+
+func tracksRemoteBranch(r *Runner, remoteConfig, wantRemote, wantMergeRef string) bool {
+	for _, line := range strings.Split(remoteConfig, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[1] != wantRemote {
+			continue
+		}
+		key := fields[0]
+		branch := strings.TrimPrefix(key, "branch.")
+		branch = strings.TrimSuffix(branch, ".remote")
+		if branch == "" || branch == key {
+			continue
+		}
+		mergeRef, err := r.BranchMergeRef(branch)
+		if err != nil {
+			continue
+		}
+		if mergeRef == wantMergeRef {
+			return true
+		}
+	}
+	return false
 }
 
 // Fetch fetches from origin.

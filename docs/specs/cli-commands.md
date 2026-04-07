@@ -141,7 +141,9 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 | `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
 | `unknown` | Base branch could not be determined; status classification was skipped |
 
-When the base branch cannot be resolved (no `default_base` config and `origin/HEAD` detection fails), all non-main worktrees that have an associated branch receive `unknown` status with a `status_detail` field indicating the reason (e.g., `base-detect-failed`). Worktrees without an associated branch (for example, detached HEAD entries where `branch` is absent from `git worktree list --porcelain`) remain `active`.
+When the base branch is resolved heuristically (for example, by inferring `origin/main` after `origin/HEAD` lookup fails), `ww list` still emits normal `active` / `merged` / `stale` statuses and adds `status_detail=heuristic-base` to every listed worktree entry.
+
+When the base branch cannot be resolved at all (no `default_base` config, `origin/HEAD` detection fails, and heuristic fallback fails), all non-main worktrees that have an associated branch receive `unknown` status with a `status_detail` field indicating the reason (e.g., `base-detect-failed`). Worktrees without an associated branch (for example, detached HEAD entries where `branch` is absent from `git worktree list --porcelain`) remain `active`.
 
 In text output, degraded statuses render as `unknown(<detail>)`. In JSON output, a separate `status_detail` field is emitted.
 
@@ -178,6 +180,12 @@ PATH                                  BRANCH              HEAD     STATUS
 ```json
 {"repo":"repo","path":"/path/to/repo","branch":"main","head":"abc1234","main":true,"status":"active"}
 {"repo":"repo","path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678","status":"unknown","status_detail":"base-detect-failed"}
+```
+
+**Output when base branch is resolved heuristically (JSON):**
+```json
+{"repo":"repo","path":"/path/to/repo","branch":"main","head":"abc1234","main":true,"status":"active","status_detail":"heuristic-base"}
+{"repo":"repo","path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678","status":"merged","status_detail":"heuristic-base"}
 ```
 
 ### `ww remove <branch>`

@@ -107,9 +107,16 @@ Extracts the branch name (e.g., `refs/remotes/origin/main` → `origin/main`).
 
 1. Explicit `default_base` from config (authoritative).
 2. `git symbolic-ref refs/remotes/origin/HEAD` (authoritative).
-3. If neither is available, base detection fails.
+3. Heuristic fallback when `origin/HEAD` is unavailable:
+   - Try `main`, then `master`.
+   - If local `<candidate>` tracks `origin/<candidate>`, use `origin/<candidate>`.
+   - Otherwise, if any local branch tracks `origin/<candidate>`, use `origin/<candidate>`.
+   - Otherwise, if `git ls-remote --heads origin <candidate>` reports the branch exists, use `origin/<candidate>`.
+4. If none succeed, base detection fails.
 
 When base detection fails, `ww list` and `ww clean` degrade gracefully: all worktrees are still listed; the main worktree (and branchless/detached entries) remain `active`, while status classification for non-main branch worktrees is skipped and they receive `unknown(base-detect-failed)` instead of `merged`/`stale`. The `ww create` command still requires a resolvable base and returns an error if detection fails.
+
+When heuristic fallback succeeds, `ww list` and `ww clean` use the resolved base exactly like an authoritative base. Status classification still produces normal `active` / `merged` / `stale` values, and `status_detail=heuristic-base` is attached to each listed worktree entry to show that the base came from the heuristic path rather than `default_base` or `origin/HEAD`.
 
 ### Other
 

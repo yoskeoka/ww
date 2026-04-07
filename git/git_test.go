@@ -185,6 +185,106 @@ func TestBranchRemoteMissingTracking(t *testing.T) {
 	}
 }
 
+func TestBranchMergeRefMissingTracking(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &Runner{Dir: repo}
+
+	mergeRef, err := runner.BranchMergeRef("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mergeRef != "" {
+		t.Fatalf("BranchMergeRef(main) = %q, want empty", mergeRef)
+	}
+}
+
+func TestHeuristicDefaultBranchPrefersLocalMainTrackingOriginMain(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	runner := &Runner{Dir: repo}
+
+	ref, ok, err := runner.HeuristicDefaultBranch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("HeuristicDefaultBranch() = not found, want found")
+	}
+	if ref != "origin/main" {
+		t.Fatalf("HeuristicDefaultBranch() = %q, want %q", ref, "origin/main")
+	}
+}
+
+func TestHeuristicDefaultBranchFindsAnyLocalBranchTrackingOriginMain(t *testing.T) {
+	repo, remote := setupGitRepoWithRemote(t)
+	runner := &Runner{Dir: repo}
+
+	if _, err := runner.Run("checkout", "-b", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("branch", "--set-upstream-to=origin/main", "dev"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("checkout", "--detach"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("branch", "--unset-upstream", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("update-ref", "-d", "refs/remotes/origin/HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("remote", "set-url", "origin", remote); err != nil {
+		t.Fatal(err)
+	}
+
+	ref, ok, err := runner.HeuristicDefaultBranch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("HeuristicDefaultBranch() = not found, want found")
+	}
+	if ref != "origin/main" {
+		t.Fatalf("HeuristicDefaultBranch() = %q, want %q", ref, "origin/main")
+	}
+}
+
+func TestHeuristicDefaultBranchFallsBackToRemoteHeadLookup(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	runner := &Runner{Dir: repo}
+
+	if _, err := runner.Run("branch", "--unset-upstream", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	ref, ok, err := runner.HeuristicDefaultBranch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("HeuristicDefaultBranch() = not found, want found")
+	}
+	if ref != "origin/main" {
+		t.Fatalf("HeuristicDefaultBranch() = %q, want %q", ref, "origin/main")
+	}
+}
+
+func TestHeuristicDefaultBranchNotFound(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &Runner{Dir: repo}
+
+	ref, ok, err := runner.HeuristicDefaultBranch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatalf("HeuristicDefaultBranch() unexpectedly found %q", ref)
+	}
+	if ref != "" {
+		t.Fatalf("HeuristicDefaultBranch() ref = %q, want empty", ref)
+	}
+}
+
 func TestRepoPathHelpersStandaloneRepo(t *testing.T) {
 	repo := setupGitRepo(t)
 	runner := &Runner{Dir: repo}

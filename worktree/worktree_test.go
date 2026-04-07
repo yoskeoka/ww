@@ -301,6 +301,79 @@ func TestListRepoGracefulDegradation(t *testing.T) {
 	}
 }
 
+func TestBaseRefUsesHeuristicWhenOriginHeadMissing(t *testing.T) {
+	repo, runner := setupStatusRepo(t)
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	base, err := mgr.baseRef(runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base.Ref != "origin/main" {
+		t.Fatalf("baseRef().Ref = %q, want %q", base.Ref, "origin/main")
+	}
+	if base.StatusDetail != "heuristic-base" {
+		t.Fatalf("baseRef().StatusDetail = %q, want %q", base.StatusDetail, "heuristic-base")
+	}
+}
+
+func TestListRepoHeuristicStatusDetail(t *testing.T) {
+	repo, runner := setupStatusRepo(t)
+
+	worktrees := map[string]string{
+		"feat/merged":       filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-merged"),
+		"feat/merged-stale": filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-merged-stale"),
+		"feat/stale":        filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-stale"),
+		"feat/local":        filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-local"),
+	}
+	for branch, wtPath := range worktrees {
+		mustGit(t, runner, "worktree", "add", wtPath, branch)
+	}
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	infos, err := mgr.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(infos) == 0 {
+		t.Fatal("expected worktree infos, got none")
+	}
+
+	gotStatus := make(map[string]string)
+	for _, info := range infos {
+		gotStatus[info.Branch] = info.Status
+		if info.StatusDetail != "heuristic-base" {
+			t.Fatalf("worktree %q status_detail = %q, want %q", info.Branch, info.StatusDetail, "heuristic-base")
+		}
+	}
+
+	if gotStatus["main"] != StatusActive {
+		t.Fatalf("main status = %q, want %q", gotStatus["main"], StatusActive)
+	}
+	if gotStatus["feat/merged"] != StatusMerged {
+		t.Fatalf("feat/merged status = %q, want %q", gotStatus["feat/merged"], StatusMerged)
+	}
+	if gotStatus["feat/merged-stale"] != StatusMerged {
+		t.Fatalf("feat/merged-stale status = %q, want %q", gotStatus["feat/merged-stale"], StatusMerged)
+	}
+	if gotStatus["feat/stale"] != StatusStale {
+		t.Fatalf("feat/stale status = %q, want %q", gotStatus["feat/stale"], StatusStale)
+	}
+	if gotStatus["feat/local"] != StatusActive {
+		t.Fatalf("feat/local status = %q, want %q", gotStatus["feat/local"], StatusActive)
+	}
+}
+
 func TestFindByName(t *testing.T) {
 	repo, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -395,6 +468,7 @@ func setupStatusRepo(t *testing.T) (string, *git.Runner) {
 	mustGit(t, runner, "commit", "-m", "feat: merged")
 	mustGit(t, runner, "checkout", "main")
 	mustGit(t, runner, "merge", "--ff-only", "feat/merged")
+	mustGit(t, runner, "push", "origin", "main")
 
 	mustGit(t, runner, "checkout", "-b", "feat/merged-stale")
 	writeStatusFile(t, repo, "merged-stale.txt", "merged stale\n")
@@ -403,6 +477,7 @@ func setupStatusRepo(t *testing.T) (string, *git.Runner) {
 	mustGit(t, runner, "push", "-u", "origin", "feat/merged-stale")
 	mustGit(t, runner, "checkout", "main")
 	mustGit(t, runner, "merge", "--ff-only", "feat/merged-stale")
+	mustGit(t, runner, "push", "origin", "main")
 	mustGit(t, runner, "push", "origin", ":feat/merged-stale")
 
 	mustGit(t, runner, "checkout", "-b", "feat/stale")

@@ -57,11 +57,11 @@ This is an intentional simplification. The candidate list can be extended in the
 
 ## Sub-tasks
 
-- [ ] Update specs for `heuristic-base` status detail
-- [ ] Implement `HeuristicDefaultBranch()` in `git/git.go`
-- [ ] Update `baseRef()` and `listRepo()` to use heuristic resolution
-- [ ] Add unit and integration tests
-- [ ] Verify `--cleanable` and `ww clean` include heuristic-resolved worktrees
+- [x] Update specs for `heuristic-base` status detail
+- [x] Implement `HeuristicDefaultBranch()` in `git/git.go`
+- [x] Update `baseRef()` and `listRepo()` to use heuristic resolution
+- [x] Add unit and integration tests
+- [x] Verify `--cleanable` and `ww clean` include heuristic-resolved worktrees
 
 ## Verification
 
