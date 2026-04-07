@@ -2,7 +2,7 @@
 
 > **Execution**: Use `/execute-task` to implement this plan.
 
-**Parent plan**: `docs/exec-plan/todo/interactive-mode-mvp.md`
+**Parent plan**: `docs/exec-plan/{todo,done}/interactive-mode-mvp.md`
 
 **Depends on:** `020-interactive-mode-contract-and-foundation.md`
 

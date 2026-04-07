@@ -2,7 +2,7 @@
 
 > **Execution**: Use `/execute-task` to implement this plan.
 
-**Parent plan**: `docs/exec-plan/todo/interactive-mode-mvp.md`
+**Parent plan**: `docs/exec-plan/{todo,done}/interactive-mode-mvp.md`
 
 **Objective:** Freeze the Phase 4 interactive-mode MVP contract before feature work begins, then add the shared `ww i` command foundation that later create/list/clean flows can reuse.
 
