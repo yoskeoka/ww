@@ -143,6 +143,23 @@ func TestInteractiveCommandRejectsJSONBeforeTTYCheck(t *testing.T) {
 	}
 }
 
+func TestInteractiveHelpHidesJSONFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+
+	out, err := runWW(t, repo, "i", "--help")
+	if err != nil {
+		t.Fatalf("ww i --help: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "--json") {
+		t.Fatalf("ww i --help should not list --json: %s", out)
+	}
+}
+
 func TestInteractiveCommandFailsWithoutTTY(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")

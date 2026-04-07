@@ -15,6 +15,7 @@ const interactiveJSONMessage = "interactive mode does not support --json; use st
 func interactiveCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" i", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Unsupported in interactive mode; use standard ww commands for machine-readable output")
+	fset.MarkHidden("json")
 
 	return command{
 		name:        "i",
