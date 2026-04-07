@@ -21,9 +21,10 @@ surface. Every externally observable action must map to an equivalent standard
 - Prompt input uses `stdin`.
 - Prompt rendering uses `stderr`.
 - `stdout` is reserved for machine-consumable or path-only results produced by
-  concrete interactive actions such as future `open`.
-- In the foundation step, no successful interactive action writes to `stdout`
-  because `create`, `list`, and `clean` are still placeholders.
+  concrete interactive actions such as `open`.
+- Successful `open` writes exactly one absolute path plus a trailing newline to
+  `stdout` and does not add any surrounding label or decoration.
+- Successful `remove`, `back`, and `quit` actions do not write to `stdout`.
 - `ww i --json` is rejected immediately; interactive mode does not provide JSON
   output.
 
@@ -57,15 +58,16 @@ The MVP top-level action menu is fixed:
 - `clean`
 - `quit`
 
-The foundation step implements:
+The current implementation step defines:
 
 - overview rendering
 - top-level action selection
 - shared action and session abstractions for later child flows
-- placeholder dispatch for `create`, `list`, and `clean`
+- the `list` child flow
+- placeholder dispatch for `create` and `clean`
 
-The foundation step does not implement the actual `create`, `list`, or `clean`
-interactive subflows yet.
+The current implementation step does not implement the actual `create` or
+`clean` interactive subflows yet.
 
 ## Placeholder Dispatch Contract
 
@@ -73,8 +75,6 @@ When the user selects one of the unimplemented flows:
 
 - `create` prints:
   `Interactive create flow is not implemented yet. Use `ww create` for now.`
-- `list` prints:
-  `Interactive list flow is not implemented yet. Use `ww list` for now.`
 - `clean` prints:
   `Interactive clean flow is not implemented yet. Use `ww clean` for now.`
 - After printing the placeholder guidance, the session returns to the
@@ -94,14 +94,65 @@ The shared foundation defines stable action identifiers for the top-level menu:
 Later child plans must reuse these identifiers rather than inventing separate
 string forms for prompts, tests, and dispatch.
 
+## List Flow Contract
+
+Selecting `list` enters a worktree browser built from the same underlying
+workspace/repo status computation used by `ww list`.
+
+The list flow must:
+
+- present worktrees, not repositories
+- support case-insensitive filtering over:
+  - repo name
+  - branch name
+  - status text including any `status_detail`
+  - full absolute path
+- display, for each visible candidate:
+  - repo
+  - branch
+  - status
+  - shortened path
+  - main-worktree marker when applicable
+
+The shortened path is a human-oriented display field only. Filtering still uses
+the full absolute path.
+
+After selecting a worktree, the action menu is:
+
+- `open`
+- `remove` when the selected worktree is not the main worktree
+- `back`
+
+Main worktrees remain selectable in the browser, but interactive mode must
+clearly mark them and must not offer `remove`, matching the non-interactive
+`ww remove` contract.
+
+### `open`
+
+- `open` is equivalent to `ww cd [--repo <repo>] <branch>`.
+- On success, it writes only the selected path plus a trailing newline to
+  `stdout`.
+- All prompts, menus, context, and any human-readable guidance remain on
+  `stderr`.
+- After writing the path, the interactive session exits successfully.
+
+### `remove`
+
+- `remove` is equivalent to `ww remove [--repo <repo>] <branch>`.
+- Before deletion, interactive mode shows a preview naming the selected
+  worktree path and branch.
+- `remove` requires explicit confirmation.
+- On success, human-readable removal output is written to `stderr`, not
+  `stdout`.
+- After a successful removal, the session returns to the list browser so the
+  user can continue browsing remaining worktrees.
+
 ## Future Child-Flow Contracts
 
-The foundation exists so later child plans can implement:
+The remaining child plans can implement:
 
 - `create` as interactive orchestration over `ww create`
-- `list` browsing over `ww list`, with `open` parity to `ww cd` and `remove`
-  parity to `ww remove`
 - `clean` preview/confirmation over `ww clean` / `ww clean --force`
 
-Those child flows must preserve the stream contract from this spec: prompt UI
-on `stderr`, path-only or machine-oriented results on `stdout`.
+Those child flows must preserve the same stream contract from this spec:
+prompt UI on `stderr`, path-only or machine-oriented results on `stdout`.
