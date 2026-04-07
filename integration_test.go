@@ -155,8 +155,20 @@ func TestInteractiveHelpHidesJSONFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ww i --help: %v\n%s", err, out)
 	}
-	if strings.Contains(out, "--json") {
-		t.Fatalf("ww i --help should not list --json: %s", out)
+	if !strings.Contains(out, "Start interactive mode") {
+		t.Fatalf("ww i --help should describe the command: %s", out)
+	}
+	if !strings.Contains(out, "Usage:\n  ww i") {
+		t.Fatalf("ww i --help should include simple usage: %s", out)
+	}
+	if !strings.Contains(out, "requires a TTY on stdin and stderr") {
+		t.Fatalf("ww i --help should mention TTY requirement: %s", out)
+	}
+	if !strings.Contains(out, "--json is not supported; use standard ww commands for machine-readable output") {
+		t.Fatalf("ww i --help should mention json guidance: %s", out)
+	}
+	if strings.Contains(out, "Usage of ww i:") {
+		t.Fatalf("ww i --help should not use default pflag usage output: %s", out)
 	}
 }
 

@@ -16,6 +16,17 @@ func interactiveCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" i", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Unsupported in interactive mode; use standard ww commands for machine-readable output")
 	fset.MarkHidden("json")
+	fset.Usage = func() {
+		out := fset.Output()
+		fmt.Fprintln(out, "Start interactive mode")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Usage:")
+		fmt.Fprintln(out, "  ww i")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Notes:")
+		fmt.Fprintln(out, "  - requires a TTY on stdin and stderr")
+		fmt.Fprintln(out, "  - --json is not supported; use standard ww commands for machine-readable output")
+	}
 
 	return command{
 		name:        "i",
