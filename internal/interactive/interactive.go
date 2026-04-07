@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 const ttyRequirementMessage = "interactive mode requires a TTY on stdin and stderr; use standard ww commands and see ww --help"
@@ -35,11 +37,7 @@ func (StatTTYChecker) IsTerminal(file *os.File) bool {
 	if file == nil {
 		return false
 	}
-	info, err := file.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(int(file.Fd()))
 }
 
 func ValidateTTY(stdin, stderr *os.File, checker TTYChecker) error {

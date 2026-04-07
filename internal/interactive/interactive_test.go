@@ -65,6 +65,19 @@ func TestValidateTTY(t *testing.T) {
 	})
 }
 
+func TestStatTTYCheckerRejectsCharacterDeviceThatIsNotTTY(t *testing.T) {
+	file, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	checker := StatTTYChecker{}
+	if checker.IsTerminal(file) {
+		t.Fatalf("StatTTYChecker should reject %s as non-TTY", os.DevNull)
+	}
+}
+
 func TestPromptOutputUsesStderr(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
