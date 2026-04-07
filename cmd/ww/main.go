@@ -44,6 +44,7 @@ func cliMain() int {
 		cdCmd(),
 		createCmd(),
 		cleanCmd(),
+		interactiveCmd(),
 		listCmd(),
 		removeCmd(),
 		versionCmd(),

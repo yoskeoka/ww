@@ -8,4 +8,5 @@
 | docs/specs/release-versioning.md | cmd/ww/version.go, cmd/ww/sub_version.go, Makefile, .goreleaser.yaml, .github/workflows/release.yml | ./cmd/ww/version_test.go, ./integration_test.go |
 | docs/specs/workspace-discovery.md | workspace/, worktree/, cmd/ww/ | ./workspace/workspace_test.go |
 | docs/specs/shell-integration.md | cmd/ww/, worktree/ | ./integration_test.go |
+| docs/specs/interactive-mode.md | internal/interactive/, cmd/ww/ | ./internal/interactive/interactive_test.go, ./integration_test.go |
 | docs/specs/testing.md | internal/testutil/ | ./integration_test.go |
