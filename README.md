@@ -7,7 +7,8 @@ A fast CLI tool for managing git worktrees across multiple repositories. Where e
 ### Homebrew
 
 ```sh
-brew install yoskeoka/ww/ww
+brew tap yoskeoka/ww
+brew install ww
 ```
 
 ### Go
@@ -35,7 +36,7 @@ ww create feat/my-feature
 # Created worktree at /path/to/repo@feat-my-feature (branch: feat/my-feature)
 ```
 
-This creates a new branch from `origin/HEAD` and sets up a worktree for it. If the branch already exists, it checks out the existing branch.
+This creates a new branch from `default_base` when configured, otherwise from `origin/HEAD`, and sets up a worktree for it. If the branch already exists, it checks out the existing branch.
 
 ### List worktrees
 
