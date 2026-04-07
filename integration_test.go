@@ -103,6 +103,66 @@ func TestVersionCommandJSON(t *testing.T) {
 	}
 }
 
+func TestHelpIncludesInteractiveCommand(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+
+	out, err := runWW(t, repo, "--help")
+	if err != nil {
+		t.Fatalf("ww --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "i             Start interactive mode") {
+		t.Fatalf("help output should list interactive command: %s", out)
+	}
+}
+
+func TestInteractiveCommandRejectsJSONBeforeTTYCheck(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+
+	stdout, stderr, err := runWWSplit(t, repo, "i", "--json")
+	if err == nil {
+		t.Fatal("expected ww i --json to fail")
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("ww i --json should not write stdout, got: %s", stdout)
+	}
+	if !strings.Contains(stderr, "interactive mode does not support --json") {
+		t.Fatalf("ww i --json stderr should mention JSON rejection: %s", stderr)
+	}
+	if strings.Contains(stderr, "requires a TTY") {
+		t.Fatalf("ww i --json should reject before TTY validation: %s", stderr)
+	}
+}
+
+func TestInteractiveCommandFailsWithoutTTY(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+
+	stdout, stderr, err := runWWSplit(t, repo, "i")
+	if err == nil {
+		t.Fatal("expected ww i to fail without TTY")
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("ww i should not write stdout, got: %s", stdout)
+	}
+	if !strings.Contains(stderr, "interactive mode requires a TTY on stdin and stderr") {
+		t.Fatalf("ww i stderr should mention TTY requirement: %s", stderr)
+	}
+}
+
 func TestCreateAndList(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")

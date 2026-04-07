@@ -118,6 +118,80 @@ Print the absolute path of a worktree for shell navigation.
 
 **Exit codes:** 0 on success, 1 on error.
 
+### `ww i`
+
+Start the interactive-mode entry point.
+
+Interactive mode is an alternate human input surface over existing `ww`
+commands. It must not introduce unique executable behavior. Any interactive
+action that changes git state, filesystem state, or selected output must have a
+non-interactive `ww` command equivalent.
+
+**Behavior:**
+1. Reject `--json` immediately with:
+   `interactive mode does not support --json; use standard ww commands for machine-readable output`
+2. Require an interactive terminal for both prompt input and prompt rendering.
+   The foundation implementation uses `stdin` for input and `stderr` for
+   prompts, menus, context, placeholder guidance, and human-readable errors.
+   If either stream is not a TTY, return:
+   `interactive mode requires a TTY on stdin and stderr; use standard ww commands and see ww --help`
+3. Resolve the current repo/workspace context using the same workspace
+   detection and repo resolution rules as the non-interactive CLI. No separate
+   workspace model exists for `ww i`.
+4. Render an overview screen before prompting for an action. The overview
+   includes:
+   - detected mode: `single-repo` or `workspace`
+   - current repo root or workspace root
+   - repo list when in workspace mode
+5. Prompt for one top-level action. The fixed MVP action set is:
+   - `create`
+   - `list`
+   - `clean`
+   - `quit`
+6. Top-level dispatch behavior in this foundation step:
+   - `quit`: exit successfully without writing to `stdout`
+   - `create`: print placeholder guidance to `stderr` and keep the session in
+     the top-level menu
+   - `list`: print placeholder guidance to `stderr` and keep the session in the
+     top-level menu
+   - `clean`: print placeholder guidance to `stderr` and keep the session in
+     the top-level menu
+
+**Parity rule:**
+- `create` flow mutations must remain expressible as
+  `ww create [--repo <repo>] <branch>`
+- `list` flow data must remain expressible as `ww list` / `ww list --cleanable`
+- `open` from interactive list flow must remain expressible as
+  `ww cd [--repo <repo>] <branch>`
+- `remove` from interactive list flow must remain expressible as
+  `ww remove [--repo <repo>] <branch>`
+- `clean` flow mutations must remain expressible as `ww clean` or
+  `ww clean --force`
+
+**Flags:**
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | bool | false | Rejected. Interactive mode must direct machine-readable use cases to standard non-interactive commands |
+
+**Output (stderr):**
+```text
+Interactive mode
+Mode: workspace
+Root: /path/to/workspace
+Repos:
+  - repo1
+  - repo2
+
+Select action [create/list/clean/quit]:
+```
+
+**Placeholder flow output (stderr):**
+```text
+Interactive create flow is not implemented yet. Use `ww create` for now.
+```
+
+**Exit codes:** 0 on successful quit/help, 1 on invalid flags, TTY precondition failures, or other errors.
+
 ### `ww list`
 
 List all worktrees for the current repository, including the main working tree.
