@@ -141,11 +141,11 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 | `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
 | `unknown` | Base branch could not be determined; status classification was skipped |
 
-When the base branch is resolved heuristically (for example, by inferring `origin/main` after `origin/HEAD` lookup fails), `ww list` still emits normal `active` / `merged` / `stale` statuses and adds `status_detail=heuristic-base` to every listed worktree entry.
+When the base branch is resolved heuristically (for example, by inferring `origin/main` after `origin/HEAD` lookup fails), `ww list` still emits normal `active` / `merged` / `stale` statuses. In text output, those render as `active(heuristic-base)`, `merged(heuristic-base)`, or `stale(heuristic-base)`. In JSON output, the `status` value remains `active`, `merged`, or `stale`, and `status_detail=heuristic-base` is emitted separately for every listed worktree entry.
 
 When the base branch cannot be resolved at all (no `default_base` config, `origin/HEAD` detection fails, and heuristic fallback fails), all non-main worktrees that have an associated branch receive `unknown` status with a `status_detail` field indicating the reason (e.g., `base-detect-failed`). Worktrees without an associated branch (for example, detached HEAD entries where `branch` is absent from `git worktree list --porcelain`) remain `active`.
 
-In text output, degraded statuses render as `unknown(<detail>)`. In JSON output, a separate `status_detail` field is emitted.
+In text output, any non-empty `status_detail` renders as `<status>(<detail>)`. In JSON output, `status` and `status_detail` are emitted as separate fields.
 
 `--cleanable` and `ww clean` only act on `merged` and `stale` worktrees. `unknown` worktrees are never eligible for cleanup.
 
@@ -186,6 +186,13 @@ PATH                                  BRANCH              HEAD     STATUS
 ```json
 {"repo":"repo","path":"/path/to/repo","branch":"main","head":"abc1234","main":true,"status":"active","status_detail":"heuristic-base"}
 {"repo":"repo","path":"/path/to/repo@feat-auth","branch":"feat/auth","head":"def5678","status":"merged","status_detail":"heuristic-base"}
+```
+
+**Output when base branch is resolved heuristically (text):**
+```text
+PATH                                  BRANCH              HEAD     STATUS
+/path/to/repo (main worktree)        main                abc1234  active(heuristic-base)
+/path/to/repo@feat-auth              feat/auth           def5678  merged(heuristic-base)
 ```
 
 ### `ww remove <branch>`
