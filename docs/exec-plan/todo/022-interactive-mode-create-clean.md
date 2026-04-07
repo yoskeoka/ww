@@ -47,7 +47,7 @@ If the interactive flow starts requiring parameters or behaviors not expressible
 | File | Change |
 |------|--------|
 | `cmd/ww/sub_interactive.go` | Wire `create` and `clean` actions into the shared interactive session |
-| `internal/interactive/` | Add create-flow controller, clean-flow controller, preview builders, and confirmation helpers |
+| `internal/interactive/` | Extend the shared `huh`-based prompt session with create-flow controller, clean-flow controller, preview builders, and confirmation helpers |
 | `integration_test.go` | Add interactive-mode tests for create/clean behavior where feasible |
 
 ## Design Notes
@@ -56,6 +56,8 @@ If the interactive flow starts requiring parameters or behaviors not expressible
 - `clean` summary is a UX layer over the existing cleanability computation. Do not introduce a second cleanability algorithm.
 - Force-vs-safe clean choice must map directly onto `ww clean` vs `ww clean --force`.
 - Workspace mode should preserve repo-wide visibility by showing zero-count repos in the clean summary.
+- Use the same `huh`-based prompt surface chosen by the parent plan and ADR, rather than introducing a second interactive UI style for `create`/`clean`.
+- Reuse the shared `huh` keymap and grouped-step flow style so arrows / `j` / `k` navigation, `q` to quit, and confirmation behavior remain consistent across interactive mode.
 
 ## Sub-tasks
 
