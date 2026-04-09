@@ -83,10 +83,6 @@ type Session interface {
 	SelectAction() (Action, error)
 }
 
-type Prompter interface {
-	ReadLine(prompt string) (string, error)
-}
-
 type LineSession struct {
 	in     *bufio.Reader
 	output io.Writer
