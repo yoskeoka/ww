@@ -25,6 +25,11 @@ type CleanTarget struct {
 	Path   string
 }
 
+type CleanSnapshot struct {
+	Targets []CleanTarget
+	State   any
+}
+
 type CleanPrompter interface {
 	SelectCleanMode(summary []CleanSummary) (CleanMode, error)
 	ConfirmClean(mode CleanMode, targets []CleanTarget) (bool, error)
@@ -34,15 +39,16 @@ type CleanFlow struct {
 	UI        CleanPrompter
 	Output    io.Writer
 	RepoNames []string
-	Load      func() ([]CleanTarget, error)
-	Execute   func(mode CleanMode) error
+	Load      func() (CleanSnapshot, error)
+	Execute   func(mode CleanMode, snapshot CleanSnapshot) error
 }
 
 func (f CleanFlow) Run() error {
-	targets, err := f.Load()
+	snapshot, err := f.Load()
 	if err != nil {
 		return err
 	}
+	targets := snapshot.Targets
 	if len(targets) == 0 {
 		_, err := fmt.Fprintln(f.Output, "No cleanable worktrees found.")
 		return err
@@ -61,7 +67,7 @@ func (f CleanFlow) Run() error {
 		return nil
 	}
 
-	return f.Execute(mode)
+	return f.Execute(mode, snapshot)
 }
 
 func BuildCleanSummary(repoNames []string, targets []CleanTarget) []CleanSummary {

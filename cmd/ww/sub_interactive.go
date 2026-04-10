@@ -100,13 +100,13 @@ func interactiveCmd() command {
 					UI:        ui,
 					Output:    prompt,
 					RepoNames: interactiveRepoNames(mgr),
-					Load: func() ([]interactive.CleanTarget, error) {
-						return interactiveCleanTargets(mgr)
+					Load: func() (interactive.CleanSnapshot, error) {
+						return interactiveCleanSnapshot(mgr)
 					},
-					Execute: func(mode interactive.CleanMode) error {
-						infos, err := listCleanableWorktrees(mgr)
-						if err != nil {
-							return err
+					Execute: func(mode interactive.CleanMode, snapshot interactive.CleanSnapshot) error {
+						infos, ok := snapshot.State.([]worktree.WorktreeInfo)
+						if !ok {
+							return fmt.Errorf("invalid clean snapshot state %T", snapshot.State)
 						}
 						return executeCleanWorktrees(mgr, infos, &globalOpts{
 							output:    prompt,
@@ -270,10 +270,10 @@ func interactiveRepoManager(baseMgr *worktree.Manager, repoName string) (*worktr
 	return managerForRepo(baseMgr, repoName)
 }
 
-func interactiveCleanTargets(mgr *worktree.Manager) ([]interactive.CleanTarget, error) {
+func interactiveCleanSnapshot(mgr *worktree.Manager) (interactive.CleanSnapshot, error) {
 	infos, err := listCleanableWorktrees(mgr)
 	if err != nil {
-		return nil, err
+		return interactive.CleanSnapshot{}, err
 	}
 
 	targets := make([]interactive.CleanTarget, 0, len(infos))
@@ -285,5 +285,8 @@ func interactiveCleanTargets(mgr *worktree.Manager) ([]interactive.CleanTarget, 
 			Path:   info.Path,
 		})
 	}
-	return targets, nil
+	return interactive.CleanSnapshot{
+		Targets: targets,
+		State:   infos,
+	}, nil
 }

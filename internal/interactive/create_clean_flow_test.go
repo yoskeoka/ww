@@ -163,10 +163,10 @@ func TestCleanFlowNoTargetsPrintsMessage(t *testing.T) {
 		UI:        ui,
 		Output:    &output,
 		RepoNames: []string{"repo1"},
-		Load: func() ([]CleanTarget, error) {
-			return nil, nil
+		Load: func() (CleanSnapshot, error) {
+			return CleanSnapshot{}, nil
 		},
-		Execute: func(mode CleanMode) error {
+		Execute: func(mode CleanMode, snapshot CleanSnapshot) error {
 			t.Fatal("Execute should not be called with no targets")
 			return nil
 		},
@@ -193,13 +193,19 @@ func TestCleanFlowForceModeExecutesAfterConfirmation(t *testing.T) {
 		UI:        ui,
 		Output:    &bytes.Buffer{},
 		RepoNames: []string{"repo1", "repo2"},
-		Load: func() ([]CleanTarget, error) {
-			return targets, nil
+		Load: func() (CleanSnapshot, error) {
+			return CleanSnapshot{
+				Targets: targets,
+				State:   "confirmed-snapshot",
+			}, nil
 		},
-		Execute: func(mode CleanMode) error {
+		Execute: func(mode CleanMode, snapshot CleanSnapshot) error {
 			execCalls++
 			if mode != CleanModeForce {
 				t.Fatalf("Execute mode = %q, want force", mode)
+			}
+			if snapshot.State != "confirmed-snapshot" {
+				t.Fatalf("snapshot.State = %#v, want confirmed-snapshot", snapshot.State)
 			}
 			return nil
 		},
@@ -216,5 +222,17 @@ func TestCleanFlowForceModeExecutesAfterConfirmation(t *testing.T) {
 	}
 	if len(ui.targetsSeen) != 1 || ui.targetsSeen[0].Branch != "feat/merged" {
 		t.Fatalf("targetsSeen = %+v, want feat/merged target", ui.targetsSeen)
+	}
+}
+
+func TestValidateInteractiveBranch(t *testing.T) {
+	if err := validateInteractiveBranch(" feat/valid "); err != nil {
+		t.Fatalf("validateInteractiveBranch(valid) error = %v", err)
+	}
+	if err := validateInteractiveBranch(" "); err == nil {
+		t.Fatal("validateInteractiveBranch(empty) should fail")
+	}
+	if err := validateInteractiveBranch("bad branch"); err == nil {
+		t.Fatal("validateInteractiveBranch(space) should fail")
 	}
 }

@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
+
+	"github.com/yoskeoka/ww/validate"
 )
 
 const (
@@ -155,7 +157,8 @@ func (ui *HuhListUI) InputCreateBranch(repo string) (string, error) {
 		huh.NewInput().
 			Title(title).
 			Description(description).
-			Value(&branch),
+			Value(&branch).
+			Validate(validateInteractiveBranch),
 	)
 	if err != nil {
 		return "", err
@@ -317,4 +320,8 @@ func formatActionList(label string, values []string) string {
 		return label + ": none"
 	}
 	return fmt.Sprintf("%s: %s", label, strings.Join(values, ", "))
+}
+
+func validateInteractiveBranch(branch string) error {
+	return validate.BranchName(strings.TrimSpace(branch))
 }
