@@ -27,7 +27,7 @@ call `submit_pr_review`. Because the instructions did not mention calling
 
 ## Fix
 
-Updated `impl-review.md` and `plan-review.md` with:
+Updated `impl-review.md`, `plan-review.md`, and `spec-code-sync.md` with:
 
 1. An explicit note that **zero output is not acceptable** — the agent must
    call either `submit_pr_review` or `noop`.
@@ -39,5 +39,6 @@ Updated `impl-review.md` and `plan-review.md` with:
 
 ## Related
 
-- Issue #116: the automatically filed workflow failure issue that triggered this fix
-- PR #114: the implementation PR where the workflow failure occurred
+- Issue #116: the automatically filed workflow failure issue that triggered this fix (impl-review)
+- PR #114: the implementation PR where the impl-review workflow failure occurred
+- PR #85: the PR where the spec-code-sync workflow failure occurred (filed as issue #118)
