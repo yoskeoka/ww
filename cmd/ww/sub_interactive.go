@@ -131,10 +131,11 @@ func worktreeItems(infos []worktree.WorktreeInfo) []interactive.WorktreeItem {
 
 func shortenInteractivePath(path string) string {
 	const maxLen = 48
-	if len(path) <= maxLen {
+	runes := []rune(path)
+	if len(runes) <= maxLen {
 		return path
 	}
-	return path[:22] + "..." + path[len(path)-23:]
+	return string(runes[:22]) + "..." + string(runes[len(runes)-23:])
 }
 
 func writeInteractiveRemoveResult(w io.Writer, result *worktree.RemoveResult) error {
