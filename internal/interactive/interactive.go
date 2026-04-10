@@ -2,6 +2,7 @@ package interactive
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -94,13 +95,21 @@ func NewLineSession(in io.Reader, output io.Writer) *LineSession {
 	}
 }
 
+func (s *LineSession) ReadLine(prompt string) (string, error) {
+	if _, err := fmt.Fprint(s.output, prompt); err != nil {
+		return "", err
+	}
+
+	line, err := s.in.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
 func (s *LineSession) SelectAction() (Action, error) {
 	for {
-		if _, err := fmt.Fprint(s.output, "Select action [create/list/clean/quit]: "); err != nil {
-			return "", err
-		}
-
-		line, err := s.in.ReadString('\n')
+		line, err := s.ReadLine("Select action [create/list/clean/quit]: ")
 		if err != nil {
 			return "", err
 		}
@@ -121,6 +130,8 @@ func (s *LineSession) SelectAction() (Action, error) {
 		}
 	}
 }
+
+var ErrSessionComplete = errors.New("interactive session complete")
 
 type Flows interface {
 	Create() error
@@ -167,14 +178,23 @@ func (r Runner) Run(overview Overview) error {
 		switch action {
 		case ActionCreate:
 			if err := r.Flows.Create(); err != nil {
+				if errors.Is(err, ErrSessionComplete) {
+					return nil
+				}
 				return err
 			}
 		case ActionList:
 			if err := r.Flows.List(); err != nil {
+				if errors.Is(err, ErrSessionComplete) {
+					return nil
+				}
 				return err
 			}
 		case ActionClean:
 			if err := r.Flows.Clean(); err != nil {
+				if errors.Is(err, ErrSessionComplete) {
+					return nil
+				}
 				return err
 			}
 		case ActionQuit:

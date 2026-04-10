@@ -148,14 +148,35 @@ non-interactive `ww` command equivalent.
    - `list`
    - `clean`
    - `quit`
-6. Top-level dispatch behavior in this foundation step:
+6. Top-level dispatch behavior:
    - `quit`: exit successfully without writing to `stdout`
    - `create`: print placeholder guidance to `stderr` and keep the session in
      the top-level menu
-   - `list`: print placeholder guidance to `stderr` and keep the session in the
-     top-level menu
+   - `list`: enter the interactive worktree browser
    - `clean`: print placeholder guidance to `stderr` and keep the session in
      the top-level menu
+7. `list` flow behavior:
+   - build candidates from the same worktree/status data source used by
+     `ww list`
+   - show worktrees, not repos, and render each candidate with repo, branch,
+     status, shortened path, and a main-worktree marker when applicable
+   - support case-insensitive filtering across repo, branch, status text, and
+     full path
+   - use keyboard-first prompt controls; at minimum arrow keys / `j` / `k`
+     navigate the selector and `q` exits the interactive session
+   - after selection, offer `open`, `remove`, or `back`
+   - for main worktrees, omit `remove` and allow only `open` or `back`
+8. `open` behavior:
+   - equivalent to `ww cd [--repo <repo>] <branch>`
+   - print exactly the selected absolute path plus a trailing newline to
+     `stdout`
+   - keep prompts, menus, and other human-readable context on `stderr`
+   - exit successfully immediately after printing the path
+9. `remove` behavior:
+   - equivalent to `ww remove [--repo <repo>] <branch>`
+   - show a preview and require confirmation before deletion
+   - on success, print human-readable removal output to `stderr`
+   - after a successful deletion, return to the interactive list browser
 
 **Parity rule:**
 - `create` flow mutations must remain expressible as
@@ -185,9 +206,14 @@ Repos:
 Select action [create/list/clean/quit]:
 ```
 
-**Placeholder flow output (stderr):**
+**Create placeholder flow output (stderr):**
 ```text
 Interactive create flow is not implemented yet. Use `ww create` for now.
+```
+
+**List flow path result (stdout):**
+```text
+/path/to/workspace/.worktrees/repo@feat-branch
 ```
 
 **Exit codes:** 0 on successful quit/help, 1 on invalid flags, TTY precondition failures, or other errors.
