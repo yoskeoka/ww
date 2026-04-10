@@ -68,22 +68,9 @@ The current implementation step defines:
 - top-level action selection
 - shared action and session abstractions for later child flows
 - the `list` child flow
-- placeholder dispatch for `create` and `clean`
+- the `create` child flow
+- the `clean` child flow
 - `huh`-based prompt rendering for the implemented flows
-
-The current implementation step does not implement the actual `create` or
-`clean` interactive subflows yet.
-
-## Placeholder Dispatch Contract
-
-When the user selects one of the unimplemented flows:
-
-- `create` prints:
-  `Interactive create flow is not implemented yet. Use `ww create` for now.`
-- `clean` prints:
-  `Interactive clean flow is not implemented yet. Use `ww clean` for now.`
-- After printing the placeholder guidance, the session returns to the
-  top-level menu instead of exiting immediately.
 
 Selecting `quit` exits successfully without writing to `stdout`.
 
@@ -98,6 +85,41 @@ The shared foundation defines stable action identifiers for the top-level menu:
 
 Later child plans must reuse these identifiers rather than inventing separate
 string forms for prompts, tests, and dispatch.
+
+## Create Flow Contract
+
+Selecting `create` enters a guided flow that remains a thin orchestration layer
+over `ww create [--repo <repo>] <branch>`.
+
+The create flow must:
+
+- in workspace mode, prompt for one repo from the detected workspace repo set
+- in single-repo mode, skip repo selection and use the current repo context
+- prompt for the target branch name
+- build the preview only from data already derivable from the existing create
+  path and config
+- require explicit confirmation before execution
+
+The preview must show:
+
+- selected repo when in workspace mode
+- target branch
+- target worktree path
+- whether the branch already exists or will be created from a base branch
+- the effective base branch when a new branch will be created
+- configured copy actions
+- configured symlink actions
+- configured post-create hook when present
+
+On success:
+
+- execute through the same business logic path as `ww create`
+- write the same human-readable success line to `stderr` that the default
+  non-interactive `ww create` writes to `stdout`
+- return to the top-level action menu instead of exiting the whole session
+
+If the user declines confirmation, the session returns to the top-level menu
+without mutating git state or the filesystem.
 
 ## List Flow Contract
 
@@ -158,12 +180,46 @@ clearly mark them and must not offer `remove`, matching the non-interactive
 - After a successful removal, the session returns to the list browser so the
   user can continue browsing remaining worktrees.
 
-## Future Child-Flow Contracts
+## Clean Flow Contract
 
-The remaining child plans can implement:
+Selecting `clean` enters a guided flow that remains a UX layer over the same
+cleanability computation used by `ww list --cleanable` and `ww clean`.
 
-- `create` as interactive orchestration over `ww create`
-- `clean` preview/confirmation over `ww clean` / `ww clean --force`
+The clean flow must:
+
+- build candidates from the same underlying status computation used by
+  `ww list`
+- treat only `merged` and `stale` worktrees as cleanable
+- show a repo-first summary before asking for execution mode
+- preserve zero-count repos in workspace mode so the user keeps repo-wide
+  visibility
+- offer exactly two execution choices:
+  - safe clean, equivalent to `ww clean`
+  - forced clean, equivalent to `ww clean --force`
+- show the detailed clean target list before final confirmation
+- require explicit confirmation before execution
+
+The summary must show, per repo:
+
+- repo name
+- count of cleanable worktrees
+
+The detailed confirmation view must show, for each clean target:
+
+- repo
+- branch
+- status
+- absolute path
+
+On success:
+
+- execute through the same business logic path as `ww clean` / `ww clean --force`
+- write human-readable removal results to `stderr`
+- return to the top-level action menu instead of exiting the whole session
+
+If no cleanable worktrees exist, interactive mode prints a short human-readable
+message on `stderr` and returns to the top-level menu without asking for safe
+vs forced execution.
 
 Those child flows must preserve the same stream contract from this spec:
 prompt UI on `stderr`, path-only or machine-oriented results on `stdout`.

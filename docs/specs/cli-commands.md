@@ -150,11 +150,9 @@ non-interactive `ww` command equivalent.
    - `quit`
 6. Top-level dispatch behavior:
    - `quit`: exit successfully without writing to `stdout`
-   - `create`: print placeholder guidance to `stderr` and keep the session in
-     the top-level menu
+   - `create`: enter the interactive create flow
    - `list`: enter the interactive worktree browser
-   - `clean`: print placeholder guidance to `stderr` and keep the session in
-     the top-level menu
+   - `clean`: enter the interactive clean flow
 7. `list` flow behavior:
    - build candidates from the same worktree/status data source used by
      `ww list`
@@ -177,6 +175,30 @@ non-interactive `ww` command equivalent.
    - show a preview and require confirmation before deletion
    - on success, print human-readable removal output to `stderr`
    - after a successful deletion, return to the interactive list browser
+10. `create` flow behavior:
+   - remain expressible as `ww create [--repo <repo>] <branch>`
+   - in workspace mode, prompt for a repo before prompting for branch
+   - in single-repo mode, skip repo selection
+   - show a pre-execution preview containing repo context when relevant,
+     branch, target path, branch/base behavior, copy actions, symlink actions,
+     and configured hook information
+   - require explicit confirmation before execution
+   - on success, print the same human-readable success line as default
+     `ww create` to `stderr`
+   - after success or cancellation, return to the top-level action menu
+11. `clean` flow behavior:
+   - derive cleanable targets from the same status computation used by
+     `ww list --cleanable`
+   - in workspace mode, show a repo summary that includes repos with zero
+     cleanable worktrees
+   - offer exactly two execution choices mapping directly to `ww clean` and
+     `ww clean --force`
+   - show the detailed clean target list before final confirmation
+   - require explicit confirmation before execution
+   - on success, print human-readable removal output to `stderr`
+   - if no cleanable worktrees exist, print a short message to `stderr` and
+     return to the top-level menu without prompting for execution mode
+   - after success or cancellation, return to the top-level action menu
 
 **Parity rule:**
 - `create` flow mutations must remain expressible as
@@ -206,9 +228,14 @@ Repos:
 Select action [create/list/clean/quit]:
 ```
 
-**Create placeholder flow output (stderr):**
+**Create success output (stderr):**
 ```text
-Interactive create flow is not implemented yet. Use `ww create` for now.
+Created worktree at /path/to/workspace/.worktrees/repo1@feat-branch (branch: feat/branch)
+```
+
+**Clean no-op output (stderr):**
+```text
+No cleanable worktrees found.
 ```
 
 **List flow path result (stdout):**

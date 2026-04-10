@@ -42,98 +42,109 @@ func cleanCmd() command {
 				return err
 			}
 
-			infos, err := mgr.List()
+			infos, err := listCleanableWorktrees(mgr)
 			if err != nil {
 				return err
 			}
-			infos = filterCleanableWorktrees(infos)
 			if len(infos) == 0 {
 				return nil
 			}
 
-			var failures []string
-			for _, info := range infos {
-				repoMgr, err := managerForRepo(mgr, info.Repo)
-				if err != nil {
-					failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
-					if glOpts.json {
-						if outErr := outputJSON(glOpts.output, cleanResult{
-							Repo:   info.Repo,
-							Path:   info.Path,
-							Branch: info.Branch,
-							Status: info.Status,
-							Error:  err.Error(),
-						}); outErr != nil {
-							return outErr
-						}
-					} else {
-						fmt.Fprintf(glOpts.output, "Failed to clean %s at %s: %v\n", info.Branch, info.Path, err)
-					}
-					continue
-				}
-
-				result, dryLog, err := repoMgr.Remove(info.Branch, worktree.RemoveOpts{
-					Force:  *force,
-					DryRun: glOpts.dryRun,
-				})
-				if err != nil {
-					failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
-					if glOpts.json {
-						if outErr := outputJSON(glOpts.output, cleanResult{
-							Repo:   info.Repo,
-							Path:   info.Path,
-							Branch: info.Branch,
-							Status: info.Status,
-							Error:  err.Error(),
-						}); outErr != nil {
-							return outErr
-						}
-					} else {
-						fmt.Fprintf(glOpts.output, "Failed to clean %s at %s: %v\n", info.Branch, info.Path, err)
-					}
-					continue
-				}
-
-				if glOpts.json {
-					out := cleanResult{
-						Repo:          info.Repo,
-						Path:          result.Path,
-						Branch:        result.Branch,
-						Status:        info.Status,
-						Removed:       result.Removed,
-						BranchDeleted: result.BranchDeleted,
-						BranchError:   result.BranchError,
-					}
-					if glOpts.dryRun {
-						out.Removed = false
-						out.BranchDeleted = false
-						out.BranchError = ""
-					}
-					if err := outputJSON(glOpts.output, out); err != nil {
-						return err
-					}
-					continue
-				}
-
-				if glOpts.dryRun {
-					for _, line := range dryLog {
-						fmt.Fprintln(glOpts.output, line)
-					}
-					continue
-				}
-
-				fmt.Fprintf(glOpts.output, "Removed worktree at %s\n", result.Path)
-				if result.BranchDeleted {
-					fmt.Fprintf(glOpts.output, "Deleted branch %s\n", result.Branch)
-				} else if result.BranchError != "" {
-					fmt.Fprintf(glOpts.errOutput, "warning: could not delete branch %s: %s\n", result.Branch, result.BranchError)
-				}
-			}
-
-			if len(failures) > 0 {
-				return fmt.Errorf("one or more worktrees failed to clean: %s", strings.Join(failures, "; "))
-			}
-			return nil
+			return executeCleanWorktrees(mgr, infos, glOpts, *force)
 		},
 	}
+}
+
+func listCleanableWorktrees(mgr *worktree.Manager) ([]worktree.WorktreeInfo, error) {
+	infos, err := mgr.List()
+	if err != nil {
+		return nil, err
+	}
+	return filterCleanableWorktrees(infos), nil
+}
+
+func executeCleanWorktrees(mgr *worktree.Manager, infos []worktree.WorktreeInfo, glOpts *globalOpts, force bool) error {
+	var failures []string
+	for _, info := range infos {
+		repoMgr, err := managerForRepo(mgr, info.Repo)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
+			if glOpts.json {
+				if outErr := outputJSON(glOpts.output, cleanResult{
+					Repo:   info.Repo,
+					Path:   info.Path,
+					Branch: info.Branch,
+					Status: info.Status,
+					Error:  err.Error(),
+				}); outErr != nil {
+					return outErr
+				}
+			} else {
+				fmt.Fprintf(glOpts.output, "Failed to clean %s at %s: %v\n", info.Branch, info.Path, err)
+			}
+			continue
+		}
+
+		result, dryLog, err := repoMgr.Remove(info.Branch, worktree.RemoveOpts{
+			Force:  force,
+			DryRun: glOpts.dryRun,
+		})
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
+			if glOpts.json {
+				if outErr := outputJSON(glOpts.output, cleanResult{
+					Repo:   info.Repo,
+					Path:   info.Path,
+					Branch: info.Branch,
+					Status: info.Status,
+					Error:  err.Error(),
+				}); outErr != nil {
+					return outErr
+				}
+			} else {
+				fmt.Fprintf(glOpts.output, "Failed to clean %s at %s: %v\n", info.Branch, info.Path, err)
+			}
+			continue
+		}
+
+		if glOpts.json {
+			out := cleanResult{
+				Repo:          info.Repo,
+				Path:          result.Path,
+				Branch:        result.Branch,
+				Status:        info.Status,
+				Removed:       result.Removed,
+				BranchDeleted: result.BranchDeleted,
+				BranchError:   result.BranchError,
+			}
+			if glOpts.dryRun {
+				out.Removed = false
+				out.BranchDeleted = false
+				out.BranchError = ""
+			}
+			if err := outputJSON(glOpts.output, out); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if glOpts.dryRun {
+			for _, line := range dryLog {
+				fmt.Fprintln(glOpts.output, line)
+			}
+			continue
+		}
+
+		fmt.Fprintf(glOpts.output, "Removed worktree at %s\n", result.Path)
+		if result.BranchDeleted {
+			fmt.Fprintf(glOpts.output, "Deleted branch %s\n", result.Branch)
+		} else if result.BranchError != "" {
+			fmt.Fprintf(glOpts.errOutput, "warning: could not delete branch %s: %s\n", result.Branch, result.BranchError)
+		}
+	}
+
+	if len(failures) > 0 {
+		return fmt.Errorf("one or more worktrees failed to clean: %s", strings.Join(failures, "; "))
+	}
+	return nil
 }

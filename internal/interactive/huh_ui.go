@@ -3,6 +3,7 @@ package interactive
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -29,9 +30,9 @@ func (s *HuhSession) SelectAction() (Action, error) {
 			Title("Select action").
 			Description("Use arrows or j/k to move, enter to confirm, q to quit.").
 			Options(
-				huh.NewOption("create (planned)", ActionCreate),
+				huh.NewOption("create", ActionCreate),
 				huh.NewOption("list", ActionList),
-				huh.NewOption("clean (planned)", ActionClean),
+				huh.NewOption("clean", ActionClean),
 				huh.NewOption("quit", ActionQuit),
 			).
 			Value(&action).
@@ -123,6 +124,96 @@ func (ui *HuhListUI) ConfirmRemove(item WorktreeItem) (bool, error) {
 	return confirmed, nil
 }
 
+func (ui *HuhListUI) SelectCreateRepo(repos []RepoOption) (string, error) {
+	var repo string
+	options := make([]huh.Option[string], 0, len(repos))
+	for _, candidate := range repos {
+		options = append(options, huh.NewOption(candidate.Name, candidate.Name))
+	}
+	err := runHuhForm(ui.Input, ui.Output,
+		huh.NewSelect[string]().
+			Title("Select repo").
+			Description("Choose the repo for `ww create`. Use arrows or j/k to move, enter to confirm, q to quit.").
+			Options(options...).
+			Value(&repo).
+			Height(min(10, len(options))),
+	)
+	if err != nil {
+		return "", err
+	}
+	return repo, nil
+}
+
+func (ui *HuhListUI) InputCreateBranch(repo string) (string, error) {
+	var branch string
+	title := "Branch name"
+	description := "Enter the branch to create or open with `ww create` parity."
+	if repo != "" {
+		description = fmt.Sprintf("Repo: %s. Enter the branch to create or open with `ww create --repo %s` parity.", repo, repo)
+	}
+	err := runHuhForm(ui.Input, ui.Output,
+		huh.NewInput().
+			Title(title).
+			Description(description).
+			Value(&branch),
+	)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(branch), nil
+}
+
+func (ui *HuhListUI) ConfirmCreate(preview CreatePreview) (bool, error) {
+	confirmed := false
+	err := runHuhForm(ui.Input, ui.Output,
+		huh.NewConfirm().
+			Title("Create worktree?").
+			Description(formatCreatePreview(preview)).
+			Affirmative("Create").
+			Negative("Cancel").
+			Value(&confirmed),
+	)
+	if err != nil {
+		return false, err
+	}
+	return confirmed, nil
+}
+
+func (ui *HuhListUI) SelectCleanMode(summary []CleanSummary) (CleanMode, error) {
+	var mode CleanMode
+	err := runHuhForm(ui.Input, ui.Output,
+		huh.NewSelect[CleanMode]().
+			Title("Clean mode").
+			Description(formatCleanSummary(summary)).
+			Options(
+				huh.NewOption("safe (`ww clean`)", CleanModeSafe),
+				huh.NewOption("force (`ww clean --force`)", CleanModeForce),
+			).
+			Value(&mode).
+			Height(2),
+	)
+	if err != nil {
+		return "", err
+	}
+	return mode, nil
+}
+
+func (ui *HuhListUI) ConfirmClean(mode CleanMode, targets []CleanTarget) (bool, error) {
+	confirmed := false
+	err := runHuhForm(ui.Input, ui.Output,
+		huh.NewConfirm().
+			Title(fmt.Sprintf("Run %s clean?", mode)).
+			Description(formatCleanConfirmation(mode, targets)).
+			Affirmative("Run").
+			Negative("Cancel").
+			Value(&confirmed),
+	)
+	if err != nil {
+		return false, err
+	}
+	return confirmed, nil
+}
+
 func runHuhForm(input io.Reader, output io.Writer, fields ...huh.Field) error {
 	groupFields := make([]huh.Field, 0, len(fields))
 	groupFields = append(groupFields, fields...)
@@ -179,4 +270,51 @@ func listActionLabel(action ListAction) string {
 	default:
 		return string(action)
 	}
+}
+
+func formatCreatePreview(preview CreatePreview) string {
+	lines := []string{
+		fmt.Sprintf("Branch: %s", preview.Branch),
+		fmt.Sprintf("Path: %s", preview.Path),
+	}
+	if preview.Repo != "" {
+		lines = append([]string{fmt.Sprintf("Repo: %s", preview.Repo)}, lines...)
+	}
+	if preview.BranchExists {
+		lines = append(lines, "Branch source: existing branch")
+	} else {
+		lines = append(lines, fmt.Sprintf("Branch source: new branch from %s", preview.Base))
+	}
+	lines = append(lines, formatActionList("Copy", preview.CopyFiles))
+	lines = append(lines, formatActionList("Symlink", preview.SymlinkFiles))
+	if preview.Hook != "" {
+		lines = append(lines, fmt.Sprintf("Hook: %s", preview.Hook))
+	} else {
+		lines = append(lines, "Hook: none")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatCleanSummary(summary []CleanSummary) string {
+	lines := make([]string, 0, len(summary)+1)
+	lines = append(lines, "Cleanable worktrees by repo:")
+	for _, entry := range summary {
+		lines = append(lines, fmt.Sprintf("- %s: %d", entry.Repo, entry.Count))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatCleanConfirmation(mode CleanMode, targets []CleanTarget) string {
+	lines := []string{fmt.Sprintf("Mode: %s", mode), "Targets:"}
+	for _, target := range targets {
+		lines = append(lines, fmt.Sprintf("- %s | %s | %s | %s", target.Repo, target.Branch, target.Status, target.Path))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatActionList(label string, values []string) string {
+	if len(values) == 0 {
+		return label + ": none"
+	}
+	return fmt.Sprintf("%s: %s", label, strings.Join(values, ", "))
 }
