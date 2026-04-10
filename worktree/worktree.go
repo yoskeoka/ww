@@ -572,12 +572,13 @@ func (m *Manager) runPostCreateHook(wtPath, branch string, opts CreateOpts) {
 	if m.Config.PostCreateHook == "" {
 		return
 	}
+	var hookOut io.Writer = os.Stderr
 	if opts.TextMode {
-		out := opts.Output
-		if out == nil {
-			out = os.Stdout
+		hookOut = opts.Output
+		if hookOut == nil {
+			hookOut = os.Stdout
 		}
-		fmt.Fprintf(out, "Running post_create_hook: %s\n", m.Config.PostCreateHook)
+		fmt.Fprintf(hookOut, "Running post_create_hook: %s\n", m.Config.PostCreateHook)
 	}
 	cmd := exec.Command("sh", "-c", m.Config.PostCreateHook)
 	cmd.Dir = wtPath
@@ -585,11 +586,7 @@ func (m *Manager) runPostCreateHook(wtPath, branch string, opts CreateOpts) {
 		"WW_BRANCH="+branch,
 		"WW_WORKTREE_PATH="+wtPath,
 	)
-	if opts.TextMode {
-		cmd.Stdout = os.Stdout
-	} else {
-		cmd.Stdout = os.Stderr
-	}
+	cmd.Stdout = hookOut
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: post-create hook failed: %v\n", err)

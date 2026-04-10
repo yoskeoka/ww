@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/pflag"
 
@@ -56,11 +57,22 @@ func interactiveCmd() command {
 
 			prompt := interactive.PromptOutput(glOpts.output, glOpts.errOutput)
 			session := interactive.NewHuhSession(os.Stdin, prompt)
-			listUI := interactive.NewHuhListUI(os.Stdin, prompt)
+			ui := interactive.NewHuhListUI(os.Stdin, prompt)
 			flows := interactiveFlows{
 				prompt: prompt,
+				create: interactive.CreateFlow{
+					UI:            ui,
+					WorkspaceMode: mgr.Workspace != nil && mgr.Workspace.Mode == workspace.ModeWorkspace,
+					Repos:         interactiveRepoOptions(mgr.Workspace),
+					BuildPreview: func(repo, branch string) (interactive.CreatePreview, error) {
+						return buildInteractiveCreatePreview(mgr, repo, branch)
+					},
+					Execute: func(repo, branch string) error {
+						return executeInteractiveCreate(mgr, prompt, repo, branch)
+					},
+				},
 				list: interactive.ListFlow{
-					UI: listUI,
+					UI: ui,
 					Load: func() ([]interactive.WorktreeItem, error) {
 						infos, err := mgr.List()
 						if err != nil {
@@ -84,6 +96,24 @@ func interactiveCmd() command {
 						return writeInteractiveRemoveResult(prompt, result)
 					},
 				},
+				clean: interactive.CleanFlow{
+					UI:        ui,
+					Output:    prompt,
+					RepoNames: interactiveRepoNames(mgr),
+					Load: func() (interactive.CleanSnapshot, error) {
+						return interactiveCleanSnapshot(mgr)
+					},
+					Execute: func(mode interactive.CleanMode, snapshot interactive.CleanSnapshot) error {
+						infos, ok := snapshot.State.([]worktree.WorktreeInfo)
+						if !ok {
+							return fmt.Errorf("invalid clean snapshot state %T", snapshot.State)
+						}
+						return executeCleanWorktrees(mgr, infos, &globalOpts{
+							output:    prompt,
+							errOutput: prompt,
+						}, mode == interactive.CleanModeForce)
+					},
+				},
 			}
 
 			return interactive.Runner{
@@ -97,12 +127,13 @@ func interactiveCmd() command {
 
 type interactiveFlows struct {
 	prompt io.Writer
+	create interactive.CreateFlow
 	list   interactive.ListFlow
+	clean  interactive.CleanFlow
 }
 
 func (f interactiveFlows) Create() error {
-	_, err := fmt.Fprintln(f.prompt, "Interactive create flow is not implemented yet. Use `ww create` for now.")
-	return err
+	return f.create.Run()
 }
 
 func (f interactiveFlows) List() error {
@@ -110,8 +141,7 @@ func (f interactiveFlows) List() error {
 }
 
 func (f interactiveFlows) Clean() error {
-	_, err := fmt.Fprintln(f.prompt, "Interactive clean flow is not implemented yet. Use `ww clean` for now.")
-	return err
+	return f.clean.Run()
 }
 
 func worktreeItems(infos []worktree.WorktreeInfo) []interactive.WorktreeItem {
@@ -165,4 +195,98 @@ func interactiveOverview(ws *workspace.Workspace) interactive.Overview {
 		}
 	}
 	return overview
+}
+
+func interactiveRepoOptions(ws *workspace.Workspace) []interactive.RepoOption {
+	if ws == nil || ws.Mode != workspace.ModeWorkspace {
+		return nil
+	}
+	options := make([]interactive.RepoOption, 0, len(ws.Repos))
+	for _, repo := range ws.Repos {
+		options = append(options, interactive.RepoOption{Name: repo.Name})
+	}
+	return options
+}
+
+func interactiveRepoNames(mgr *worktree.Manager) []string {
+	if mgr.Workspace != nil && mgr.Workspace.Mode == workspace.ModeWorkspace {
+		names := make([]string, 0, len(mgr.Workspace.Repos))
+		for _, repo := range mgr.Workspace.Repos {
+			names = append(names, repo.Name)
+		}
+		return names
+	}
+	return []string{filepath.Base(mgr.RepoDir)}
+}
+
+func buildInteractiveCreatePreview(baseMgr *worktree.Manager, repoName, branch string) (interactive.CreatePreview, error) {
+	repoMgr, err := interactiveRepoManager(baseMgr, repoName)
+	if err != nil {
+		return interactive.CreatePreview{}, err
+	}
+
+	info, _, err := repoMgr.Create(branch, worktree.CreateOpts{DryRun: true})
+	if err != nil {
+		return interactive.CreatePreview{}, err
+	}
+
+	preview := interactive.CreatePreview{
+		Repo:         repoName,
+		Branch:       branch,
+		Path:         info.Path,
+		BranchExists: repoMgr.Git.BranchExists(branch),
+		CopyFiles:    append([]string(nil), repoMgr.Config.CopyFiles...),
+		SymlinkFiles: append([]string(nil), repoMgr.Config.SymlinkFiles...),
+		Hook:         repoMgr.Config.PostCreateHook,
+	}
+	if !preview.BranchExists {
+		preview.Base = info.Base
+	}
+	return preview, nil
+}
+
+func executeInteractiveCreate(baseMgr *worktree.Manager, prompt io.Writer, repoName, branch string) error {
+	repoMgr, err := interactiveRepoManager(baseMgr, repoName)
+	if err != nil {
+		return err
+	}
+
+	info, _, err := repoMgr.Create(branch, worktree.CreateOpts{
+		Output:   prompt,
+		TextMode: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(prompt, "Created worktree at %s (branch: %s)\n", info.Path, info.Branch)
+	return err
+}
+
+func interactiveRepoManager(baseMgr *worktree.Manager, repoName string) (*worktree.Manager, error) {
+	if repoName == "" {
+		return baseMgr, nil
+	}
+	return managerForRepo(baseMgr, repoName)
+}
+
+func interactiveCleanSnapshot(mgr *worktree.Manager) (interactive.CleanSnapshot, error) {
+	infos, err := listCleanableWorktrees(mgr)
+	if err != nil {
+		return interactive.CleanSnapshot{}, err
+	}
+
+	targets := make([]interactive.CleanTarget, 0, len(infos))
+	for _, info := range infos {
+		targets = append(targets, interactive.CleanTarget{
+			Repo:   info.Repo,
+			Branch: info.Branch,
+			Status: displayStatus(info),
+			Path:   info.Path,
+		})
+	}
+	return interactive.CleanSnapshot{
+		Targets: targets,
+		State:   infos,
+	}, nil
 }
