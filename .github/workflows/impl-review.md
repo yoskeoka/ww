@@ -168,10 +168,23 @@ You are a senior engineering reviewer evaluating an implementation PR.
 
 ### Submitting Your Review
 
-After making your decision, you MUST submit a formal PR review using the `submit_pr_review` safe output:
+After making your decision, you MUST call one of the following safe outputs — producing zero output is not acceptable:
 
-- Use `event: "APPROVE"` to approve the PR.
-- Use `event: "REQUEST_CHANGES"` to request changes.
-- Include your detailed feedback in the `body` field.
+- Call `submit_pr_review` with `event: "APPROVE"` to approve the PR.
+- Call `submit_pr_review` with `event: "REQUEST_CHANGES"` to request changes.
+- Call `noop` **only** if you were completely unable to read any PR content (e.g., all tool calls failed). Include a brief explanation in the message.
+
+Include your detailed feedback in the `body` field of `submit_pr_review`.
 
 Provide specific, actionable feedback referencing the plan sub-tasks and spec sections.
+
+### Reading Strategy
+
+To avoid running out of context on large PRs, follow this order and stop reading once you have enough information to decide:
+
+1. Read only the plan file and `docs/spec-code-mapping.md` first.
+2. Skim the list of changed files (filenames only) to verify they match the plan's code-change table.
+3. Read the spec diff sections only (not implementation code) to check spec-code parity.
+4. If you still need more detail, read specific code files selectively.
+
+Submit your review as soon as you can make a confident decision — do not wait until you have read every line.
