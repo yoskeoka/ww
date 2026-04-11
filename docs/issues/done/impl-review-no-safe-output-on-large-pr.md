@@ -39,6 +39,10 @@ Updated `impl-review.md`, `plan-review.md`, and `spec-code-sync.md` with:
 
 ## Related
 
-- Issue #116: the automatically filed workflow failure issue that triggered this fix (impl-review)
-- PR #114: the implementation PR where the impl-review workflow failure occurred
-- PR #85: the PR where the spec-code-sync workflow failure occurred (filed as issue #118)
+- Issue #115: the automatically filed plan-review workflow failure issue (same root cause)
+- Issue #116: the automatically filed impl-review workflow failure issue that triggered this fix
+- Issue #118: the automatically filed spec-code-sync workflow failure issue (same root cause)
+- PR #114: the implementation PR where the impl-review and plan-review workflow failures occurred
+- PR #85: the PR where the spec-code-sync workflow failure occurred
+- PR #117: the fix PR (impl-review + plan-review)
+- PR #119: the fix PR (spec-code-sync)
