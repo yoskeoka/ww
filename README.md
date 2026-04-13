@@ -74,7 +74,7 @@ ww i
 Interactive mode provides a guided prompt flow for the most common human-facing operations:
 
 - `create`: pick a repo and branch, preview the target path, then create
-- `list`: browse existing worktrees and open or remove them
+- `list`: browse existing worktrees and print the selected worktree path (equivalent to `ww cd`) for shell navigation, or remove them
 - `clean`: review cleanable worktrees before deletion
 
 Interactive mode is a thin wrapper over the standard CLI. It requires a TTY and is intended for people, not `--json` automation.
