@@ -77,7 +77,7 @@ Interactive mode provides a guided prompt flow for the most common human-facing 
 - `list`: browse existing worktrees and print the selected worktree path (equivalent to `ww cd`) for shell navigation, or remove them
 - `clean`: review cleanable worktrees before deletion
 
-Interactive mode is a thin wrapper over the standard CLI. It requires a TTY and is intended for people, not `--json` automation.
+Interactive mode is a thin wrapper over the standard CLI. It requires TTYs on stdin and stderr (stdout may be redirected) and is intended for people, not `--json` automation.
 
 ## Shell Integration
 
