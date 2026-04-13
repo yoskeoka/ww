@@ -65,6 +65,20 @@ ww clean
 
 Removes all worktrees whose branches are already merged or whose remote tracking branches no longer exist. Use `--dry-run` to preview what would be cleaned.
 
+### Use interactive mode
+
+```sh
+ww i
+```
+
+Interactive mode provides a guided prompt flow for the most common human-facing operations:
+
+- `create`: pick a repo and branch, preview the target path, then create
+- `list`: browse existing worktrees and print the selected worktree path (equivalent to `ww cd`) for shell navigation, or remove them
+- `clean`: review cleanable worktrees before deletion
+
+Interactive mode is a thin wrapper over the standard CLI. It requires TTYs on stdin and stderr (stdout may be redirected) and is intended for people, not `--json` automation.
+
 ## Shell Integration
 
 `ww` never changes your shell's current directory directly. Instead, it prints paths that shell wrappers or command substitution can consume.
@@ -190,6 +204,7 @@ post_create_hook = "npm install"
 | `ww list` | List all worktrees (across workspace in workspace mode) |
 | `ww remove <branch>` | Remove a worktree and delete its branch |
 | `ww clean` | Remove all merged or stale worktrees |
+| `ww i` | Start the interactive create/list/clean flow |
 | `ww cd [branch]` | Print a worktree path for shell navigation |
 | `ww version` | Print version information |
 
