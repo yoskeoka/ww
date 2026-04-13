@@ -37,10 +37,21 @@ five-row viewport.
 ## Sub-tasks
 
 - [ ] Add the menu-visibility requirements to the interactive mode spec.
-- [ ] Adjust select height calculation for top-level actions, worktree list, and
-  selected-worktree actions.
-- [ ] Add regression tests for the helper functions and fixed action set.
+- [ ] [depends on: spec] Adjust select height calculation for top-level actions,
+  worktree list, and selected-worktree actions.
+- [ ] [depends on: code] Add regression tests for the helper functions and fixed
+  action set.
 
+## Verification
+
+- Confirm the top-level `Select action` menu renders all four fixed actions
+  (`create`, `list`, `clean`, `quit`) without requiring scrolling.
+- Confirm the `Selected worktree` action menu renders all of its fixed actions
+  without requiring scrolling.
+- Confirm the worktree browser shows a stable five-row visible viewport before
+  scrolling is required.
+- Confirm regression tests cover the select-height helper calculations and the
+  fixed action-set sizing behavior.
 ## Design Decisions
 
 - Keep the existing vertical `huh` UI. This change only fixes sizing so prompt
