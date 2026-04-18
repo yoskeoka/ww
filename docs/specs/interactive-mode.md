@@ -74,6 +74,11 @@ The current implementation step defines:
 
 Selecting `quit` exits successfully without writing to `stdout`.
 
+PTY-backed integration coverage must verify that `quit` works through the real
+prompt adapter under an actual TTY. The smoke test is expected to start
+`ww i`, wait for the top-level prompt to render, select `quit` with terminal
+key input, and observe a successful exit without a path-only action result.
+
 ## Shared Action Model
 
 The shared foundation defines stable action identifiers for the top-level menu:
@@ -168,6 +173,13 @@ clearly mark them and must not offer `remove`, matching the non-interactive
 - All prompts, menus, context, and any human-readable guidance remain on
   `stderr`.
 - After writing the path, the interactive session exits successfully.
+
+PTY-backed integration coverage must verify the real `list -> open` path. The
+smoke test is expected to create a secondary worktree, drive the top-level
+`list` action through the real prompt adapter, select a worktree, select
+`open`, and observe exactly the selected absolute path as the final stdout
+payload. Prompt rendering may include terminal control sequences, but the
+path-only result must remain distinguishable from human UI output.
 
 ### `remove`
 

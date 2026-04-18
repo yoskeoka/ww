@@ -65,12 +65,16 @@ func (ui *HuhListUI) SelectWorktree(items []WorktreeItem, filter string) (*Workt
 			Title("Filter worktrees").
 			Description("Match repo, branch, status, or full path. Leave empty for all.").
 			Value(&currentFilter),
+	)
+	if err != nil {
+		return nil, filter, err
+	}
+
+	err = runHuhForm(ui.Input, ui.Output,
 		huh.NewSelect[string]().
 			Title("Select worktree").
 			Description("Use arrows or j/k to move, enter to select, / to filter the visible list, q to quit.").
-			OptionsFunc(func() []huh.Option[string] {
-				return worktreeOptions(items, currentFilter, index)
-			}, &currentFilter).
+			Options(worktreeOptions(items, currentFilter, index)...).
 			Value(&selected).
 			Height(min(10, max(2, len(items)+1))),
 	)
