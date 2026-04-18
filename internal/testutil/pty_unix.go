@@ -43,7 +43,7 @@ func (e *HostEnv) RunWWPTY(ctx context.Context, dir string, args ...string) (*PT
 	if dir != "" {
 		c.Dir = dir
 	}
-	c.Env = append(testEnv(e.gitConfigPath), "TERM=dumb")
+	c.Env = e.env("TERM=dumb")
 	stdout := &bytes.Buffer{}
 	c.Stdout = stdout
 
@@ -89,7 +89,7 @@ func (s *PTYSession) WaitForOutput(text string, timeout time.Duration) error {
 		select {
 		case err := <-s.waitCh:
 			s.waitCh <- err
-			return fmt.Errorf("process exited before %q appeared: %w\nstderr:\n%s", text, err, s.Stderr())
+			return fmt.Errorf("process exited before %q appeared: %v\nstderr:\n%s", text, err, s.Stderr())
 		default:
 		}
 		if time.Now().After(deadline) {
@@ -133,6 +133,13 @@ func (s *PTYSession) Wait(timeout time.Duration) (string, string, error) {
 	return s.Stdout(), s.Stderr(), waitErr
 }
 
+// Close terminates the PTY session and waits briefly for process cleanup.
+func (s *PTYSession) Close(timeout time.Duration) {
+	s.cancel()
+	_ = s.pty.Close()
+	_, _, _ = s.Wait(timeout)
+}
+
 func (s *PTYSession) Stdout() string {
 	return s.stdoutBuf.String()
 }
@@ -152,17 +159,4 @@ func (b *lockedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.Write(p)
-}
-
-func testEnv(gitConfigPath string) []string {
-	baseEnv := os.Environ()
-	env := make([]string, 0, len(baseEnv)+1)
-	for _, v := range baseEnv {
-		if strings.HasPrefix(v, "GIT_CONFIG_GLOBAL=") {
-			continue
-		}
-		env = append(env, v)
-	}
-	env = append(env, "GIT_CONFIG_GLOBAL="+gitConfigPath)
-	return env
 }

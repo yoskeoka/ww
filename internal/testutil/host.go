@@ -131,18 +131,7 @@ func (e *HostEnv) Exec(dir string, cmd string, args ...string) (string, error) {
 	if dir != "" {
 		c.Dir = dir
 	}
-	// Ensure our test git config path deterministically overrides any existing
-	// GIT_CONFIG_GLOBAL in the environment.
-	baseEnv := os.Environ()
-	env := make([]string, 0, len(baseEnv)+1)
-	for _, v := range baseEnv {
-		if strings.HasPrefix(v, "GIT_CONFIG_GLOBAL=") {
-			continue
-		}
-		env = append(env, v)
-	}
-	env = append(env, "GIT_CONFIG_GLOBAL="+e.gitConfigPath)
-	c.Env = env
+	c.Env = e.env()
 
 	out, err := c.CombinedOutput()
 	outStr := string(out)
@@ -163,16 +152,7 @@ func (e *HostEnv) ExecSplit(dir string, cmd string, args ...string) (string, str
 		c.Dir = dir
 	}
 
-	baseEnv := os.Environ()
-	env := make([]string, 0, len(baseEnv)+1)
-	for _, v := range baseEnv {
-		if strings.HasPrefix(v, "GIT_CONFIG_GLOBAL=") {
-			continue
-		}
-		env = append(env, v)
-	}
-	env = append(env, "GIT_CONFIG_GLOBAL="+e.gitConfigPath)
-	c.Env = env
+	c.Env = e.env()
 
 	var stdoutBuf bytes.Buffer
 	var stderrBuf bytes.Buffer
@@ -187,6 +167,32 @@ func (e *HostEnv) ExecSplit(dir string, cmd string, args ...string) (string, str
 		return stdoutBuf.String(), stderrBuf.String(), err
 	}
 	return stdoutBuf.String(), stderrBuf.String(), nil
+}
+
+func (e *HostEnv) env(extra ...string) []string {
+	overrides := map[string]struct{}{"GIT_CONFIG_GLOBAL": {}}
+	for _, v := range extra {
+		overrides[envKey(v)] = struct{}{}
+	}
+
+	baseEnv := os.Environ()
+	env := make([]string, 0, len(baseEnv)+1+len(extra))
+	for _, v := range baseEnv {
+		if _, ok := overrides[envKey(v)]; ok {
+			continue
+		}
+		env = append(env, v)
+	}
+	env = append(env, "GIT_CONFIG_GLOBAL="+e.gitConfigPath)
+	env = append(env, extra...)
+	return env
+}
+
+func envKey(v string) string {
+	if key, _, ok := strings.Cut(v, "="); ok {
+		return key
+	}
+	return v
 }
 
 // buildWWBinaryHost compiles ww for the host OS/arch.

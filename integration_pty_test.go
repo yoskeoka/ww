@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yoskeoka/ww/internal/testutil"
 )
 
 func TestInteractivePTYQuitSmoke(t *testing.T) {
@@ -89,11 +91,7 @@ func TestInteractivePTYListOpenSmoke(t *testing.T) {
 	}
 }
 
-func startInteractivePTY(t *testing.T, repo string) interface {
-	WriteKeys(string) error
-	WaitForOutput(string, time.Duration) error
-	Wait(time.Duration) (string, string, error)
-} {
+func startInteractivePTY(t *testing.T, repo string) *testutil.PTYSession {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -102,5 +100,8 @@ func startInteractivePTY(t *testing.T, repo string) interface {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		session.Close(time.Second)
+	})
 	return session
 }
