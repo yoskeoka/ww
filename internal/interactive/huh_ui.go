@@ -12,9 +12,18 @@ import (
 )
 
 const (
-	backValue    = "__back__"
-	noMatchesKey = "__no_matches__"
+	backValue                     = "__back__"
+	noMatchesKey                  = "__no_matches__"
+	huhSelectTitleDescriptionRows = 2
+	worktreeBrowserVisibleRows    = 5
 )
+
+var topLevelActions = []Action{
+	ActionCreate,
+	ActionList,
+	ActionClean,
+	ActionQuit,
+}
 
 type HuhSession struct {
 	Input  io.Reader
@@ -31,14 +40,9 @@ func (s *HuhSession) SelectAction() (Action, error) {
 		huh.NewSelect[Action]().
 			Title("Select action").
 			Description("Use arrows or j/k to move, enter to confirm, q to quit.").
-			Options(
-				huh.NewOption("create", ActionCreate),
-				huh.NewOption("list", ActionList),
-				huh.NewOption("clean", ActionClean),
-				huh.NewOption("quit", ActionQuit),
-			).
+			Options(topLevelActionOptions()...).
 			Value(&action).
-			Height(4),
+			Height(selectHeightForOptions(len(topLevelActions))),
 	)
 	if err != nil {
 		return "", err
@@ -72,7 +76,7 @@ func (ui *HuhListUI) SelectWorktree(items []WorktreeItem, filter string) (*Workt
 				return worktreeOptions(items, currentFilter, index)
 			}, &currentFilter).
 			Value(&selected).
-			Height(min(10, max(2, len(items)+1))),
+			Height(selectHeightForVisibleOptions(worktreeBrowserVisibleRows)),
 	)
 	if err != nil {
 		return nil, filter, err
@@ -102,7 +106,7 @@ func (ui *HuhListUI) SelectListAction(item WorktreeItem, actions []ListAction) (
 			Description(FormatWorktreeItem(item)).
 			Options(options...).
 			Value(&action).
-			Height(len(options)),
+			Height(selectHeightForOptions(len(options))),
 	)
 	if err != nil {
 		return "", err
@@ -138,7 +142,7 @@ func (ui *HuhListUI) SelectCreateRepo(repos []RepoOption) (string, error) {
 			Description("Choose the repo for `ww create`. Use arrows or j/k to move, enter to confirm, q to quit.").
 			Options(options...).
 			Value(&repo).
-			Height(min(10, len(options))),
+			Height(cappedSelectHeightForOptions(len(options), 10)),
 	)
 	if err != nil {
 		return "", err
@@ -193,7 +197,7 @@ func (ui *HuhListUI) SelectCleanMode(summary []CleanSummary) (CleanMode, error) 
 				huh.NewOption("force (`ww clean --force`)", CleanModeForce),
 			).
 			Value(&mode).
-			Height(2),
+			Height(selectHeightForOptions(2)),
 	)
 	if err != nil {
 		return "", err
@@ -239,6 +243,26 @@ func runHuhForm(input io.Reader, output io.Writer, fields ...huh.Field) error {
 		return err
 	}
 	return nil
+}
+
+func topLevelActionOptions() []huh.Option[Action] {
+	options := make([]huh.Option[Action], 0, len(topLevelActions))
+	for _, action := range topLevelActions {
+		options = append(options, huh.NewOption(string(action), action))
+	}
+	return options
+}
+
+func selectHeightForOptions(optionCount int) int {
+	return selectHeightForVisibleOptions(optionCount)
+}
+
+func cappedSelectHeightForOptions(optionCount, maxVisible int) int {
+	return selectHeightForVisibleOptions(min(max(1, optionCount), maxVisible))
+}
+
+func selectHeightForVisibleOptions(visibleOptions int) int {
+	return max(1, visibleOptions) + huhSelectTitleDescriptionRows
 }
 
 func worktreeOptions(items []WorktreeItem, filter string, index map[string]WorktreeItem) []huh.Option[string] {
