@@ -72,13 +72,13 @@ Apply the same reasoning here: add only enough PTY integration to catch real-ter
 
 ## Sub-tasks
 
-- [ ] [parallel] Update `docs/specs/testing.md` with PTY smoke-test expectations and limits
-- [ ] [parallel] Update `docs/specs/interactive-mode.md` with PTY-backed verification expectations for `quit` and `list -> open`
-- [ ] [depends on: specs] Choose and wire a Go PTY helper approach for integration tests
-- [ ] [depends on: PTY helper] Add a `ww i` smoke test that starts the real interactive session and exits via `quit`
-- [ ] [depends on: PTY helper] Add a `ww i` smoke test that drives `list -> open` and verifies path-only `stdout`
-- [ ] [depends on: PTY helper] Make the PTY harness robust against bounded rendering delays without relying on arbitrary long sleeps
-- [ ] [depends on: implementation] Run the relevant integration tests and confirm they pass reliably in the host-based test harness
+- [x] [parallel] Update `docs/specs/testing.md` with PTY smoke-test expectations and limits
+- [x] [parallel] Update `docs/specs/interactive-mode.md` with PTY-backed verification expectations for `quit` and `list -> open`
+- [x] [depends on: specs] Choose and wire a Go PTY helper approach for integration tests
+- [x] [depends on: PTY helper] Add a `ww i` smoke test that starts the real interactive session and exits via `quit`
+- [x] [depends on: PTY helper] Add a `ww i` smoke test that drives `list -> open` and verifies path-only `stdout`
+- [x] [depends on: PTY helper] Make the PTY harness robust against bounded rendering delays without relying on arbitrary long sleeps
+- [x] [depends on: implementation] Run the relevant integration tests and confirm they pass reliably in the host-based test harness
 
 ## Verification
 
