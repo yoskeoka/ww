@@ -43,7 +43,7 @@ func (e *HostEnv) RunWWPTY(ctx context.Context, dir string, args ...string) (*PT
 	if dir != "" {
 		c.Dir = dir
 	}
-	c.Env = testEnv(e.gitConfigPath)
+	c.Env = append(testEnv(e.gitConfigPath), "TERM=dumb")
 	stdout := &bytes.Buffer{}
 	c.Stdout = stdout
 

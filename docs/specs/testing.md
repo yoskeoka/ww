@@ -24,7 +24,7 @@ All tests may run in parallel. No Docker daemon or container runtime is required
 
 `make test-all` includes a narrow PTY-backed smoke path for `ww i`. These tests run in the host-based integration harness and are skipped by `make test` because short mode excludes all integration tests.
 
-The PTY smoke harness starts the built `ww` binary with a pseudo-terminal attached to `stdin` and `stderr`, captures `stdout` separately, writes key sequences into the terminal, and waits for stable prompt checkpoints with bounded deadlines. This coverage is intentionally small:
+The PTY smoke harness starts the built `ww` binary with a pseudo-terminal attached to `stdin` and `stderr`, captures `stdout` separately, fixes `TERM=dumb` for deterministic accessible prompt rendering, writes key sequences into the terminal, and waits for stable prompt checkpoints with bounded deadlines. This coverage is intentionally small:
 
 - starting `ww i` under a real TTY must pass the interactive TTY guard
 - selecting `quit` from the real prompt loop must exit successfully without writing a path or other action result
