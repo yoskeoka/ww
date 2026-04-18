@@ -153,8 +153,9 @@ The selector UX is keyboard-first:
 - `/` enters in-selector filtering over the visible option labels
 - `q` exits the interactive session
 
-The worktree browser selector must show up to five visible worktree options
-before scrolling.
+The worktree browser selector must use a stable five-row visible option area
+before scrolling. The `Back to actions` option is part of the same selector, so
+it occupies one of those rows when it is visible.
 
 After selecting a worktree, the action menu is:
 
