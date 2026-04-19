@@ -174,7 +174,7 @@ Provide specific, actionable feedback. Reference the exact sections that need im
 
 ### Fallback if safe-output tools are unavailable
 
-If safe-output tool calls fail with `Tool "<name>" does not exist`, do **not** end without output.
+If safe-output tool calls fail with `Tool "<name>" does not exist` (or the same message with single quotes, `Tool '<name>' does not exist`), do **not** end without output.
 
 Use `shell` to write `/tmp/gh-aw/agent_output.json` directly with exactly one item in the `items` array.
 
@@ -186,6 +186,12 @@ Example shape:
 
 ```json
 {"items":[{"type":"submit_pr_review","event":"APPROVE","body":"LGTM. Plan is complete and actionable."}]}
+```
+
+If you cannot read any PR content, use `noop` instead:
+
+```json
+{"items":[{"type":"noop","message":"Unable to read PR content because required tool calls failed."}]}
 ```
 
 Example using Python JSON encoding:
