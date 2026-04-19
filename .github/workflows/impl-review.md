@@ -178,6 +178,21 @@ Include your detailed feedback in the `body` field of `submit_pr_review`.
 
 Provide specific, actionable feedback referencing the plan sub-tasks and spec sections.
 
+### Fallback if safe-output tools are unavailable
+
+If safe-output tool calls fail with `Tool '<name>' does not exist`, do **not** end without output.
+
+Use `shell` to write `/tmp/gh-aw/agent_output.json` directly with one item:
+
+- Approve:
+  `{"items":[{"type":"submit_pr_review","event":"APPROVE","body":"<your review body>"}]}`
+- Request changes:
+  `{"items":[{"type":"submit_pr_review","event":"REQUEST_CHANGES","body":"<your review body>"}]}`
+- If you were completely unable to review:
+  `{"items":[{"type":"noop","message":"<brief explanation>"}]}`
+
+This is only a fallback path when the safe-output tools are unavailable.
+
 ### Reading Strategy
 
 To avoid running out of context on large PRs, follow this order and stop reading once you have enough information to decide:
