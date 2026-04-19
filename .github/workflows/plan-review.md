@@ -171,3 +171,47 @@ After making your decision, you MUST call one of the following safe outputs — 
 Include your detailed feedback in the `body` field of `submit_pr_review`.
 
 Provide specific, actionable feedback. Reference the exact sections that need improvement.
+
+### Fallback if safe-output tools are unavailable
+
+If safe-output tool calls fail with `Tool "<name>" does not exist` (or the same message with single quotes, `Tool '<name>' does not exist`), do **not** end without output.
+
+Use `shell` to write `/tmp/gh-aw/agent_output.json` directly with exactly one item in the `items` array.
+
+**Important:** the file must contain valid JSON. Do **not** paste a raw multi-line review body directly into a JSON string. Review bodies often contain newlines, quotes, and Markdown, so generate the JSON with a serializer (for example `python -` with a heredoc or `jq -n`) or otherwise ensure newlines are encoded as `\n` and quotes/backslashes are escaped.
+
+This is only a fallback path when the safe-output tools are unavailable.
+
+Example shape:
+
+```json
+{"items":[{"type":"submit_pr_review","event":"APPROVE","body":"LGTM. Plan is complete and actionable."}]}
+```
+
+If you cannot read any PR content, use `noop` instead:
+
+```json
+{"items":[{"type":"noop","message":"Unable to read PR content because required tool calls failed."}]}
+```
+
+Example using Python JSON encoding:
+
+```bash
+python - <<'PY'
+import json
+body = "LGTM. Plan is complete and actionable."
+obj = {"items":[{"type":"submit_pr_review","event":"APPROVE","body":body}]}
+with open("/tmp/gh-aw/agent_output.json", "w", encoding="utf-8") as f:
+    json.dump(obj, f)
+PY
+```
+
+### Reading Strategy
+
+To avoid running out of context on large PRs, follow this order and stop reading once you have enough information to decide whether the plan meets the review criteria (problem statement, spec changes, concrete sub-tasks, and dependencies):
+
+1. Read only changed files under `docs/exec-plan/todo/` first.
+2. If needed, read referenced issue files under `docs/issues/` for context.
+3. Skim only filenames of other changed files to confirm scope is plan-only.
+
+Submit your review as soon as you can make a confident decision — do not wait until you have read every line.
