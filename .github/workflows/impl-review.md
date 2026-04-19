@@ -64,10 +64,19 @@ safe-outputs:
               const marker = '<!-- gh-aw:impl-review -->';
               for (const item of items) {
                 try {
-                  const parsedPullNumber = Number.parseInt(String(item.pull_request_number ?? ''), 10);
-                  const pullNumber = Number.isInteger(parsedPullNumber) && parsedPullNumber > 0
-                    ? parsedPullNumber
-                    : context.issue.number;
+                  const rawPullNumber = String(item.pull_request_number ?? '').trim();
+                  const hasStrictOverride = /^[1-9][0-9]*$/.test(rawPullNumber);
+                  const requestedPullNumber = hasStrictOverride ? Number(rawPullNumber) : null;
+                  const isPullRequestEvent = context.eventName === 'pull_request';
+                  if (rawPullNumber && !hasStrictOverride) {
+                    core.warning(`Ignoring invalid pull_request_number: ${JSON.stringify(rawPullNumber)}`);
+                  }
+                  if (isPullRequestEvent && requestedPullNumber && requestedPullNumber !== context.issue.number) {
+                    core.warning(`Ignoring pull_request_number override ${requestedPullNumber} for pull_request event #${context.issue.number}`);
+                  }
+                  const pullNumber = isPullRequestEvent
+                    ? context.issue.number
+                    : (requestedPullNumber ?? context.issue.number);
                   // Route A: Best-effort dismiss of prior reviews from this workflow only
                   try {
                     const botReviews = [];
