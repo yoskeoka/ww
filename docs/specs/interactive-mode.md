@@ -62,6 +62,9 @@ The MVP top-level action menu is fixed:
 - `clean`
 - `quit`
 
+The top-level action picker must size its visible option area so all four
+fixed actions are visible at once without scrolling.
+
 The current implementation step defines:
 
 - overview rendering
@@ -155,11 +158,19 @@ The selector UX is keyboard-first:
 - `/` enters in-selector filtering over the visible option labels
 - `q` exits the interactive session
 
+The worktree browser selector must use a stable five-row visible option area
+before scrolling. The `Back to actions` option is part of the same selector, so
+it occupies one of those rows when it is visible.
+
 After selecting a worktree, the action menu is:
 
 - `open`
 - `remove` when the selected worktree is not the main worktree
 - `back`
+
+The selected-worktree action picker must size its visible option area so every
+available action for the selected worktree is visible at once without
+scrolling.
 
 Main worktrees remain selectable in the browser, but interactive mode must
 clearly mark them and must not offer `remove`, matching the non-interactive
