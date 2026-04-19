@@ -64,7 +64,10 @@ safe-outputs:
               const marker = '<!-- gh-aw:impl-review -->';
               for (const item of items) {
                 try {
-                  const pullNumber = Number(item.pull_request_number) || context.issue.number;
+                  const parsedPullNumber = Number.parseInt(String(item.pull_request_number ?? ''), 10);
+                  const pullNumber = Number.isInteger(parsedPullNumber) && parsedPullNumber > 0
+                    ? parsedPullNumber
+                    : context.issue.number;
                   // Route A: Best-effort dismiss of prior reviews from this workflow only
                   try {
                     const botReviews = [];

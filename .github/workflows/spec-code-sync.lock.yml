@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"1afa9038979296716f65f5caa712cb9fa03342b02daa4df29cd2d39bb410ae91","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"29d9254e32060d866988a2962c1503a9b019f348b697cb3368437e0404666e2b","compiler_version":"v0.59.0","strict":true}
 
 name: "Spec/Code Sync Check"
 "on":
@@ -1209,7 +1209,10 @@ jobs:
             const marker = '<!-- gh-aw:spec-code-sync -->';
             for (const item of items) {
               try {
-                const pullNumber = Number(item.pull_request_number) || context.issue.number;
+                const parsedPullNumber = Number.parseInt(String(item.pull_request_number ?? ''), 10);
+                const pullNumber = Number.isInteger(parsedPullNumber) && parsedPullNumber > 0
+                  ? parsedPullNumber
+                  : context.issue.number;
                 // Route A: Best-effort dismiss of prior reviews from this workflow only
                 try {
                   const botReviews = [];

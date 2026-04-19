@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"7295ba08380edce6a6e66c04a2486a286fe6dc8ebdba09d7c46eb1123b24b498","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"8fa5160fa6e17698529adbbf3d9f3a513a16df5b9aa95a79595e38ac6ee936ca","compiler_version":"v0.59.0","strict":true}
 
 name: "Plan Review"
 "on":
@@ -1204,7 +1204,10 @@ jobs:
             const marker = '<!-- gh-aw:plan-review -->';
             for (const item of items) {
               try {
-                const pullNumber = Number(item.pull_request_number) || context.issue.number;
+                const parsedPullNumber = Number.parseInt(String(item.pull_request_number ?? ''), 10);
+                const pullNumber = Number.isInteger(parsedPullNumber) && parsedPullNumber > 0
+                  ? parsedPullNumber
+                  : context.issue.number;
                 // Route A: Best-effort dismiss of prior reviews from this workflow only
                 try {
                   const botReviews = [];

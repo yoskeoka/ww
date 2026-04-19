@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"10698b07d722387708a9c20e8d4108c6b9072e5fba25cab697a8d0b7ea3e2129","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"4db00c78aa9ffce99447e961a65877970e077f8276db088cc1923b797ab3daab","compiler_version":"v0.59.0","strict":true}
 
 name: "Implementation Review"
 "on":
@@ -1204,7 +1204,10 @@ jobs:
             const marker = '<!-- gh-aw:impl-review -->';
             for (const item of items) {
               try {
-                const pullNumber = Number(item.pull_request_number) || context.issue.number;
+                const parsedPullNumber = Number.parseInt(String(item.pull_request_number ?? ''), 10);
+                const pullNumber = Number.isInteger(parsedPullNumber) && parsedPullNumber > 0
+                  ? parsedPullNumber
+                  : context.issue.number;
                 // Route A: Best-effort dismiss of prior reviews from this workflow only
                 try {
                   const botReviews = [];
