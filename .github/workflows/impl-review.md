@@ -178,6 +178,21 @@ Include your detailed feedback in the `body` field of `submit_pr_review`.
 
 Provide specific, actionable feedback referencing the plan sub-tasks and spec sections.
 
+### Fallback if safe-output tools are unavailable
+
+If safe-output tool calls fail with `Tool '<name>' does not exist`, do **not** end without output.
+
+Use `shell` to write `/tmp/gh-aw/agent_output.json` directly with one item.
+
+**Important:** the file must contain valid JSON. Do **not** paste a raw multi-line review body directly into a JSON string. Review bodies often contain newlines, quotes, and Markdown, so generate the JSON with a serializer (for example `python -c` or `jq -n`) or otherwise ensure newlines are encoded as `\n` and quotes/backslashes are escaped.
+
+Examples using Python JSON encoding:
+
+- Approve:
+  
+
+This is only a fallback path when the safe-output tools are unavailable.
+
 ### Reading Strategy
 
 To avoid running out of context on large PRs, follow this order and stop reading once you have enough information to decide:
