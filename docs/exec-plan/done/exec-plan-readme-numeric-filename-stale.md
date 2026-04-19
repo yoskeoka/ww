@@ -44,11 +44,11 @@ Recommendation: choose Option B. It aligns both active and archive guidance whil
 
 ## Sub-tasks
 
-- [ ] [parallel] Search workflow docs for stale `XXX-description.md`, numeric prefix, or completed-plan renaming guidance.
-- [ ] [parallel] Update `docs/exec-plan/todo/README.md` with the current non-numeric naming convention.
-- [ ] [parallel] Update `docs/exec-plan/done/README.md` with archive behavior and no-renaming guidance.
-- [ ] [depends on: README updates] Move the active issue file into `docs/issues/done/`.
-- [ ] [depends on: README updates, issue move] Run documentation-focused verification and inspect the final diff.
+- [x] [parallel] Search workflow docs for stale `XXX-description.md`, numeric prefix, or completed-plan renaming guidance.
+- [x] [parallel] Update `docs/exec-plan/todo/README.md` with the current non-numeric naming convention.
+- [x] [parallel] Update `docs/exec-plan/done/README.md` with archive behavior and no-renaming guidance.
+- [x] [depends on: README updates] Move the active issue file into `docs/issues/done/`.
+- [x] [depends on: README updates, issue move] Run documentation-focused verification and inspect the final diff.
 
 ## Parallelism
 
