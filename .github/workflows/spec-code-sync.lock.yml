@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"621f6d637763f74955826605577c192dce67841112b66cb38ea1a74b7482b762","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"1ec45deba638bde2a0cc93a878efef67de46bb12a810c1ad4832551af0b90107","compiler_version":"v0.59.0","strict":true}
 
 name: "Spec/Code Sync Check"
 "on":
@@ -335,7 +335,7 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"add_comment":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1},"submit_pr_review":{"description":"Submit a PR review with Approve or Request Changes","inputs":{"body":{"default":null,"description":"Review body text (markdown)","required":true,"type":"string"},"event":{"default":null,"description":"Review event: APPROVE or REQUEST_CHANGES","options":["APPROVE","REQUEST_CHANGES"],"required":true,"type":"choice"}}}}
+          {"add_comment":{"max":1},"missing_data":{},"missing_tool":{},"noop":{"max":1},"submit_pr_review":{"description":"Submit a PR review with Approve or Request Changes","inputs":{"body":{"default":null,"description":"Review body text (markdown)","required":true,"type":"string"},"event":{"default":null,"description":"Review event: APPROVE or REQUEST_CHANGES","options":["APPROVE","REQUEST_CHANGES"],"required":true,"type":"choice"},"pull_request_number":{"default":null,"description":"Optional PR number (defaults to the current PR)","required":false,"type":"string"}}}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
       - name: Write Safe Outputs Tools
         run: |
@@ -486,6 +486,10 @@ jobs:
                       "APPROVE",
                       "REQUEST_CHANGES"
                     ],
+                    "type": "string"
+                  },
+                  "pull_request_number": {
+                    "description": "Optional PR number (defaults to the current PR)",
                     "type": "string"
                   }
                 },
@@ -1189,17 +1193,42 @@ jobs:
           script: |
             const fs = require('fs');
             const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
-            const items = output.items.filter(i => i.type === 'submit_pr_review');
+            const items = Array.isArray(output)
+              ? output
+                  .filter(i => i && typeof i === 'object' && i.submit_pr_review)
+                  .map(i => i.submit_pr_review)
+              : Array.isArray(output?.items)
+                ? output.items
+                    .filter(i => i && i.type === 'submit_pr_review')
+                    .map(i => ({
+                      pull_request_number: i.pull_request_number,
+                      event: i.event,
+                      body: i.body,
+                    }))
+                : [];
             const marker = '<!-- gh-aw:spec-code-sync -->';
             for (const item of items) {
               try {
+                const rawPullNumber = String(item.pull_request_number ?? '').trim();
+                const hasStrictOverride = /^[1-9][0-9]*$/.test(rawPullNumber);
+                const requestedPullNumber = hasStrictOverride ? Number(rawPullNumber) : null;
+                const isPullRequestEvent = context.eventName === 'pull_request';
+                if (rawPullNumber && !hasStrictOverride) {
+                  core.warning(`Ignoring invalid pull_request_number: ${JSON.stringify(rawPullNumber)}`);
+                }
+                if (isPullRequestEvent && requestedPullNumber && requestedPullNumber !== context.issue.number) {
+                  core.warning(`Ignoring pull_request_number override ${requestedPullNumber} for pull_request event #${context.issue.number}`);
+                }
+                const pullNumber = isPullRequestEvent
+                  ? context.issue.number
+                  : (requestedPullNumber ?? context.issue.number);
                 // Route A: Best-effort dismiss of prior reviews from this workflow only
                 try {
                   const botReviews = [];
                   for await (const page of github.paginate.iterator(github.rest.pulls.listReviews, {
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    pull_number: context.issue.number,
+                    pull_number: pullNumber,
                   })) {
                     for (const r of page.data) {
                       if (r.user && r.user.login === 'github-actions[bot]' &&
@@ -1212,7 +1241,7 @@ jobs:
                     await github.rest.pulls.dismissReview({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
-                      pull_number: context.issue.number,
+                      pull_number: pullNumber,
                       review_id: rev.id,
                       message: 'Superseded by updated review',
                     });
@@ -1223,7 +1252,7 @@ jobs:
                 await github.rest.pulls.createReview({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  pull_number: context.issue.number,
+                  pull_number: pullNumber,
                   event: item.event,
                   body: `${item.body}\n\n${marker}`
                 });
@@ -1237,7 +1266,7 @@ jobs:
                 for await (const page of github.paginate.iterator(github.rest.issues.listComments, {
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  issue_number: context.issue.number,
+                  issue_number: pullNumber,
                 })) {
                   for (const c of page.data) {
                     if (c.user && c.user.login === 'github-actions[bot]' &&
@@ -1273,7 +1302,7 @@ jobs:
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    issue_number: context.issue.number,
+                    issue_number: pullNumber,
                     body: commentBody
                   });
                   core.info(`Posted ${item.event} review as PR comment (fallback)`);

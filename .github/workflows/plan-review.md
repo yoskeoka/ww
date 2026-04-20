@@ -26,6 +26,10 @@ safe-outputs:
         pull-requests: write
         issues: write
       inputs:
+        pull_request_number:
+          description: "Optional PR number (defaults to the current PR)"
+          required: false
+          type: string
         event:
           description: "Review event: APPROVE or REQUEST_CHANGES"
           required: true
@@ -42,17 +46,42 @@ safe-outputs:
             script: |
               const fs = require('fs');
               const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
-              const items = output.items.filter(i => i.type === 'submit_pr_review');
+              const items = Array.isArray(output)
+                ? output
+                    .filter(i => i && typeof i === 'object' && i.submit_pr_review)
+                    .map(i => i.submit_pr_review)
+                : Array.isArray(output?.items)
+                  ? output.items
+                      .filter(i => i && i.type === 'submit_pr_review')
+                      .map(i => ({
+                        pull_request_number: i.pull_request_number,
+                        event: i.event,
+                        body: i.body,
+                      }))
+                  : [];
               const marker = '<!-- gh-aw:plan-review -->';
               for (const item of items) {
                 try {
+                  const rawPullNumber = String(item.pull_request_number ?? '').trim();
+                  const hasStrictOverride = /^[1-9][0-9]*$/.test(rawPullNumber);
+                  const requestedPullNumber = hasStrictOverride ? Number(rawPullNumber) : null;
+                  const isPullRequestEvent = context.eventName === 'pull_request';
+                  if (rawPullNumber && !hasStrictOverride) {
+                    core.warning(`Ignoring invalid pull_request_number: ${JSON.stringify(rawPullNumber)}`);
+                  }
+                  if (isPullRequestEvent && requestedPullNumber && requestedPullNumber !== context.issue.number) {
+                    core.warning(`Ignoring pull_request_number override ${requestedPullNumber} for pull_request event #${context.issue.number}`);
+                  }
+                  const pullNumber = isPullRequestEvent
+                    ? context.issue.number
+                    : (requestedPullNumber ?? context.issue.number);
                   // Route A: Best-effort dismiss of prior reviews from this workflow only
                   try {
                     const botReviews = [];
                     for await (const page of github.paginate.iterator(github.rest.pulls.listReviews, {
                       owner: context.repo.owner,
                       repo: context.repo.repo,
-                      pull_number: context.issue.number,
+                      pull_number: pullNumber,
                     })) {
                       for (const r of page.data) {
                         if (r.user && r.user.login === 'github-actions[bot]' &&
@@ -65,7 +94,7 @@ safe-outputs:
                       await github.rest.pulls.dismissReview({
                         owner: context.repo.owner,
                         repo: context.repo.repo,
-                        pull_number: context.issue.number,
+                        pull_number: pullNumber,
                         review_id: rev.id,
                         message: 'Superseded by updated review',
                       });
@@ -76,7 +105,7 @@ safe-outputs:
                   await github.rest.pulls.createReview({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    pull_number: context.issue.number,
+                    pull_number: pullNumber,
                     event: item.event,
                     body: `${item.body}\n\n${marker}`
                   });
@@ -90,7 +119,7 @@ safe-outputs:
                   for await (const page of github.paginate.iterator(github.rest.issues.listComments, {
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    issue_number: context.issue.number,
+                    issue_number: pullNumber,
                   })) {
                     for (const c of page.data) {
                       if (c.user && c.user.login === 'github-actions[bot]' &&
@@ -126,7 +155,7 @@ safe-outputs:
                     await github.rest.issues.createComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
-                      issue_number: context.issue.number,
+                      issue_number: pullNumber,
                       body: commentBody
                     });
                     core.info(`Posted ${item.event} review as PR comment (fallback)`);
