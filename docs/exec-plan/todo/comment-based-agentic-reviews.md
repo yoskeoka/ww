@@ -42,21 +42,22 @@ Cons:
 - stale formal reviews can keep confusing the PR timeline
 - every workflow must keep custom JavaScript for review listing, dismissal, creation, and fallback
 
-### Option B: Make marker-based PR comments primary
+### Option B: Make marker-based PR comments primary with explicit upsert
 
-Remove the custom `submit_pr_review` job and instruct agents to call `add_comment` directly with a stable hidden marker and a visible decision label such as `APPROVE` or `REQUEST_CHANGES`. The implementation updates or replaces the generated lock files so each workflow has a single comment output path.
+Remove the custom `submit_pr_review` job and replace it with an explicit marker-comment upsert path. The agent should emit a comment-review safe output with a visible decision label such as `APPROVE` or `REQUEST_CHANGES`; the workflow job should find the latest bot-authored PR comment with the workflow marker, update it when present, delete older duplicates when feasible, and create the comment when no current marker comment exists.
 
 Pros:
 
 - matches the behavior the user requested
 - avoids stale formal reviews and removes review dismissal entirely
-- uses the built-in gh-aw `add-comment` safe output instead of custom review-submission code
-- preserves advisory feedback in the PR conversation with less workflow-specific scripting
+- preserves exactly one current advisory comment per workflow per PR instead of creating a new comment on every run
+- keeps workflow-specific scripting focused on comment upsert only, without formal review API calls
 
 Cons:
 
 - no longer produces a formal GitHub review state
 - branch protection cannot rely on these three workflows as required PR approvals
+- still needs a small custom safe-output job because built-in `add_comment` creates comments but does not upsert existing marker comments
 
 Recommendation: choose Option B. The user explicitly requested this direction, and it better matches the current observed failure mode.
 
@@ -67,11 +68,13 @@ Create or update a spec for the agentic review workflows. The execution should a
 Expected spec contract:
 
 - `plan-review`, `impl-review`, and `spec-code-sync` are advisory comment workflows, not formal PR review submitters.
-- Each workflow must include a stable hidden marker in its posted comment:
+- Each workflow must expose a safe-output path that upserts a PR comment instead of creating a formal PR review.
+- Each workflow must include a stable hidden marker in its upserted comment:
   - `<!-- gh-aw:plan-review -->`
   - `<!-- gh-aw:impl-review -->`
   - `<!-- gh-aw:spec-code-sync -->`
 - Each workflow should leave at most one current bot-authored comment with its marker per PR.
+- The upsert behavior should list PR issue comments, filter to comments authored by `github-actions[bot]` that contain the workflow marker, keep the newest matching comment, delete older matching duplicates on a best-effort basis, and update or create the newest/current comment.
 - The comment body must include the decision signal (`APPROVE` or `REQUEST_CHANGES`) and detailed feedback.
 - The workflows must not attempt `pulls.createReview` or `pulls.dismissReview`.
 - The workflows must not mention repository settings for allowing Actions to approve PRs, because that permission is no longer required for this behavior.
@@ -82,10 +85,10 @@ Expected spec contract:
 ### `.github/workflows/plan-review.md`
 
 - Remove the custom `safe-outputs.jobs.submit_pr_review` job.
-- Keep built-in `safe-outputs.add-comment` with `discussions: false`.
-- Update instructions so the agent must call `add_comment`, not `submit_pr_review`.
+- Add or keep a custom safe-output job dedicated to PR comment upsert. It should accept the decision event and review body, then use `issues.listComments`, `issues.updateComment`, `issues.createComment`, and best-effort `issues.deleteComment` for older duplicates.
+- Update instructions so the agent must call the comment-upsert output, not `submit_pr_review`.
 - Require the marker `<!-- gh-aw:plan-review -->` in the comment body.
-- Replace fallback instructions that manually write `submit_pr_review` output with fallback instructions that write exactly one `add_comment` item if the safe-output tool is unavailable.
+- Replace fallback instructions that manually write `submit_pr_review` output with fallback instructions that write exactly one comment-upsert item if the safe-output tool is unavailable.
 - Keep `noop` only for the existing "unable to read PR content" case.
 
 ### `.github/workflows/impl-review.md`
@@ -129,7 +132,7 @@ The three workflow source files can be edited independently after the spec contr
 ## Verification
 
 - Run `gh aw compile --strict` for each changed agentic workflow, or the repository's equivalent gh-aw compile command if documented.
-- Run `rg -n "submit_pr_review|pulls\\.createReview|pulls\\.dismissReview|Allow GitHub Actions to create and approve pull requests" .github/workflows docs/specs docs/spec-code-mapping.md`.
+- Run `rg -n "submit_pr_review|pulls\\.createReview|pulls\\.dismissReview|Allow GitHub Actions to create and approve pull requests" .github/workflows docs/specs docs/spec-code-mapping.md docs/issues --glob '!docs/issues/done/**'`.
 - Run `make lint` if it covers workflow or docs checks in the local environment.
 - Run `make test` if workflow changes or spec-code mapping updates trigger normal repository verification expectations.
 
