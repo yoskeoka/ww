@@ -544,9 +544,13 @@ func submoduleWorktreeRemoveError(worktreePath, repoDir string, err error) error
 Target worktree: %s
 Manual cleanup permanently deletes uncommitted work in that directory.
 To clean it up manually, run:
-  rm -rf %q
-  git -C %q worktree prune
-Original error: %w`, worktreePath, worktreePath, repoDir, err)
+  rm -rf -- %s
+  git -C %s worktree prune
+Original error: %w`, worktreePath, shellQuotePOSIX(worktreePath), shellQuotePOSIX(repoDir), err)
+}
+
+func shellQuotePOSIX(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
 func (m *Manager) copyFiles(wtPath string) {

@@ -312,8 +312,8 @@ func TestSubmoduleWorktreeRemoveError(t *testing.T) {
 		"Git cannot remove worktrees containing submodules",
 		"Target worktree: /tmp/repo@feat",
 		"Manual cleanup permanently deletes uncommitted work",
-		`rm -rf "/tmp/repo@feat"`,
-		`git -C "/tmp/repo" worktree prune`,
+		`rm -rf -- '/tmp/repo@feat'`,
+		`git -C '/tmp/repo' worktree prune`,
 		"Original error:",
 	} {
 		if !strings.Contains(msg, want) {
@@ -322,6 +322,14 @@ func TestSubmoduleWorktreeRemoveError(t *testing.T) {
 	}
 	if !errors.Is(err, cause) {
 		t.Fatal("diagnostic should preserve the original error cause")
+	}
+}
+
+func TestShellQuotePOSIX(t *testing.T) {
+	got := shellQuotePOSIX(`/tmp/repo's $branch`)
+	want := `'/tmp/repo'"'"'s $branch'`
+	if got != want {
+		t.Fatalf("shellQuotePOSIX() = %q, want %q", got, want)
 	}
 }
 
