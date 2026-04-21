@@ -61,6 +61,18 @@ The output is parsed into structured entries. The first entry is always the main
 git worktree remove <path>
 ```
 
+Git refuses to move or remove working trees containing submodules and reports:
+
+```text
+fatal: working trees containing submodules cannot be moved or removed
+```
+
+`ww` detects this specific `git worktree remove` failure by matching Git's error
+text. It does not retry with recursive deletion. Instead, the shared worktree
+removal path returns guided remediation telling the user to manually remove the
+worktree directory and then run `git worktree prune`, with a warning that manual
+directory removal permanently deletes uncommitted work.
+
 ### Branch Operations
 
 **Delete branch (safe):**

@@ -670,6 +670,49 @@ func TestCleanContinuesAfterFailure(t *testing.T) {
 	}
 }
 
+func TestCleanContinuesAfterSubmoduleRemovalFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+	addCommittedSubmodule(t, repo)
+	skipIfGitAllowsSubmoduleWorktreeRemove(t, repo)
+
+	if _, err := runWW(t, repo, "create", "feat/submodule-clean"); err != nil {
+		t.Fatal(err)
+	}
+	submoduleWT := worktreePath(repo, "feat/submodule-clean")
+	initSubmodules(t, submoduleWT)
+
+	if _, err := runWW(t, repo, "create", "feat/clean-after-submodule"); err != nil {
+		t.Fatal(err)
+	}
+	cleanWT := worktreePath(repo, "feat/clean-after-submodule")
+
+	out, err := runWW(t, repo, "clean", "--force")
+	if err == nil {
+		t.Fatalf("expected ww clean --force to fail when one cleanable worktree contains submodules, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Failed to clean feat/submodule-clean") {
+		t.Fatalf("clean should report the failed submodule worktree:\n%s", out)
+	}
+	if !strings.Contains(out, "Git cannot remove worktrees containing submodules") {
+		t.Fatalf("clean failure should include guided remediation:\n%s", out)
+	}
+	if !strings.Contains(out, "Deleted branch feat/clean-after-submodule") {
+		t.Fatalf("clean should continue to later cleanable worktrees:\n%s", out)
+	}
+	if !globalEnv.PathExists(submoduleWT) {
+		t.Fatal("failed submodule worktree should remain in place")
+	}
+	if globalEnv.PathExists(cleanWT) {
+		t.Fatal("later cleanable worktree should be removed")
+	}
+}
+
 func TestCreateDryRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")
@@ -1304,6 +1347,73 @@ func makeStaleWorktree(t *testing.T, repo, branch string, dirty bool) {
 	}
 }
 
+func addCommittedSubmodule(t *testing.T, repo string) {
+	t.Helper()
+
+	root, err := globalEnv.MkdirTemp("ww-submodule-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	submoduleRepo := path.Join(root, "submodule")
+	if err := globalEnv.MkdirAll(submoduleRepo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(submoduleRepo, "init", "-b", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(submoduleRepo, "README.md"), "# submodule\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(submoduleRepo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(submoduleRepo, "commit", "-m", "initial submodule"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "-c", "protocol.file.allow=always", "submodule", "add", submoduleRepo, "vendor/submodule"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "add submodule"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func initSubmodules(t *testing.T, worktree string) {
+	t.Helper()
+
+	if _, err := globalEnv.Git(worktree, "-c", "protocol.file.allow=always", "submodule", "update", "--init", "--recursive"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func skipIfGitAllowsSubmoduleWorktreeRemove(t *testing.T, repo string) {
+	t.Helper()
+
+	branch := "feat/submodule-remove-probe"
+	if _, err := runWW(t, repo, "create", branch); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := worktreePath(repo, branch)
+	initSubmodules(t, wtPath)
+
+	out, err := globalEnv.Git(repo, "worktree", "remove", "--force", wtPath)
+	if err == nil {
+		t.Skipf("installed Git removes submodule-containing worktrees without the target failure; probe output: %s", out)
+	}
+	if !strings.Contains(out, "working trees containing submodules cannot be moved or removed") {
+		t.Fatalf("raw git submodule removal probe failed with an unexpected error:\n%s", out)
+	}
+	if removeErr := os.RemoveAll(wtPath); removeErr != nil {
+		t.Fatal(removeErr)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "prune"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "branch", "-D", branch); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func worktreePath(repo, branch string) string {
 	return path.Join(path.Dir(repo), "myrepo@"+strings.ReplaceAll(branch, "/", "-"))
 }
@@ -1535,6 +1645,44 @@ func TestRemoveForceDirtyWorktree(t *testing.T) {
 	}
 	if _, err := globalEnv.Git(repo, "rev-parse", "--verify", "refs/heads/feat/force-dirty"); err == nil {
 		t.Error("force remove should delete the branch with git branch -D")
+	}
+}
+
+func TestRemoveForceSubmoduleWorktreeReportsGuidedRemediation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+	addCommittedSubmodule(t, repo)
+	skipIfGitAllowsSubmoduleWorktreeRemove(t, repo)
+
+	if _, err := runWW(t, repo, "create", "feat/submodule-remove"); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := worktreePath(repo, "feat/submodule-remove")
+	initSubmodules(t, wtPath)
+
+	out, err := runWW(t, repo, "remove", "--force", "feat/submodule-remove")
+	if err == nil {
+		t.Fatalf("expected ww remove --force to fail for submodule worktree, got:\n%s", out)
+	}
+	for _, want := range []string{
+		"Git cannot remove worktrees containing submodules",
+		"Target worktree: " + wtPath,
+		"Manual cleanup permanently deletes uncommitted work",
+		"rm -rf",
+		"git -C",
+		"worktree prune",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("submodule removal diagnostic missing %q:\n%s", want, out)
+		}
+	}
+	if !globalEnv.PathExists(wtPath) {
+		t.Fatal("submodule worktree should remain after guided remediation failure")
 	}
 }
 

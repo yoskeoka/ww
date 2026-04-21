@@ -116,28 +116,34 @@ execution unless the human explicitly changes the decision during review.
 
 ## Sub-tasks
 
-- [ ] [parallel] Update `docs/specs/cli-commands.md` with the submodule removal
+- [x] [parallel] Update `docs/specs/cli-commands.md` with the submodule removal
   error contract for `ww remove` and `ww clean`.
-- [ ] [parallel] Update `docs/specs/git-operations.md` with Git's submodule
+- [x] [parallel] Update `docs/specs/git-operations.md` with Git's submodule
   limitation and `ww`'s detection/remediation behavior.
-- [ ] [depends on: specs] Add a submodule-removal failure recognizer close to
+- [x] [depends on: specs] Add a submodule-removal failure recognizer close to
   the Git runner or removal manager boundary.
-- [ ] [depends on: recognizer] Wrap the specific failure in
+- [x] [depends on: recognizer] Wrap the specific failure in
   `worktree.Manager.Remove` with a guided remediation message that preserves the
   original error context.
-- [ ] [depends on: removal wrapping] Verify `ww remove` text mode,
+- [x] [depends on: removal wrapping] Verify `ww remove` text mode,
   `ww remove --json`, `ww clean` text mode, and `ww clean --json` surface the
   failure without reporting success.
-- [ ] [depends on: specs, removal wrapping] Add focused unit tests for
+- [x] [depends on: specs, removal wrapping] Add focused unit tests for
   recognizer/wrapping behavior.
-- [ ] [depends on: removal wrapping] Add host integration reproduction coverage
+- [x] [depends on: removal wrapping] Add host integration reproduction coverage
   for `ww remove --force` with a submodule-containing worktree.
-- [ ] [depends on: integration] Add `ww clean --force` integration coverage if
+- [x] [depends on: integration] Add `ww clean --force` integration coverage if
   the cleanability setup remains straightforward; otherwise document why the
   shared `Manager.Remove` unit coverage is sufficient.
-- [ ] [depends on: all above] Move
+- [x] [depends on: all above] Move
   `docs/issues/worktree-remove-fails-with-submodules.md` to `docs/issues/done/`
   during the implementation PR after verification passes.
+
+Note: host integration coverage first probes the installed Git. On Git versions
+that already remove submodule-containing worktrees successfully, the regression
+tests skip because the target Git failure is not reproducible in that
+environment. The focused unit tests still verify the recognizer and guided
+remediation formatting.
 
 ## Verification
 

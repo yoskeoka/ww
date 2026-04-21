@@ -10,6 +10,8 @@ import (
 
 var heuristicDefaultBranchCandidates = []string{"main", "master"}
 
+const worktreeRemoveSubmoduleFailure = "working trees containing submodules cannot be moved or removed"
+
 // Runner executes git commands by shelling out to the git binary.
 type Runner struct {
 	GitBin string // path to git binary, defaults to "git"
@@ -220,6 +222,12 @@ func (r *Runner) WorktreeRemove(path string, force bool) error {
 	args = append(args, path)
 	_, err := r.Run(args...)
 	return err
+}
+
+// IsWorktreeRemoveSubmoduleError reports whether err is Git's known refusal to
+// remove a worktree that contains submodules.
+func IsWorktreeRemoveSubmoduleError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), worktreeRemoveSubmoduleFailure)
 }
 
 // BranchDelete deletes a local branch.
