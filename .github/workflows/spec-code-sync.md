@@ -21,15 +21,13 @@ tools:
 network: defaults
 
 safe-outputs:
-  add-comment:
-    discussions: false
   jobs:
-    submit_pr_review:
-      description: "Submit a PR review with Approve or Request Changes"
+    upsert_pr_comment:
+      description: "Upsert an advisory PR comment with Approve or Request Changes"
       runs-on: ubuntu-latest
       permissions:
-        pull-requests: write
         issues: write
+        pull-requests: write
       inputs:
         pull_request_number:
           description: "Optional PR number (defaults to the current PR)"
@@ -41,11 +39,11 @@ safe-outputs:
           type: choice
           options: ["APPROVE", "REQUEST_CHANGES"]
         body:
-          description: "Review body text (markdown)"
+          description: "Review comment body text (markdown)"
           required: true
           type: string
       steps:
-        - name: Submit PR review
+        - name: Upsert PR comment
           uses: actions/github-script@v8
           with:
             script: |
@@ -53,11 +51,11 @@ safe-outputs:
               const output = JSON.parse(fs.readFileSync(process.env.GH_AW_AGENT_OUTPUT, 'utf8'));
               const items = Array.isArray(output)
                 ? output
-                    .filter(i => i && typeof i === 'object' && i.submit_pr_review)
-                    .map(i => i.submit_pr_review)
+                    .filter(i => i && typeof i === 'object' && i.upsert_pr_comment)
+                    .map(i => i.upsert_pr_comment)
                 : Array.isArray(output?.items)
                   ? output.items
-                      .filter(i => i && i.type === 'submit_pr_review')
+                      .filter(i => i && i.type === 'upsert_pr_comment')
                       .map(i => ({
                         pull_request_number: i.pull_request_number,
                         event: i.event,
@@ -77,49 +75,18 @@ safe-outputs:
                   if (isPullRequestEvent && requestedPullNumber && requestedPullNumber !== context.issue.number) {
                     core.warning(`Ignoring pull_request_number override ${requestedPullNumber} for pull_request event #${context.issue.number}`);
                   }
+                  if (!isPullRequestEvent && requestedPullNumber == null) {
+                    throw new Error('pull_request_number is required for non-pull_request events');
+                  }
                   const pullNumber = isPullRequestEvent
                     ? context.issue.number
-                    : (requestedPullNumber ?? context.issue.number);
-                  // Route A: Best-effort dismiss of prior reviews from this workflow only
-                  try {
-                    const botReviews = [];
-                    for await (const page of github.paginate.iterator(github.rest.pulls.listReviews, {
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      pull_number: pullNumber,
-                    })) {
-                      for (const r of page.data) {
-                        if (r.user && r.user.login === 'github-actions[bot]' &&
-                            r.state !== 'DISMISSED' && (r.body || '').includes(marker)) {
-                          botReviews.push(r);
-                        }
-                      }
-                    }
-                    for (const rev of botReviews) {
-                      await github.rest.pulls.dismissReview({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        pull_number: pullNumber,
-                        review_id: rev.id,
-                        message: 'Superseded by updated review',
-                      });
-                    }
-                  } catch (dismissErr) {
-                    core.warning(`Failed to dismiss prior reviews (non-fatal): ${dismissErr.message}`);
-                  }
-                  await github.rest.pulls.createReview({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: pullNumber,
-                    event: item.event,
-                    body: `${item.body}\n\n${marker}`
-                  });
-                  core.info(`Submitted ${item.event} review`);
-                } catch (err) {
-                  core.warning(`Failed to submit ${item.event} review: ${err.message}. Falling back to PR comment.`);
-                  const fixGuide = `> **Fix:** Go to **Settings → Actions → General → Workflow permissions** and check **"Allow GitHub Actions to create and approve pull requests"**.`;
-                  const commentBody = `${marker}\n**${item.event}** (posted as comment — review submission failed)\n\n${item.body}\n\n---\n${fixGuide}`;
-                  // Route B: Find bot-authored fallback comments; update newest, delete older duplicates
+                    : requestedPullNumber;
+                  const rawBody = String(item.body ?? '').trim();
+                  const bodyWithoutMarker = rawBody.split(marker).join('').trim();
+                  const bodyWithDecision = bodyWithoutMarker.includes(item.event)
+                    ? bodyWithoutMarker
+                    : `**${item.event}**\n\n${bodyWithoutMarker}`;
+                  const commentBody = `${marker}\n${bodyWithDecision}`;
                   const matchingComments = [];
                   for await (const page of github.paginate.iterator(github.rest.issues.listComments, {
                     owner: context.repo.owner,
@@ -163,8 +130,10 @@ safe-outputs:
                       issue_number: pullNumber,
                       body: commentBody
                     });
-                    core.info(`Posted ${item.event} review as PR comment (fallback)`);
+                    core.info(`Posted ${item.event} review as PR comment`);
                   }
+                } catch (err) {
+                  core.setFailed(`Failed to upsert ${item.event} review comment: ${err.message}`);
                 }
               }
 
@@ -203,13 +172,34 @@ You are a reviewer checking spec-code synchronization.
 
 After making your decision, you MUST call one of the following safe outputs — producing zero output is not acceptable:
 
-- Call `submit_pr_review` with `event: "APPROVE"` to approve the PR.
-- Call `submit_pr_review` with `event: "REQUEST_CHANGES"` to request changes.
+- Call the safe-output tool named `safeoutputs-upsert_pr_comment` with `event: "APPROVE"` to post/update the advisory PR comment. If your runtime exposes the same tool without the `safeoutputs-` prefix, call `upsert_pr_comment`.
+- Call the safe-output tool named `safeoutputs-upsert_pr_comment` with `event: "REQUEST_CHANGES"` to post/update the advisory PR comment. If your runtime exposes the same tool without the `safeoutputs-` prefix, call `upsert_pr_comment`.
 - Call `noop` **only** if you were completely unable to read any PR content (e.g., all tool calls failed). Include a brief explanation in the message.
 
-Include your detailed feedback in the `body` field of `submit_pr_review`.
+Include your detailed feedback in the `body` field of `upsert_pr_comment`. The body MUST include the stable marker `<!-- gh-aw:spec-code-sync -->` and a visible `APPROVE` or `REQUEST_CHANGES` decision label.
+Do not call `add_comment`, and do not pass `type: "upsert_pr_comment"` to `add_comment`.
 
 Be precise. Reference the specific spec section and code file that are out of sync.
+
+### Fallback if safe-output tools are unavailable
+
+If safe-output tool calls fail with `Tool '<name>' does not exist`, do **not** end without output.
+
+Use `shell` to write `/tmp/gh-aw/agent_output.json` directly with one item.
+
+**Important:** the file must contain valid JSON. Do **not** paste a raw multi-line review body directly into a JSON string. Review bodies often contain newlines, quotes, and Markdown, so generate the JSON with a serializer (for example `python -c` or `jq -n`) or otherwise ensure newlines are encoded as `\n` and quotes/backslashes are escaped.
+
+Example shape:
+
+```json
+{"items":[{"type":"upsert_pr_comment","event":"APPROVE","body":"<!-- gh-aw:spec-code-sync -->\nAPPROVE\n\nSpecs and code are in sync."}]}
+```
+
+If you cannot read any PR content, use `noop` instead:
+
+```json
+{"items":[{"type":"noop","message":"Unable to read PR content because required tool calls failed."}]}
+```
 
 ### Reading Strategy
 

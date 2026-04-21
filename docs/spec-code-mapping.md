@@ -10,3 +10,4 @@
 | docs/specs/shell-integration.md | cmd/ww/, worktree/ | ./integration_test.go |
 | docs/specs/interactive-mode.md | internal/interactive/, cmd/ww/ | ./internal/interactive/interactive_test.go, ./integration_test.go |
 | docs/specs/testing.md | internal/testutil/ | ./integration_test.go |
+| docs/specs/agentic-review-workflows.md | .github/workflows/plan-review.md, .github/workflows/impl-review.md, .github/workflows/spec-code-sync.md, .github/workflows/plan-review.lock.yml, .github/workflows/impl-review.lock.yml, .github/workflows/spec-code-sync.lock.yml | N/A |
