@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,6 +54,22 @@ bare
 	}
 	if !entries[0].Bare {
 		t.Error("expected bare = true")
+	}
+}
+
+func TestIsWorktreeRemoveSubmoduleError(t *testing.T) {
+	err := errors.New("git worktree remove --force /tmp/repo@feat: exit status 128\nfatal: working trees containing submodules cannot be moved or removed")
+	if !IsWorktreeRemoveSubmoduleError(err) {
+		t.Fatal("expected submodule worktree remove failure to be recognized")
+	}
+
+	otherErr := errors.New("git worktree remove /tmp/repo@feat: exit status 128\nfatal: '/tmp/repo@feat' contains modified or untracked files")
+	if IsWorktreeRemoveSubmoduleError(otherErr) {
+		t.Fatal("dirty worktree failure should not be recognized as a submodule failure")
+	}
+
+	if IsWorktreeRemoveSubmoduleError(nil) {
+		t.Fatal("nil error should not be recognized as a submodule failure")
 	}
 }
 

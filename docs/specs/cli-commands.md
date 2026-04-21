@@ -337,6 +337,7 @@ Remove the worktree for the given branch and optionally delete the branch.
 4. Remove the git worktree using the path from the worktree list entry.
 5. Attempt to delete the branch unless `--keep-branch` is set. By default this uses a safe delete (`git branch -d`). When `--force` is set, it uses a force delete (`git branch -D`) to match the forced worktree removal behavior.
 6. If safe branch deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
+7. If `git worktree remove` fails because the target worktree contains submodules, exit non-zero with an actionable diagnostic. The diagnostic must include the target worktree path, state that Git cannot remove worktrees containing submodules, warn that manual directory removal permanently deletes uncommitted work, and show manual remediation commands equivalent to `rm -rf <worktree-path>` followed by `git worktree prune`.
 
 **Flags:**
 | Flag | Type | Default | Description |
@@ -362,6 +363,8 @@ If safe branch deletion fails, JSON output includes `"branch_deleted":false` and
 
 When `--force` is used and branch deletion succeeds, JSON output still reports `"branch_deleted":true`; there is no separate field indicating whether safe or forced deletion was used.
 
+Submodule-containing worktree removal failures remain command errors in `--json` mode. The current command-level failure path may emit the diagnostic as a non-JSON error rather than a success object.
+
 **Exit codes:** 0 on success, 1 on error.
 
 ### `ww clean`
@@ -381,6 +384,7 @@ from a non-git workspace root, it still cleans the workspace repositories.
 4. If safe branch deletion fails for a worktree, print a warning in text mode or include `branch_error` in JSON output, then continue. This does not make the command fail by itself.
 5. If one worktree fails to remove, report that failure, continue processing the remaining cleanable worktrees, and exit non-zero after all attempts complete.
 6. If there are no cleanable worktrees, exit successfully with no output.
+7. If a cleanable worktree cannot be removed because it contains submodules, report the guided remediation diagnostic for that worktree just like other removal failures, continue processing later cleanable worktrees, and exit non-zero after all attempts complete. In `--json` mode, the per-worktree result remains an error result with the diagnostic in the `error` field.
 
 **Flags:**
 | Flag | Type | Default | Description |

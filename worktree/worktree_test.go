@@ -1,8 +1,10 @@
 package worktree
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -298,6 +300,28 @@ func TestListRepoGracefulDegradation(t *testing.T) {
 	}
 	if !unknownFound {
 		t.Error("expected at least one worktree with unknown status")
+	}
+}
+
+func TestSubmoduleWorktreeRemoveError(t *testing.T) {
+	cause := errors.New("git worktree remove --force /tmp/repo@feat: exit status 128\nfatal: working trees containing submodules cannot be moved or removed")
+	err := submoduleWorktreeRemoveError("/tmp/repo@feat", "/tmp/repo", cause)
+	msg := err.Error()
+
+	for _, want := range []string{
+		"Git cannot remove worktrees containing submodules",
+		"Target worktree: /tmp/repo@feat",
+		"Manual cleanup permanently deletes uncommitted work",
+		`rm -rf "/tmp/repo@feat"`,
+		`git -C "/tmp/repo" worktree prune`,
+		"Original error:",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("diagnostic missing %q:\n%s", want, msg)
+		}
+	}
+	if !errors.Is(err, cause) {
+		t.Fatal("diagnostic should preserve the original error cause")
 	}
 }
 

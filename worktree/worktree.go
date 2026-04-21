@@ -521,6 +521,9 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 	}
 
 	if err := m.Git.WorktreeRemove(found.Path, opts.Force); err != nil {
+		if git.IsWorktreeRemoveSubmoduleError(err) {
+			return nil, nil, submoduleWorktreeRemoveError(found.Path, m.RepoDir, err)
+		}
 		return nil, nil, fmt.Errorf("removing worktree: %w", err)
 	}
 	result.Removed = true
@@ -534,6 +537,16 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 	}
 
 	return result, nil, nil
+}
+
+func submoduleWorktreeRemoveError(worktreePath, repoDir string, err error) error {
+	return fmt.Errorf(`removing worktree: Git cannot remove worktrees containing submodules.
+Target worktree: %s
+Manual cleanup permanently deletes uncommitted work in that directory.
+To clean it up manually, run:
+  rm -rf %q
+  git -C %q worktree prune
+Original error: %w`, worktreePath, worktreePath, repoDir, err)
 }
 
 func (m *Manager) copyFiles(wtPath string) {
