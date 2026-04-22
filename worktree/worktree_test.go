@@ -303,6 +303,43 @@ func TestListRepoGracefulDegradation(t *testing.T) {
 	}
 }
 
+func TestCreateUnresolvedBaseErrorIsActionable(t *testing.T) {
+	repo := t.TempDir()
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	_, _, err := mgr.Create("feat/no-base", CreateOpts{DryRun: true})
+	if err == nil {
+		t.Fatal("Create() error = nil, want unresolved base error")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"cannot determine base branch",
+		"no default_base is configured",
+		"origin/HEAD could not be used",
+		"heuristic fallback could not find a usable origin/main or origin/master",
+		"Set default_base in .ww.toml",
+		"git remote set-head origin --auto",
+		"Original error:",
+		"git symbolic-ref refs/remotes/origin/HEAD",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Create() diagnostic missing %q:\n%s", want, msg)
+		}
+	}
+}
+
 func TestSubmoduleWorktreeRemoveError(t *testing.T) {
 	cause := errors.New("git worktree remove --force /tmp/repo@feat: exit status 128\nfatal: working trees containing submodules cannot be moved or removed")
 	err := submoduleWorktreeRemoveError("/tmp/repo@feat", "/tmp/repo", cause)

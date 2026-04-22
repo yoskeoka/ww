@@ -159,13 +159,11 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	branchExists := m.Git.BranchExists(branch)
 
-	base := m.Config.DefaultBase
-	if base == "" {
-		base, err = m.Git.DefaultBranch()
-		if err != nil {
-			return nil, nil, fmt.Errorf("cannot determine base branch: %w", err)
-		}
+	baseInfo, err := m.baseRef(m.Git)
+	if err != nil {
+		return nil, nil, unresolvedCreateBaseError(err)
 	}
+	base := baseInfo.Ref
 
 	var dryRunLog []string
 
@@ -416,6 +414,10 @@ func (m *Manager) baseRef(runner *git.Runner) (baseRefInfo, error) {
 		return baseRefInfo{Ref: ref, StatusDetail: "heuristic-base"}, nil
 	}
 	return baseRefInfo{}, err
+}
+
+func unresolvedCreateBaseError(err error) error {
+	return fmt.Errorf("cannot determine base branch: no default_base is configured, origin/HEAD could not be used, and heuristic fallback could not find a usable origin/main or origin/master.\nSet default_base in .ww.toml or run: git remote set-head origin --auto when origin exposes a default branch.\nOriginal error: %w", err)
 }
 
 // listRepoUnknown builds WorktreeInfo entries when the base branch cannot be
