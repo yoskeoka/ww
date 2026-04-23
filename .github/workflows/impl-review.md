@@ -144,8 +144,10 @@ Provide specific, actionable feedback referencing the plan sub-tasks and spec se
 
 After making your decision, submit an advisory PR comment using the `safeoutputs-upsert_pr_comment` safe output. If your runtime exposes the tool without the prefix, call `upsert_pr_comment`.
 
+- Emit exactly one safe-output item when you can read PR content.
 - Use `event: "APPROVE"` to approve the implementation.
 - Use `event: "REQUEST_CHANGES"` to request changes.
 - Include your detailed feedback in `body`.
 - The body must include the stable marker `<!-- gh-aw:impl-review -->` and a visible `APPROVE` or `REQUEST_CHANGES` decision label.
+- Use `noop` only if you were completely unable to read any PR content.
 - Do not call `add_comment`.
