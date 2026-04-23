@@ -55,6 +55,7 @@ Update `docs/specs/agentic-review-workflows.md` before workflow changes:
   - exactly one item for normal review completion
   - `type: "upsert_pr_comment"` for advisory comments or `type: "noop"` when PR content cannot be read
   - `event`, `body`, and optional `pull_request_number` fields for `upsert_pr_comment`
+  - required `message` field for `noop` items so fallback output remains valid against the safe-output schema
 - State that fallback output must not leave the custom upsert path skipped when a valid `upsert_pr_comment` item exists.
 - Keep the prohibition on built-in `add-comment` and formal PR review APIs.
 
