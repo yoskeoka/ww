@@ -1,7 +1,9 @@
-# workspace-direntry-prefilter-followup
+# Workspace Direntry Prefilter Follow-up
 > **Execution**: Use `/execute-task` to implement this plan.
 
-**Objective**: Reduce duplicate `Lstat` work in the child-entry prefilter inside `workspace.scanImmediateRepos()`, and make the boundary between `DirEntry` prefiltering and symlink/repo validation clearer. Keep public behavior unchanged while improving readability and maintainability.
+## Objective
+
+Reduce duplicate `Lstat` work in the child-entry prefilter inside `scanImmediateRepos()` in the `workspace` package, and make the boundary between `DirEntry` prefiltering and symlink/repo validation clearer. Keep public behavior unchanged while improving readability and maintainability.
 
 ## Context
 
@@ -21,13 +23,13 @@
    - Pros: Could reduce repeated stat work more systematically.
    - Cons: Over-scoped for this low-priority follow-up and increases regression risk across workspace detection logic.
 
-**Recommendation**: Option 2. Refine helper boundaries around `DirEntry` while preserving external behavior, so this issue is resolved without broad logic changes.  
+**Recommendation**: Option 2. Refine helper boundaries around `DirEntry` while preserving external behavior, so this issue is resolved without broad logic changes.
 **Decision (2026-04-23)**: Human confirmed Option 2; this plan is locked to the lightweight refactor path.
 
 ## Spec Changes
 
 - Default direction: **no spec behavior change** (public behavior remains as-is).
-- Only if clarification is necessary, add a minimal note in `docs/specs/workspace-discovery.md` Edge Cases that child-entry prefiltering still preserves the no-follow-symlink policy.
+- Only if clarification is necessary, add a minimal note in the `Edge Cases` section of `docs/specs/workspace-discovery.md` clarifying that child-entry prefiltering still preserves the no-follow-symlink policy.
 
 ## Code Changes
 
