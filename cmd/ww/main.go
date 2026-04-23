@@ -118,6 +118,12 @@ func newManager(requireRepo bool) (*worktree.Manager, error) {
 	return newManagerWithOptions(requireRepo, false)
 }
 
+type managerContext struct {
+	ws      *workspace.Workspace
+	mainDir string
+	cfg     *config.Config
+}
+
 func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manager, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -133,6 +139,40 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 		sandboxMode = preCfg.Sandbox
 	}
 
+	ctx, err := loadManagerContext(dir, requireRepo, sandboxMode)
+	if err != nil {
+		return nil, err
+	}
+
+	// sandbox=true discovered only via fallback config paths must still
+	// affect workspace/config behavior, so rerun once in sandbox mode.
+	if !sandboxMode && ctx.cfg.Sandbox {
+		sandboxMode = true
+		ctx, err = loadManagerContext(dir, requireRepo, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+	sandboxMode = sandboxMode || ctx.cfg.Sandbox
+
+	runner := &git.Runner{Dir: dir}
+
+	return &worktree.Manager{
+		Git: runner,
+		Config: worktree.Config{
+			WorktreeDir:    ctx.cfg.WorktreeDir,
+			DefaultBase:    ctx.cfg.DefaultBase,
+			CopyFiles:      ctx.cfg.CopyFiles,
+			SymlinkFiles:   ctx.cfg.SymlinkFiles,
+			PostCreateHook: ctx.cfg.PostCreateHook,
+			Sandbox:        sandboxMode,
+		},
+		RepoDir:   ctx.mainDir,
+		Workspace: ctx.ws,
+	}, nil
+}
+
+func loadManagerContext(dir string, requireRepo bool, sandboxMode bool) (*managerContext, error) {
 	ws, err := workspace.DetectWithOptions(dir, workspace.DetectOptions{Sandbox: sandboxMode})
 	if err != nil {
 		return nil, err
@@ -158,21 +198,7 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
-	sandboxMode = sandboxMode || cfg.Sandbox
-
-	return &worktree.Manager{
-		Git: runner,
-		Config: worktree.Config{
-			WorktreeDir:    cfg.WorktreeDir,
-			DefaultBase:    cfg.DefaultBase,
-			CopyFiles:      cfg.CopyFiles,
-			SymlinkFiles:   cfg.SymlinkFiles,
-			PostCreateHook: cfg.PostCreateHook,
-			Sandbox:        sandboxMode,
-		},
-		RepoDir:   mainDir,
-		Workspace: ws,
-	}, nil
+	return &managerContext{ws: ws, mainDir: mainDir, cfg: cfg}, nil
 }
 
 func sandboxBoundary(ws *workspace.Workspace, mainDir string) string {
@@ -184,9 +210,6 @@ func sandboxBoundary(ws *workspace.Workspace, mainDir string) string {
 
 func sandboxFallbackDirs(sandbox bool, mainDir, workspaceRoot string) []string {
 	if sandbox {
-		if workspaceRoot != "" && workspaceRoot == mainDir {
-			return []string{mainDir}
-		}
 		return []string{mainDir}
 	}
 	return []string{mainDir, workspaceRoot}

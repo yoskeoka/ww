@@ -114,7 +114,7 @@ func (m *Manager) worktreeLocation(branch string) (string, string, error) {
 			base = filepath.Join(cleanAnchor, base)
 			// Reject relative paths that escape the anchor root via ".." traversal.
 			rel, relErr := filepath.Rel(cleanAnchor, base)
-			if relErr != nil || strings.HasPrefix(rel, "..") {
+			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				return "", "", fmt.Errorf("worktree_dir %q resolves outside the allowed area %q", m.Config.WorktreeDir, anchor)
 			}
 			if m.isWorkspaceMode() {
