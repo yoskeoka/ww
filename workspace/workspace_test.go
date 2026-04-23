@@ -380,6 +380,50 @@ func TestDetectWorktreeSiblingNotCountedAsWorkspaceMember(t *testing.T) {
 	}
 }
 
+func TestDetectSandboxFromChildRepoDoesNotDiscoverParentWorkspace(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	childB := filepath.Join(root, "child-b")
+	gitInit(t, childA)
+	gitInit(t, childB)
+
+	ws, err := DetectWithOptions(childA, DetectOptions{Sandbox: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeSingleRepo {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeSingleRepo)
+	}
+	if ws.Root != childA {
+		t.Fatalf("Root = %q, want %q", ws.Root, childA)
+	}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child-a"}) {
+		t.Fatalf("Repos = %v, want [child-a]", got)
+	}
+}
+
+func TestDetectSandboxCurrentDirectoryWorkspaceRoot(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	childB := filepath.Join(root, "child-b")
+	gitInit(t, childA)
+	gitInit(t, childB)
+
+	ws, err := DetectWithOptions(root, DetectOptions{Sandbox: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeWorkspace {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeWorkspace)
+	}
+	if ws.Root != root {
+		t.Fatalf("Root = %q, want %q", ws.Root, root)
+	}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child-a", "child-b"}) {
+		t.Fatalf("Repos = %v, want [child-a child-b]", got)
+	}
+}
+
 func repoNames(repos []Repo) []string {
 	names := make([]string, len(repos))
 	for i, repo := range repos {

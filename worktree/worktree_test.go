@@ -60,6 +60,21 @@ func TestWorktreePathWorkspaceDefault(t *testing.T) {
 	}
 }
 
+func TestWorktreePathSandboxSingleRepoDefault(t *testing.T) {
+	m := &Manager{
+		Config:  Config{Sandbox: true},
+		RepoDir: "/tmp/project",
+	}
+	got, err := m.WorktreePath("feat/my-feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join("/tmp/project", ".worktrees", "project@feat-my-feature")
+	if got != want {
+		t.Fatalf("WorktreePath = %q, want %q", got, want)
+	}
+}
+
 func TestWorktreePathRelativeOverrideWorkspace(t *testing.T) {
 	m := &Manager{
 		Config:  Config{WorktreeDir: "custom"},
@@ -117,6 +132,32 @@ func TestWorktreePathRelativeOverrideSingleRepo(t *testing.T) {
 	want := filepath.Join("/tmp", "worktrees", "project@feat-my-feature")
 	if got != want {
 		t.Fatalf("WorktreePath = %q, want %q", got, want)
+	}
+}
+
+func TestWorktreePathRelativeOverrideSandboxSingleRepo(t *testing.T) {
+	m := &Manager{
+		Config:  Config{WorktreeDir: "worktrees", Sandbox: true},
+		RepoDir: "/tmp/project",
+	}
+	got, err := m.WorktreePath("feat/my-feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join("/tmp/project", "worktrees", "project@feat-my-feature")
+	if got != want {
+		t.Fatalf("WorktreePath = %q, want %q", got, want)
+	}
+}
+
+func TestWorktreePathRelativeEscapeSandboxSingleRepo(t *testing.T) {
+	m := &Manager{
+		Config:  Config{WorktreeDir: "../outside", Sandbox: true},
+		RepoDir: "/tmp/project",
+	}
+	_, err := m.WorktreePath("feat/my-feature")
+	if err == nil {
+		t.Fatal("expected error for relative worktree_dir that escapes repo root, got nil")
 	}
 }
 
@@ -366,6 +407,66 @@ func TestCreateExistingBranchDoesNotRequireBase(t *testing.T) {
 	}
 	if len(log) == 0 || !strings.Contains(log[0], "existing branch: feat/existing") {
 		t.Fatalf("Create() dry-run log = %#v, want existing branch message", log)
+	}
+}
+
+func TestCreateSandboxSingleRepoUsesRepoLocalWorktrees(t *testing.T) {
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{DefaultBase: "main", Sandbox: true},
+		RepoDir: repo,
+	}
+
+	info, _, err := mgr.Create("feat/sandbox", CreateOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(repo, ".worktrees", filepath.Base(repo)+"@feat-sandbox")
+	if info.Path != want {
+		t.Fatalf("Create path = %q, want %q", info.Path, want)
+	}
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("created worktree not found at %s: %v", want, err)
+	}
+}
+
+func TestCreateSandboxRelativeEscapeRejected(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{DefaultBase: "main", WorktreeDir: "../outside", Sandbox: true},
+		RepoDir: repo,
+	}
+
+	_, _, err := mgr.Create("feat/escape", CreateOpts{})
+	if err == nil {
+		t.Fatal("Create error = nil, want relative worktree_dir escape error")
+	}
+	if !strings.Contains(err.Error(), "resolves outside the allowed area") {
+		t.Fatalf("Create error = %q, want escape diagnostic", err)
 	}
 }
 

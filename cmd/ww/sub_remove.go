@@ -33,7 +33,7 @@ func removeCmd() command {
 			}
 			branch := remaining[0]
 
-			mgr, err := managerForSelectedRepo(*repo, true)
+			mgr, err := managerForSelectedRepo(*repo, true, glOpts.sandbox)
 			if err != nil {
 				return err
 			}

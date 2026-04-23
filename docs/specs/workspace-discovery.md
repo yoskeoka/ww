@@ -52,6 +52,19 @@ When the start directory is inside git:
    - it is the current main repo root itself, or one of those immediate child repositories contains the current main repo root
 5. If no candidate qualifies, treat the current repository as a standalone single-repo workspace.
 
+## Sandbox Mode
+
+Sandbox mode is enabled by the global `--sandbox` flag or by `sandbox = true` in `.ww.toml` when that config can be loaded. It constrains default discovery to the current sandbox boundary instead of trying to infer a containing workspace from parent directories.
+
+When sandbox mode is enabled:
+
+1. Scan only the current directory's immediate children for real git repositories.
+2. If child repositories are found, treat the current directory as a workspace root, even if the current directory is not itself a git repository.
+3. Otherwise, if the current directory is inside git, resolve the repository's main working tree root and operate in `single-repo` mode for that repository.
+4. Otherwise, return `not a git repository`.
+
+Sandbox mode does not inspect parent or grandparent directories while detecting a containing workspace. It also does not scan sibling repositories from a parent workspace candidate. From inside a child repository, sandbox mode therefore cannot discover parent workspace siblings, and commands using `--repo <name>` fail unless the current directory itself is a detected workspace root.
+
 ## Edge Cases
 
 - `.git` presence alone is not sufficient for workspace membership. Candidate children are validated with git top-level and git-dir/common-dir resolution.
@@ -73,12 +86,16 @@ When the start directory is inside git:
 |------|---------|------------------|
 | `workspace` | `.worktrees` | `<workspace_root>/.worktrees/<repo>@<branch>` |
 | `single-repo` | `""` | `<repo-parent>/<repo>@<branch>` |
+| `single-repo` with sandbox mode | `.worktrees` | `<repo_root>/.worktrees/<repo>@<branch>` |
 
 Behavior:
 - Explicit `worktree_dir` overrides the mode default in both modes.
 - Relative `worktree_dir` values are resolved against the workspace root in workspace mode.
 - Relative `worktree_dir` values are resolved against the repository parent in single-repo mode.
+- In sandbox single-repo mode, relative `worktree_dir` values are resolved against the repository root.
+- Relative `worktree_dir` values that escape their anchor with `..` are rejected, including in sandbox mode.
 - Absolute `worktree_dir` values are used as-is.
+- Absolute `worktree_dir` values are honored even if they point outside the sandbox-friendly default area. Any real sandbox denial is surfaced as the underlying filesystem or git error.
 
 ## CLI Prerequisite
 

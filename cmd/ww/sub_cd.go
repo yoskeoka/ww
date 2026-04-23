@@ -28,7 +28,7 @@ func cdCmd() command {
 				return fmt.Errorf("usage: ww cd [branch]")
 			}
 
-			mgr, err := managerForSelectedRepo(*repo, true)
+			mgr, err := managerForSelectedRepo(*repo, true, glOpts.sandbox)
 			if err != nil {
 				return err
 			}

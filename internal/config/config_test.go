@@ -31,6 +31,7 @@ default_base = "origin/main"
 copy_files = [".env"]
 symlink_files = ["node_modules"]
 post_create_hook = "npm install"
+sandbox = true
 `
 	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0644); err != nil {
 		t.Fatal(err)
@@ -51,6 +52,9 @@ post_create_hook = "npm install"
 	}
 	if cfg.PostCreateHook != "npm install" {
 		t.Errorf("PostCreateHook = %q, want 'npm install'", cfg.PostCreateHook)
+	}
+	if !cfg.Sandbox {
+		t.Errorf("Sandbox = false, want true")
 	}
 }
 
@@ -146,5 +150,68 @@ func TestLoadFallbackSkipsEmptyString(t *testing.T) {
 	}
 	if cfg.WorktreeDir != "from-fallback" {
 		t.Errorf("WorktreeDir = %q, want from-fallback", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadSandboxStopsAtBoundary(t *testing.T) {
+	parentDir := t.TempDir()
+	boundary := filepath.Join(parentDir, "repo")
+	startDir := filepath.Join(boundary, "sub")
+	if err := os.MkdirAll(startDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parentDir, FileName), []byte(`worktree_dir = "from-parent"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(boundary, FileName), []byte(`worktree_dir = "from-boundary"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(startDir, LoadOptions{Sandbox: true, Boundary: boundary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-boundary" {
+		t.Errorf("WorktreeDir = %q, want from-boundary", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadSandboxIgnoresConfigAboveBoundary(t *testing.T) {
+	parentDir := t.TempDir()
+	boundary := filepath.Join(parentDir, "repo")
+	startDir := filepath.Join(boundary, "sub")
+	if err := os.MkdirAll(startDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parentDir, FileName), []byte(`worktree_dir = "from-parent"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(startDir, LoadOptions{Sandbox: true, Boundary: boundary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "" {
+		t.Errorf("WorktreeDir = %q, want default", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadSandboxAllowsMainWorktreeFallback(t *testing.T) {
+	currentCheckout := t.TempDir()
+	mainWorktree := t.TempDir()
+	if err := os.WriteFile(filepath.Join(mainWorktree, FileName), []byte(`worktree_dir = "from-main"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(currentCheckout, LoadOptions{
+		Sandbox:      true,
+		Boundary:     mainWorktree,
+		FallbackDirs: []string{mainWorktree},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-main" {
+		t.Errorf("WorktreeDir = %q, want from-main", cfg.WorktreeDir)
 	}
 }

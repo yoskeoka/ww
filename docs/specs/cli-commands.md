@@ -8,6 +8,7 @@
 
 - `git` must be available in PATH. If not found, `ww` exits with a clear error: `git not found in PATH`.
 - Workspace-sensitive commands use the nearest containing workspace root selected by the workspace discovery algorithm.
+- When sandbox mode is enabled with `--sandbox` or `sandbox = true`, workspace-sensitive commands only use the current-directory workspace root or the current repository. Parent/grandparent containing workspace detection and parent-based sibling scans are skipped.
 - Detected workspace repositories are limited to real child repo roots. Immediate child symlinks, linked worktree checkouts, and helper directories with stray `.git` markers are excluded from workspace membership.
 - `ww` may be started from a non-git workspace root. `ww list` and `ww clean` work there without extra flags. `ww create` and `ww remove` require `--repo <name>` from that location; without it they exit with: `repo selection is not supported from a non-git workspace root`.
 - If the current directory is neither a git repository nor a detected workspace root, `ww` exits with: `not a git repository`.
@@ -20,6 +21,7 @@ When run from a secondary worktree, `ww` resolves back to the main working tree 
 |------|------|---------|-------------|
 | `--json` | bool | false | Output NDJSON (one JSON object per line) |
 | `--dry-run` | bool | false | Show planned actions without executing |
+| `--sandbox` | bool | false | Constrain workspace/config discovery and single-repo worktree defaults to the current sandbox boundary |
 | `--version` | bool | false | Print version and exit |
 
 ## Commands
@@ -33,6 +35,7 @@ Create a new worktree for the given branch.
    - If `--repo <name>` is omitted, use the current repository exactly as in Phase 1.
    - If `--repo <name>` is provided, require detected workspace mode, find the matching entry in the workspace child repo list by directory name, and operate on that repository.
    - If `--repo` is provided outside workspace mode, return an error: `--repo can only be used inside a detected workspace`.
+   - In sandbox mode, `--repo` is allowed only when the current directory itself is detected as a workspace root. From inside a child repository, sandbox mode resolves only that repository, so `--repo` returns: `--repo can only be used inside a detected workspace`.
    - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
 2. If a worktree directory already exists at the target path, return an error: `worktree already exists at <path>`.
 3. If the branch does not exist: create a new branch from `default_base` (config), `origin/HEAD`, or the heuristic `origin/main` / `origin/master` fallback and add a worktree for it.
@@ -45,6 +48,7 @@ If no base can be resolved for a new branch, the command must return an actionab
 
 **Worktree path:** mode-dependent default, or explicit `worktree_dir` override. Slashes in branch names are replaced with `-`.
 In workspace mode with `--repo`, the default path remains centralized at `<workspace_root>/.worktrees/<repo>@<branch>`.
+In sandbox single-repo mode, the default path is repo-local: `<repo_root>/.worktrees/<repo>@<branch>`.
 
 **Flags:**
 | Flag | Type | Default | Description |
@@ -94,6 +98,7 @@ Print the absolute path of a worktree for shell navigation.
    - If `--repo <name>` is omitted, use the current repository exactly as in Phase 1.
    - If `--repo <name>` is provided, require detected workspace mode, find the matching entry in the workspace child repo list by directory name, and operate on that repository.
    - If `--repo` is provided outside workspace mode, return an error: `--repo can only be used inside a detected workspace`.
+   - In sandbox mode, `--repo` is allowed only when the current directory itself is detected as a workspace root.
    - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
 2. If no branch argument is provided, resolve the most recently created secondary worktree for the target repository.
 3. If a branch argument is provided, match it against worktree branch names. `refs/heads/<branch>` and `<branch>` are treated as equivalent.

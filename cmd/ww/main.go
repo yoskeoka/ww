@@ -29,6 +29,7 @@ type globalOpts struct {
 	errOutput io.Writer
 	json      bool
 	dryRun    bool
+	sandbox   bool
 }
 
 type command struct {
@@ -53,6 +54,7 @@ func cliMain() int {
 	fset := pflag.NewFlagSet(mainCmdName, pflag.ContinueOnError)
 	fset.SetInterspersed(false)
 	showVersion := fset.Bool("version", false, "Print version")
+	sandbox := fset.Bool("sandbox", false, "Constrain discovery and worktree defaults to the current sandbox boundary")
 
 	fset.Usage = func() {
 		fmt.Fprintf(fset.Output(), "Usage: %s <command> [flags]\n\n", mainCmdName)
@@ -81,7 +83,7 @@ func cliMain() int {
 		return 1
 	}
 
-	glOpts := &globalOpts{output: os.Stdout, errOutput: os.Stderr}
+	glOpts := &globalOpts{output: os.Stdout, errOutput: os.Stderr, sandbox: *sandbox}
 	if err := runSubcmd(mainCmdName, commands, args, glOpts); err != nil {
 		if errors.Is(err, errHelp) {
 			return 0
@@ -113,12 +115,25 @@ func runSubcmd(parentCmd string, subCommands []command, args []string, glOpts *g
 }
 
 func newManager(requireRepo bool) (*worktree.Manager, error) {
+	return newManagerWithOptions(requireRepo, false)
+}
+
+func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manager, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
 
-	ws, err := workspace.Detect(dir)
+	sandboxMode := sandboxFlag
+	if !sandboxMode {
+		preCfg, err := config.Load(dir)
+		if err != nil {
+			return nil, fmt.Errorf("loading config: %w", err)
+		}
+		sandboxMode = preCfg.Sandbox
+	}
+
+	ws, err := workspace.DetectWithOptions(dir, workspace.DetectOptions{Sandbox: sandboxMode})
 	if err != nil {
 		return nil, err
 	}
@@ -135,10 +150,15 @@ func newManager(requireRepo bool) (*worktree.Manager, error) {
 		}
 	}
 
-	cfg, err := config.Load(dir, mainDir, ws.Root)
+	cfg, err := config.LoadWithOptions(dir, config.LoadOptions{
+		Sandbox:      sandboxMode,
+		Boundary:     sandboxBoundary(ws, mainDir),
+		FallbackDirs: sandboxFallbackDirs(sandboxMode, mainDir, ws.Root),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
+	sandboxMode = sandboxMode || cfg.Sandbox
 
 	return &worktree.Manager{
 		Git: runner,
@@ -148,10 +168,28 @@ func newManager(requireRepo bool) (*worktree.Manager, error) {
 			CopyFiles:      cfg.CopyFiles,
 			SymlinkFiles:   cfg.SymlinkFiles,
 			PostCreateHook: cfg.PostCreateHook,
+			Sandbox:        sandboxMode,
 		},
 		RepoDir:   mainDir,
 		Workspace: ws,
 	}, nil
+}
+
+func sandboxBoundary(ws *workspace.Workspace, mainDir string) string {
+	if ws != nil && ws.Mode == workspace.ModeWorkspace && ws.Root != "" {
+		return ws.Root
+	}
+	return mainDir
+}
+
+func sandboxFallbackDirs(sandbox bool, mainDir, workspaceRoot string) []string {
+	if sandbox {
+		if workspaceRoot != "" && workspaceRoot == mainDir {
+			return []string{mainDir}
+		}
+		return []string{mainDir}
+	}
+	return []string{mainDir, workspaceRoot}
 }
 
 func outputJSON(w io.Writer, v any) error {

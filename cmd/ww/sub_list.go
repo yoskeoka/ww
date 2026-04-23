@@ -25,7 +25,7 @@ func listCmd() command {
 			}
 			glOpts.json = glOpts.json || *jsonFlag
 
-			mgr, err := newManager(false)
+			mgr, err := newManagerWithOptions(false, glOpts.sandbox)
 			if err != nil {
 				return err
 			}
