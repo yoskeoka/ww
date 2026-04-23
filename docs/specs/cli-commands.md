@@ -35,11 +35,13 @@ Create a new worktree for the given branch.
    - If `--repo` is provided outside workspace mode, return an error: `--repo can only be used inside a detected workspace`.
    - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
 2. If a worktree directory already exists at the target path, return an error: `worktree already exists at <path>`.
-3. If the branch does not exist: create a new branch from `default_base` (config) or `origin/HEAD` and add a worktree for it.
+3. If the branch does not exist: create a new branch from `default_base` (config), `origin/HEAD`, or the heuristic `origin/main` / `origin/master` fallback and add a worktree for it.
 4. If the branch already exists: add a worktree that checks out the existing branch.
 5. After worktree creation, copy files listed in `copy_files` config.
 6. Create symlinks for files listed in `symlink_files` config.
 7. Run `post_create_hook` if configured. In text mode, print `Running post_create_hook: <command>` immediately before streaming the hook's own output.
+
+If no base can be resolved for a new branch, the command must return an actionable error. The error must explain that no explicit `default_base` is configured, `origin/HEAD` could not be used, and heuristic fallback could not find a usable `origin/main` or `origin/master`. It must include both supported remediation paths: set `default_base` in `.ww.toml`, or run `git remote set-head origin --auto` when the remote exposes a default branch.
 
 **Worktree path:** mode-dependent default, or explicit `worktree_dir` override. Slashes in branch names are replaced with `-`.
 In workspace mode with `--repo`, the default path remains centralized at `<workspace_root>/.worktrees/<repo>@<branch>`.

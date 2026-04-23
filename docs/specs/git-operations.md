@@ -130,6 +130,8 @@ When base detection fails, `ww list` and `ww clean` degrade gracefully: all work
 
 When heuristic fallback succeeds, `ww list` and `ww clean` use the resolved base exactly like an authoritative base. Status classification still produces normal `active` / `merged` / `stale` values, and `status_detail=heuristic-base` is attached to each listed worktree entry to show that the base came from the heuristic path rather than `default_base` or `origin/HEAD`.
 
+Commands that require a base branch, such as `ww create` for a new branch, must make unresolved base failures actionable. The error must state that no explicit `default_base` is configured, `origin/HEAD` could not be used, and heuristic fallback could not find a usable `origin/main` or `origin/master`. It must also tell the operator to set `default_base` in `.ww.toml` or repair the remote default branch with `git remote set-head origin --auto` when the remote exposes a default branch. The underlying Git failure must remain available in the message or error chain for debugging.
+
 ### Other
 
 **Fetch from origin:**

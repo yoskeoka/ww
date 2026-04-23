@@ -303,6 +303,104 @@ func TestListRepoGracefulDegradation(t *testing.T) {
 	}
 }
 
+func TestCreateUnresolvedBaseErrorIsActionable(t *testing.T) {
+	repo := t.TempDir()
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	_, _, err := mgr.Create("feat/no-base", CreateOpts{DryRun: true})
+	if err == nil {
+		t.Fatal("Create() error = nil, want unresolved base error")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"cannot determine base branch",
+		"no default_base is configured",
+		"origin/HEAD could not be used",
+		"heuristic fallback could not find a usable origin/main or origin/master",
+		"Set default_base in .ww.toml",
+		"git remote set-head origin --auto",
+		"Original error:",
+		"git symbolic-ref refs/remotes/origin/HEAD",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Create() diagnostic missing %q:\n%s", want, msg)
+		}
+	}
+}
+
+func TestCreateExistingBranchDoesNotRequireBase(t *testing.T) {
+	repo := t.TempDir()
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+	mustGit(t, runner, "branch", "feat/existing")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	info, log, err := mgr.Create("feat/existing", CreateOpts{DryRun: true})
+	if err != nil {
+		t.Fatalf("Create() existing branch should not require base, got: %v", err)
+	}
+	if info.Base != "" {
+		t.Fatalf("Create() existing branch Base = %q, want empty", info.Base)
+	}
+	if len(log) == 0 || !strings.Contains(log[0], "existing branch: feat/existing") {
+		t.Fatalf("Create() dry-run log = %#v, want existing branch message", log)
+	}
+}
+
+func TestUnresolvedCreateBaseErrorDistinguishesHeuristicFailure(t *testing.T) {
+	originErr := errors.New("origin head failed")
+	heuristicErr := errors.New("ls-remote failed")
+	err := unresolvedCreateBaseError(baseDetectionError{
+		originHeadErr: originErr,
+		heuristicErr:  heuristicErr,
+	})
+	msg := err.Error()
+
+	for _, want := range []string{
+		"heuristic fallback failed before it could choose origin/main or origin/master",
+		"Set default_base in .ww.toml",
+		"git remote set-head origin --auto",
+		"Original error:",
+		"ls-remote failed",
+		"origin head failed",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("diagnostic missing %q:\n%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "heuristic fallback could not find a usable origin/main or origin/master") {
+		t.Fatalf("diagnostic should not describe heuristic execution failure as candidate miss:\n%s", msg)
+	}
+	if !errors.Is(err, originErr) {
+		t.Fatal("diagnostic should preserve origin/HEAD error cause")
+	}
+	if !errors.Is(err, heuristicErr) {
+		t.Fatal("diagnostic should preserve heuristic error cause")
+	}
+}
+
 func TestSubmoduleWorktreeRemoveError(t *testing.T) {
 	cause := errors.New("git worktree remove --force /tmp/repo@feat: exit status 128\nfatal: working trees containing submodules cannot be moved or removed")
 	err := submoduleWorktreeRemoveError("/tmp/repo@feat", "/tmp/repo", cause)
