@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"3011acd2cea74495fd165941d91c4bc09b1655faf8d93637f0d37808a3ac99d8","compiler_version":"v0.59.0","strict":true}
+# gh-aw-metadata: {"schema_version":"v2","frontmatter_hash":"47f11897ef05aa93a1badad338c161d6656c6ea356c9ad3810a1a99cd542d0b1","compiler_version":"v0.59.0","strict":true}
 
 name: "Spec/Code Sync Check"
 "on":
@@ -335,7 +335,7 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"missing_data":{},"missing_tool":{},"noop":{"max":1},"upsert_pr_comment":{"description":"Upsert an advisory PR comment with Approve or Request Changes","inputs":{"body":{"default":null,"description":"Review comment body text (markdown)","required":true,"type":"string"},"event":{"default":null,"description":"Review event: APPROVE or REQUEST_CHANGES","options":["APPROVE","REQUEST_CHANGES"],"required":true,"type":"choice"},"pull_request_number":{"default":null,"description":"Optional PR number (defaults to the current PR)","required":false,"type":"string"}}}}
+          {"missing_data":{},"missing_tool":{},"noop":{"max":1},"upsert_pr_comment":{"description":"Upsert an advisory PR comment with Approve or Request Changes","inputs":{"body":{"default":null,"description":"Review comment body text (markdown)","required":true,"type":"string"},"event":{"default":null,"description":"Review event: APPROVE or REQUEST_CHANGES","options":["APPROVE","REQUEST_CHANGES"],"required":true,"type":"choice"}}}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
       - name: Write Safe Outputs Tools
         run: |
@@ -449,10 +449,6 @@ jobs:
                       "APPROVE",
                       "REQUEST_CHANGES"
                     ],
-                    "type": "string"
-                  },
-                  "pull_request_number": {
-                    "description": "Optional PR number (defaults to the current PR)",
                     "type": "string"
                   }
                 },
@@ -1110,7 +1106,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      pull-requests: write
     steps:
       - name: Download agent output artifact
         continue-on-error: true
@@ -1135,31 +1130,11 @@ jobs:
               : Array.isArray(output?.items)
                 ? output.items
                     .filter(i => i && i.type === 'upsert_pr_comment')
-                    .map(i => ({
-                      pull_request_number: i.pull_request_number,
-                      event: i.event,
-                      body: i.body,
-                    }))
+                    .map(i => ({ event: i.event, body: i.body }))
                 : [];
             const marker = '<!-- gh-aw:spec-code-sync -->';
             for (const item of items) {
               try {
-                const rawPullNumber = String(item.pull_request_number ?? '').trim();
-                const hasStrictOverride = /^[1-9][0-9]*$/.test(rawPullNumber);
-                const requestedPullNumber = hasStrictOverride ? Number(rawPullNumber) : null;
-                const isPullRequestEvent = context.eventName === 'pull_request';
-                if (rawPullNumber && !hasStrictOverride) {
-                  core.warning(`Ignoring invalid pull_request_number: ${JSON.stringify(rawPullNumber)}`);
-                }
-                if (isPullRequestEvent && requestedPullNumber && requestedPullNumber !== context.issue.number) {
-                  core.warning(`Ignoring pull_request_number override ${requestedPullNumber} for pull_request event #${context.issue.number}`);
-                }
-                if (!isPullRequestEvent && requestedPullNumber == null) {
-                  throw new Error('pull_request_number is required for non-pull_request events');
-                }
-                const pullNumber = isPullRequestEvent
-                  ? context.issue.number
-                  : requestedPullNumber;
                 const rawBody = String(item.body ?? '').trim();
                 const bodyWithoutMarker = rawBody.split(marker).join('').trim();
                 const bodyWithDecision = bodyWithoutMarker.includes(item.event)
@@ -1170,7 +1145,7 @@ jobs:
                 for await (const page of github.paginate.iterator(github.rest.issues.listComments, {
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  issue_number: pullNumber,
+                  issue_number: context.issue.number,
                 })) {
                   for (const c of page.data) {
                     if (c.user && c.user.login === 'github-actions[bot]' &&
@@ -1206,7 +1181,7 @@ jobs:
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    issue_number: pullNumber,
+                    issue_number: context.issue.number,
                     body: commentBody
                   });
                   core.info(`Posted ${item.event} review as PR comment`);

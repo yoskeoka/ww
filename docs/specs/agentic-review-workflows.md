@@ -16,9 +16,6 @@ Each workflow must define a custom safe-output job that upserts a PR issue comme
 
 - `event`: either `APPROVE` or `REQUEST_CHANGES`
 - `body`: markdown review feedback
-- `pull_request_number`: optional positive integer override for non-`pull_request` events
-
-For `pull_request` events, the current event PR number is authoritative. Invalid overrides are ignored with a warning. Overrides that do not match the current PR are ignored with a warning. For non-`pull_request` events, a valid positive-integer `pull_request_number` is required; the job must fail early with a clear error when it is missing or invalid instead of falling through to an undefined issue number.
 
 ## Markers
 
@@ -45,7 +42,7 @@ The safe-output job must:
 
 Comment deletion failures are non-fatal and must be emitted as warnings.
 
-The job must request `issues: write` and `pull-requests: write` permissions so PR issue comments can be created and updated consistently. The `pull-requests: write` permission is only for PR-comment workflow compatibility; the job must still avoid formal PR review APIs.
+The job must request `issues: write` permission so PR issue comments can be created and updated consistently.
 
 Verification for this spec is `gh aw compile --strict` for the three covered workflows, plus a stale-token search that confirms the current workflow sources and lock files do not contain legacy formal-review output names or Pull Requests review API calls.
 
@@ -72,5 +69,3 @@ Each prompt must require the agent to produce exactly one review-comment safe ou
 The prompt must identify the custom safe-output tool by the runtime-visible tool name `safeoutputs-upsert_pr_comment`, while also allowing the unqualified `upsert_pr_comment` name when a runtime exposes it that way. The prompt must explicitly tell agents not to use the built-in add-comment tool for this output.
 
 The agent may call `noop` only when it is completely unable to read PR content.
-
-Fallback instructions for missing safe-output tools must write `/tmp/gh-aw/agent_output.json` with exactly one comment-upsert item. The fallback JSON must use serialized strings so markdown, quotes, and newlines are valid JSON.
