@@ -159,11 +159,14 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	branchExists := m.Git.BranchExists(branch)
 
-	baseInfo, err := m.baseRef(m.Git)
-	if err != nil {
-		return nil, nil, unresolvedCreateBaseError(err)
+	var base string
+	if !branchExists {
+		baseInfo, err := m.baseRef(m.Git)
+		if err != nil {
+			return nil, nil, unresolvedCreateBaseError(err)
+		}
+		base = baseInfo.Ref
 	}
-	base := baseInfo.Ref
 
 	var dryRunLog []string
 
@@ -398,6 +401,29 @@ func (m *Manager) listRepoFast(repoName, repoPath string) ([]WorktreeInfo, error
 	return infos, nil
 }
 
+type baseDetectionError struct {
+	originHeadErr error
+	heuristicErr  error
+}
+
+func (e baseDetectionError) Error() string {
+	if e.heuristicErr != nil {
+		return fmt.Sprintf("origin/HEAD could not be used and heuristic fallback failed: %v (origin/HEAD error: %v)", e.heuristicErr, e.originHeadErr)
+	}
+	return fmt.Sprintf("origin/HEAD could not be used and heuristic fallback found no usable origin/main or origin/master: %v", e.originHeadErr)
+}
+
+func (e baseDetectionError) Unwrap() []error {
+	var errs []error
+	if e.originHeadErr != nil {
+		errs = append(errs, e.originHeadErr)
+	}
+	if e.heuristicErr != nil {
+		errs = append(errs, e.heuristicErr)
+	}
+	return errs
+}
+
 func (m *Manager) baseRef(runner *git.Runner) (baseRefInfo, error) {
 	if m.Config.DefaultBase != "" {
 		return baseRefInfo{Ref: m.Config.DefaultBase}, nil
@@ -408,16 +434,21 @@ func (m *Manager) baseRef(runner *git.Runner) (baseRefInfo, error) {
 	}
 	ref, ok, heuristicErr := runner.HeuristicDefaultBranch()
 	if heuristicErr != nil {
-		return baseRefInfo{}, heuristicErr
+		return baseRefInfo{}, baseDetectionError{originHeadErr: err, heuristicErr: heuristicErr}
 	}
 	if ok {
 		return baseRefInfo{Ref: ref, StatusDetail: "heuristic-base"}, nil
 	}
-	return baseRefInfo{}, err
+	return baseRefInfo{}, baseDetectionError{originHeadErr: err}
 }
 
 func unresolvedCreateBaseError(err error) error {
-	return fmt.Errorf("cannot determine base branch: no default_base is configured, origin/HEAD could not be used, and heuristic fallback could not find a usable origin/main or origin/master.\nSet default_base in .ww.toml or run: git remote set-head origin --auto when origin exposes a default branch.\nOriginal error: %w", err)
+	var baseErr baseDetectionError
+	heuristicDetail := "heuristic fallback could not find a usable origin/main or origin/master"
+	if errors.As(err, &baseErr) && baseErr.heuristicErr != nil {
+		heuristicDetail = "heuristic fallback failed before it could choose origin/main or origin/master"
+	}
+	return fmt.Errorf("cannot determine base branch: no default_base is configured, origin/HEAD could not be used, and %s.\nSet default_base in .ww.toml or run: git remote set-head origin --auto when origin exposes a default branch.\nOriginal error: %w", heuristicDetail, err)
 }
 
 // listRepoUnknown builds WorktreeInfo entries when the base branch cannot be
