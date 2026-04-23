@@ -33,12 +33,22 @@ type Workspace struct {
 	Mode  Mode
 }
 
+// DetectOptions controls workspace discovery behavior.
+type DetectOptions struct {
+	Sandbox bool
+}
+
 // ErrNotGitRepository is returned when detection finds no git repository and
 // no valid workspace root.
 var ErrNotGitRepository = errors.New("not a git repository")
 
 // Detect inspects startDir and returns the detected workspace layout.
 func Detect(startDir string) (*Workspace, error) {
+	return DetectWithOptions(startDir, DetectOptions{})
+}
+
+// DetectWithOptions inspects startDir and returns the detected workspace layout.
+func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) {
 	absStart, err := filepath.Abs(startDir)
 	if err != nil {
 		return nil, err
@@ -47,6 +57,16 @@ func Detect(startDir string) (*Workspace, error) {
 	childRepos, err := scanImmediateRepos(absStart)
 	if err != nil {
 		return nil, err
+	}
+
+	if opts.Sandbox && len(childRepos) > 0 {
+		repos := childRepos
+		if ok, err := isStandaloneRepoRoot(absStart); err != nil {
+			return nil, err
+		} else if ok {
+			repos = append(repos, Repo{Name: filepath.Base(absStart), Path: absStart})
+		}
+		return &Workspace{Root: absStart, Repos: normalizeRepos(repos), Mode: ModeWorkspace}, nil
 	}
 
 	runner := &git.Runner{Dir: absStart}
@@ -65,6 +85,17 @@ func Detect(startDir string) (*Workspace, error) {
 	mainRoot, err = filepath.Abs(mainRoot)
 	if err != nil {
 		return nil, err
+	}
+
+	if opts.Sandbox {
+		return &Workspace{
+			Root: mainRoot,
+			Repos: []Repo{{
+				Name: filepath.Base(mainRoot),
+				Path: mainRoot,
+			}},
+			Mode: ModeSingleRepo,
+		}, nil
 	}
 
 	if wsRoot, ok, err := detectContainingWorkspace(absStart, mainRoot); err != nil {

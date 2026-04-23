@@ -116,16 +116,16 @@ Update specs before code:
 
 ## Sub-tasks
 
-- [ ] Update specs and project plan for sandbox-constrained mode.
-- [ ] Add ADR entry documenting why sandbox mode overrides existing workspace discovery and single-repo path defaults.
-- [ ] Implement global `--sandbox` flag and configuration field.
-- [ ] Implement sandbox-aware workspace detection without parent/grandparent scans while preserving current-directory child repo scans.
-- [ ] Implement sandbox-aware config search and path anchoring.
-- [ ] Preserve absolute out-of-bound config paths and existing git worktree relationships, while keeping relative `worktree_dir` escape rejection.
-- [ ] Add command-level `--repo` rejection coverage.
-- [ ] Add unit and integration tests.
-- [ ] Run `make test` and any narrower Go test commands needed while iterating.
-- [ ] Move this plan to `docs/exec-plan/done/` during execution.
+- [x] Update specs and project plan for sandbox-constrained mode.
+- [x] Add ADR entry documenting why sandbox mode overrides existing workspace discovery and single-repo path defaults.
+- [x] Implement global `--sandbox` flag and configuration field.
+- [x] Implement sandbox-aware workspace detection without parent/grandparent scans while preserving current-directory child repo scans.
+- [x] Implement sandbox-aware config search and path anchoring.
+- [x] Preserve absolute out-of-bound config paths and existing git worktree relationships, while keeping relative `worktree_dir` escape rejection.
+- [x] Add command-level `--repo` rejection coverage.
+- [x] Add unit and integration tests.
+- [x] Run `make test` and any narrower Go test commands needed while iterating.
+- [x] Move this plan to `docs/exec-plan/done/` during execution.
 
 ## Parallelism
 

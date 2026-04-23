@@ -22,6 +22,7 @@ symlink_files = [
 ]
 
 post_create_hook = "npm install"
+sandbox = false
 ```
 
 ## Fields
@@ -33,6 +34,7 @@ post_create_hook = "npm install"
 | `copy_files` | string[] | `[]` | Files/directories to deep-copy from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `post_create_hook` | string | `""` | Shell command to run in the new worktree directory after creation. Empty = no hook. |
+| `sandbox` | bool | `false` | Constrain workspace/config discovery and single-repo worktree defaults to the current sandbox boundary. The `--sandbox` CLI flag takes precedence and enables sandbox mode even when this field is absent or false. |
 
 ## Trust Model
 
@@ -46,6 +48,19 @@ post_create_hook = "npm install"
 4. Stop at the filesystem root.
 5. If not found via upward search, check caller-provided fallback directories (e.g., the main worktree's root directory or the detected workspace root).
 6. If no file is found, use defaults.
+
+### Sandbox Config Search
+
+When sandbox mode is enabled by `--sandbox` or by an already-loaded `sandbox = true` config value:
+
+1. Determine the sandbox boundary before loading the final config:
+   - if the current working directory has immediate child git repositories, the boundary is the current working directory
+   - otherwise, if the current working directory is inside git, the boundary is that repository's main working tree root
+   - otherwise, config loading uses defaults and command setup returns `not a git repository`
+2. Search from the current working directory upward, stopping at the sandbox boundary.
+3. If the current working directory is a secondary worktree that is not a descendant of the main working tree root, the main working tree root may be checked as an explicit fallback because git defines it as the repository's primary root.
+4. Other fallback directories outside the sandbox boundary are ignored.
+5. If no config is found within those locations, use defaults.
 
 ## Worktree Path Layout
 
@@ -61,6 +76,20 @@ myapp@fix-bug/      # worktree
 
 Path formula: `<repo-parent>/<repo-name>@<sanitized-branch>`
 
+### Sandbox single-repo layout (`worktree_dir = ""`)
+
+In sandbox single-repo mode, the default avoids parent-directory placement:
+
+```text
+myapp/                        # main repo
+├── .worktrees/
+│   ├── myapp@feat-auth/      # worktree
+│   └── myapp@fix-bug/        # worktree
+└── .ww.toml
+```
+
+Path formula: `<repo-root>/.worktrees/<repo-name>@<sanitized-branch>`
+
 ### Workspace layout (`worktree_dir = ".worktrees"` in workspace mode)
 
 Worktrees are created under the specified directory:
@@ -75,6 +104,8 @@ workspace/
 ```
 
 Path formula: `<worktree_dir>/<repo-name>@<sanitized-branch>`
+
+Relative `worktree_dir` values are resolved against the active anchor: the workspace root in workspace mode, the repository parent in normal single-repo mode, or the repository root in sandbox single-repo mode. Relative values that escape the active anchor with `..` are rejected. Absolute values are used as explicit user intent and are not rejected solely for pointing outside the sandbox-friendly default area.
 
 ## Branch Name Sanitization for Paths
 

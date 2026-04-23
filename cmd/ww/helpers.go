@@ -19,12 +19,12 @@ func worktreeCreateOpts(glOpts *globalOpts, quiet bool) worktree.CreateOpts {
 	}
 }
 
-func managerForSelectedRepo(repoName string, requireRepo bool) (*worktree.Manager, error) {
+func managerForSelectedRepo(repoName string, requireRepo bool, sandbox bool) (*worktree.Manager, error) {
 	if repoName == "" {
-		return newManager(requireRepo)
+		return newManagerWithOptions(requireRepo, sandbox)
 	}
 
-	base, err := newManager(false)
+	base, err := newManagerWithOptions(false, sandbox)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +51,7 @@ func managerForRepo(base *worktree.Manager, repoName string) (*worktree.Manager,
 				CopyFiles:      base.Config.CopyFiles,
 				SymlinkFiles:   base.Config.SymlinkFiles,
 				PostCreateHook: base.Config.PostCreateHook,
+				Sandbox:        base.Config.Sandbox,
 			},
 			RepoDir:   repo.Path,
 			Workspace: base.Workspace,

@@ -45,6 +45,7 @@ Phase 3 shell integration adds explicit path-printing interfaces for shell navig
 - If `post_create_hook` runs in quiet mode, its output is routed to `stderr` so `stdout` remains path-only.
 - With `--dry-run`, quiet mode prints the path that would be created.
 - With `--json`, JSON output takes precedence over quiet text mode.
+- With `--sandbox` in single-repo mode and no explicit `worktree_dir`, quiet mode prints the repo-local `.worktrees` path, e.g. `/path/to/repo/.worktrees/repo@feat-my-branch`.
 
 ## Supported Shell Patterns
 

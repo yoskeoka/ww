@@ -37,7 +37,7 @@ func cleanCmd() command {
 			glOpts.json = glOpts.json || *jsonFlag
 			glOpts.dryRun = glOpts.dryRun || *dryRun
 
-			mgr, err := newManager(false)
+			mgr, err := newManagerWithOptions(false, glOpts.sandbox)
 			if err != nil {
 				return err
 			}

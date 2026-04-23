@@ -29,6 +29,7 @@ type globalOpts struct {
 	errOutput io.Writer
 	json      bool
 	dryRun    bool
+	sandbox   bool
 }
 
 type command struct {
@@ -53,6 +54,7 @@ func cliMain() int {
 	fset := pflag.NewFlagSet(mainCmdName, pflag.ContinueOnError)
 	fset.SetInterspersed(false)
 	showVersion := fset.Bool("version", false, "Print version")
+	sandbox := fset.Bool("sandbox", false, "Constrain discovery and worktree defaults to the current sandbox boundary")
 
 	fset.Usage = func() {
 		fmt.Fprintf(fset.Output(), "Usage: %s <command> [flags]\n\n", mainCmdName)
@@ -81,7 +83,7 @@ func cliMain() int {
 		return 1
 	}
 
-	glOpts := &globalOpts{output: os.Stdout, errOutput: os.Stderr}
+	glOpts := &globalOpts{output: os.Stdout, errOutput: os.Stderr, sandbox: *sandbox}
 	if err := runSubcmd(mainCmdName, commands, args, glOpts); err != nil {
 		if errors.Is(err, errHelp) {
 			return 0
@@ -113,12 +115,65 @@ func runSubcmd(parentCmd string, subCommands []command, args []string, glOpts *g
 }
 
 func newManager(requireRepo bool) (*worktree.Manager, error) {
+	return newManagerWithOptions(requireRepo, false)
+}
+
+type managerContext struct {
+	ws      *workspace.Workspace
+	mainDir string
+	cfg     *config.Config
+}
+
+func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manager, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
 
-	ws, err := workspace.Detect(dir)
+	sandboxMode := sandboxFlag
+	if !sandboxMode {
+		preCfg, err := config.Load(dir)
+		if err != nil {
+			return nil, fmt.Errorf("loading config: %w", err)
+		}
+		sandboxMode = preCfg.Sandbox
+	}
+
+	ctx, err := loadManagerContext(dir, requireRepo, sandboxMode)
+	if err != nil {
+		return nil, err
+	}
+
+	// sandbox=true discovered only via fallback config paths must still
+	// affect workspace/config behavior, so rerun once in sandbox mode.
+	if !sandboxMode && ctx.cfg.Sandbox {
+		sandboxMode = true
+		ctx, err = loadManagerContext(dir, requireRepo, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+	sandboxMode = sandboxMode || ctx.cfg.Sandbox
+
+	runner := &git.Runner{Dir: dir}
+
+	return &worktree.Manager{
+		Git: runner,
+		Config: worktree.Config{
+			WorktreeDir:    ctx.cfg.WorktreeDir,
+			DefaultBase:    ctx.cfg.DefaultBase,
+			CopyFiles:      ctx.cfg.CopyFiles,
+			SymlinkFiles:   ctx.cfg.SymlinkFiles,
+			PostCreateHook: ctx.cfg.PostCreateHook,
+			Sandbox:        sandboxMode,
+		},
+		RepoDir:   ctx.mainDir,
+		Workspace: ctx.ws,
+	}, nil
+}
+
+func loadManagerContext(dir string, requireRepo bool, sandboxMode bool) (*managerContext, error) {
+	ws, err := workspace.DetectWithOptions(dir, workspace.DetectOptions{Sandbox: sandboxMode})
 	if err != nil {
 		return nil, err
 	}
@@ -135,23 +190,29 @@ func newManager(requireRepo bool) (*worktree.Manager, error) {
 		}
 	}
 
-	cfg, err := config.Load(dir, mainDir, ws.Root)
+	cfg, err := config.LoadWithOptions(dir, config.LoadOptions{
+		Sandbox:      sandboxMode,
+		Boundary:     sandboxBoundary(ws, mainDir),
+		FallbackDirs: sandboxFallbackDirs(sandboxMode, mainDir, ws.Root),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
+	return &managerContext{ws: ws, mainDir: mainDir, cfg: cfg}, nil
+}
 
-	return &worktree.Manager{
-		Git: runner,
-		Config: worktree.Config{
-			WorktreeDir:    cfg.WorktreeDir,
-			DefaultBase:    cfg.DefaultBase,
-			CopyFiles:      cfg.CopyFiles,
-			SymlinkFiles:   cfg.SymlinkFiles,
-			PostCreateHook: cfg.PostCreateHook,
-		},
-		RepoDir:   mainDir,
-		Workspace: ws,
-	}, nil
+func sandboxBoundary(ws *workspace.Workspace, mainDir string) string {
+	if ws != nil && ws.Mode == workspace.ModeWorkspace && ws.Root != "" {
+		return ws.Root
+	}
+	return mainDir
+}
+
+func sandboxFallbackDirs(sandbox bool, mainDir, workspaceRoot string) []string {
+	if sandbox {
+		return []string{mainDir}
+	}
+	return []string{mainDir, workspaceRoot}
 }
 
 func outputJSON(w io.Writer, v any) error {

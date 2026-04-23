@@ -32,6 +32,7 @@ type Config struct {
 	CopyFiles      []string
 	SymlinkFiles   []string
 	PostCreateHook string
+	Sandbox        bool
 }
 
 // Manager coordinates worktree operations.
@@ -104,6 +105,8 @@ func (m *Manager) worktreeLocation(branch string) (string, string, error) {
 			var anchor string
 			if m.isWorkspaceMode() {
 				anchor = m.Workspace.Root
+			} else if m.Config.Sandbox {
+				anchor = m.RepoDir
 			} else {
 				anchor = repoParent
 			}
@@ -111,7 +114,7 @@ func (m *Manager) worktreeLocation(branch string) (string, string, error) {
 			base = filepath.Join(cleanAnchor, base)
 			// Reject relative paths that escape the anchor root via ".." traversal.
 			rel, relErr := filepath.Rel(cleanAnchor, base)
-			if relErr != nil || strings.HasPrefix(rel, "..") {
+			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				return "", "", fmt.Errorf("worktree_dir %q resolves outside the allowed area %q", m.Config.WorktreeDir, anchor)
 			}
 			if m.isWorkspaceMode() {
@@ -125,6 +128,11 @@ func (m *Manager) worktreeLocation(branch string) (string, string, error) {
 	if m.isWorkspaceMode() {
 		base := filepath.Join(m.Workspace.Root, ".worktrees")
 		return filepath.Join(base, dirName), m.Workspace.Root, nil
+	}
+
+	if m.Config.Sandbox {
+		base := filepath.Join(m.RepoDir, ".worktrees")
+		return filepath.Join(base, dirName), m.RepoDir, nil
 	}
 
 	return filepath.Join(repoParent, dirName), m.RepoDir, nil

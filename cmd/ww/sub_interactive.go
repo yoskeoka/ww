@@ -50,7 +50,7 @@ func interactiveCmd() command {
 				return err
 			}
 
-			mgr, err := newManager(false)
+			mgr, err := newManagerWithOptions(false, glOpts.sandbox)
 			if err != nil {
 				return err
 			}
@@ -111,6 +111,7 @@ func interactiveCmd() command {
 						return executeCleanWorktrees(mgr, infos, &globalOpts{
 							output:    prompt,
 							errOutput: prompt,
+							sandbox:   glOpts.sandbox,
 						}, mode == interactive.CleanModeForce)
 					},
 				},
