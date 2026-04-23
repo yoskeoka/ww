@@ -18,14 +18,14 @@ Relevant existing decisions:
 
 ## User-Facing Naming
 
-`--no-upward-search` is too narrow because it only describes one mechanism. The desired mode also changes the default worktree base from the repo parent to the repo-local `.worktrees` directory and avoids sibling workspace enumeration.
+`--no-upward-search` is too narrow because it only describes one mechanism. The desired mode also changes the default worktree base when operating on a single repository from the repo parent to the repo-local `.worktrees` directory and avoids using parent directories to discover containing workspaces.
 
 Options:
 
 - `--no-upward-search`: precise for config/workspace traversal, but misleading once worktree placement also changes.
 - `--local-only`: communicates current-repo operation, but can be confused with network/remotes and does not clearly explain sandbox motivation.
 - `--contained`: communicates bounded filesystem behavior, but is a less common CLI term and may be vague without reading docs.
-- `--sandbox`: directly names the target environment and gives room for the full behavior set: no parent discovery, no sibling workspace use, repo-local defaults.
+- `--sandbox`: directly names the target environment and gives room for the full behavior set: no parent discovery, no parent-based sibling workspace use, repo-local defaults when operating on one repo.
 
 Recommendation: implement a global `--sandbox` flag and matching `.ww.toml` field named `sandbox = true`. The flag should take precedence over config. During execution, update the project plan to rename FR-26 from `--no-upward-search` to sandbox-constrained mode so future work does not preserve the misleading name.
 
@@ -36,12 +36,25 @@ When sandbox mode is enabled:
 - `ww` must not search above the current repository root for `.ww.toml`.
 - `ww` must not inspect parent or grandparent directories while detecting a containing workspace.
 - `ww` must not scan sibling repositories from a parent workspace candidate.
-- `ww` must operate as single-repo mode for the current repository.
-- `--repo <name>` must be rejected because no workspace repo list is available.
-- If `worktree_dir` is unset, worktrees default to `<repo_root>/.worktrees/<repo>@<branch>` instead of `<repo_parent>/<repo>@<branch>`.
-- If `worktree_dir` is relative, resolve it against `<repo_root>` instead of the repo parent.
+- `ww` may still scan immediate child directories of the current working directory. If the current working directory itself is a workspace root with child repositories, sandbox mode should preserve workspace mode and allow `--repo <name>`.
+- If the current working directory is inside a child repository, `ww` must not walk upward to discover the containing workspace. In that case, sandbox mode operates only on the current repository and `--repo <name>` is rejected because no workspace repo list is available.
+- If the current working directory is not inside git but has immediate child repositories, treat the current directory as a sandbox-bounded workspace root.
+- If the current working directory is neither inside git nor a current-directory workspace root, return `not a git repository`.
+- If `worktree_dir` is unset while operating on one repo outside a detected current-directory workspace, worktrees default to `<repo_root>/.worktrees/<repo>@<branch>` instead of `<repo_parent>/<repo>@<branch>`.
+- If `worktree_dir` is unset in a sandbox-bounded workspace root, keep the workspace layout at `<cwd>/.worktrees/<repo>@<branch>`.
+- If `worktree_dir` is relative, resolve it against the active sandbox boundary: the current-directory workspace root in workspace mode, or the repo root in single-repo mode.
 - Absolute `worktree_dir` values remain accepted because they are explicit user intent.
 - Existing copy/symlink/hook behavior remains unchanged after the target path is resolved.
+
+Sandbox-mode config lookup algorithm:
+
+1. Determine the sandbox boundary before loading config:
+   - if the current working directory has immediate child git repositories, the boundary is the current working directory
+   - otherwise, if the current working directory is inside git, the boundary is the current repository root
+   - otherwise, there is no valid boundary and `ww` returns `not a git repository`
+2. Search for `.ww.toml` from the current working directory upward, but stop at the sandbox boundary.
+3. Do not check fallback directories outside the sandbox boundary.
+4. If no config is found within the boundary, use defaults.
 
 Open edge to verify during implementation: running from a secondary worktree currently resolves back to the main working tree. Sandbox mode should keep that behavior only if the required git commands do not force parent directory filesystem reads outside the allowed sandbox. If this cannot be guaranteed, document the limitation and add an actionable error.
 
@@ -51,15 +64,15 @@ Update specs before code:
 
 - `docs/specs/cli-commands.md`
   - Add `--sandbox` to global flags.
-  - Document that workspace-sensitive commands force single-repo operation in sandbox mode.
-  - Document `--repo` rejection in sandbox mode.
+  - Document that workspace-sensitive commands only use the current-directory workspace root or current repository in sandbox mode.
+  - Document `--repo` behavior in sandbox mode: allowed from a current-directory workspace root, rejected when sandbox mode resolves only the current repository.
 - `docs/specs/workspace-discovery.md`
-  - Add a sandbox mode section explaining that containing workspace detection and sibling enumeration are skipped.
+  - Add a sandbox mode section explaining that parent/grandparent containing workspace detection is skipped, while current-directory child repo scanning remains allowed.
   - Add sandbox mode worktree path defaults.
 - `docs/specs/configuration.md`
   - Add `sandbox = true`.
-  - Define config lookup order in sandbox mode: current directory/repo-local config only, no parent walk.
-  - Define relative `worktree_dir` anchoring to repo root in sandbox mode.
+  - Define config lookup order in sandbox mode: search upward from the current working directory only until the active sandbox boundary.
+  - Define relative `worktree_dir` anchoring to the current-directory workspace root in workspace mode or repo root in single-repo mode.
 - `docs/specs/shell-integration.md`
   - Confirm `ww create -q --sandbox <branch>` prints the repo-local `.worktrees` path.
 - `docs/project-plan.md`
@@ -74,7 +87,9 @@ Update specs before code:
   - Thread the mode into workspace detection and config loading.
 - `workspace/workspace.go`
   - Add an options struct, e.g. `DetectOptions{Sandbox bool}`.
-  - In sandbox mode, resolve only the current repo and return `ModeSingleRepo`; skip candidate parent/grandparent detection and child/sibling scans that would touch parent directories.
+  - In sandbox mode, first scan only the current directory's immediate children. If child repositories are found, return `ModeWorkspace` rooted at the current directory.
+  - If the current directory is inside git and no current-directory workspace root is found, return `ModeSingleRepo` for the current repository.
+  - Skip candidate parent/grandparent detection and parent-based sibling scans that would touch parent directories.
 - `internal/config/config.go`
   - Add `Sandbox bool` to `Config`.
   - Add load options so sandbox mode disables upward search beyond the repository root.
@@ -93,7 +108,7 @@ Update specs before code:
 - [ ] Update specs and project plan for sandbox-constrained mode.
 - [ ] Add ADR entry documenting why sandbox mode overrides existing workspace discovery and single-repo path defaults.
 - [ ] Implement global `--sandbox` flag and configuration field.
-- [ ] Implement sandbox-aware workspace detection without parent/grandparent/sibling scans.
+- [ ] Implement sandbox-aware workspace detection without parent/grandparent scans while preserving current-directory child repo scans.
 - [ ] Implement sandbox-aware config search and path anchoring.
 - [ ] Add command-level `--repo` rejection coverage.
 - [ ] Add unit and integration tests.
@@ -114,5 +129,7 @@ Update specs before code:
 - Targeted integration tests covering:
   - `ww --sandbox create feat/x` creates `<repo_root>/.worktrees/<repo>@feat-x`
   - `ww --sandbox create -q feat/x` prints only that path
-  - `ww --sandbox list` does not include sibling workspace repos
-  - `ww --sandbox create --repo other feat/x` returns a clear sandbox-mode error
+  - `ww --sandbox list` from a workspace root includes immediate child repos
+  - `ww --sandbox list` from inside a child repo does not include parent workspace siblings
+  - `ww --sandbox create --repo other feat/x` works from a current-directory workspace root
+  - `ww --sandbox create --repo other feat/x` returns a clear sandbox-mode error from inside a single child repo
