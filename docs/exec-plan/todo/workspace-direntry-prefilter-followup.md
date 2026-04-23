@@ -1,4 +1,4 @@
-# Workspace Direntry Prefilter Follow-up
+# Workspace DirEntry Prefilter Follow-up
 > **Execution**: Use `/execute-task` to implement this plan.
 
 ## Objective
