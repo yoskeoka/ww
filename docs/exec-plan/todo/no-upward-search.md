@@ -31,7 +31,7 @@ Recommendation: implement a global `--sandbox` flag and matching `.ww.toml` fiel
 
 This must not become a forced single-repo flag. If sandbox mode disabled downward scanning from a workspace root, the behavior would be better named `--single-repo` or similar. The intended contract is bounded filesystem access: use the current directory and descendants when they are the active workspace, but do not read or depend on parent directories.
 
-Sandbox mode is also not a strict policy engine that rejects every path outside the sandbox boundary. Its purpose is to make the default discovery and placement strategy usable when `ww` has been used with `--sandbox` from the start. If an existing config value or git worktree relationship explicitly points outside the sandbox boundary, `ww` should follow that user intent and let the underlying filesystem or git operation fail normally when the real sandbox blocks it.
+Sandbox mode is also not a strict policy engine that rejects every path outside the sandbox boundary. Its purpose is to make the default discovery and placement strategy usable when `ww` has been used with `--sandbox` from the start. If an absolute config value or existing git worktree relationship explicitly points outside the sandbox boundary, `ww` should follow that user intent and let the underlying filesystem or git operation fail normally when the real sandbox blocks it. Relative `worktree_dir` values that escape their anchor with `..` remain rejected in sandbox mode, matching current behavior; loosening that rule globally is tracked as follow-up work in `docs/issues/relax-relative-worktree-dir-escape.md`.
 
 ## Behavior Contract
 
@@ -47,7 +47,8 @@ When sandbox mode is enabled:
 - If `worktree_dir` is unset while operating on one repo outside a detected current-directory workspace, worktrees default to `<repo_root>/.worktrees/<repo>@<branch>` instead of `<repo_parent>/<repo>@<branch>`.
 - If `worktree_dir` is unset in a sandbox-bounded workspace root, keep the workspace layout at `<cwd>/.worktrees/<repo>@<branch>`.
 - If `worktree_dir` is relative, resolve it against the active sandbox boundary: the current-directory workspace root in workspace mode, or the repo root in single-repo mode.
-- Explicit `worktree_dir` values, including relative values that escape with `..`, remain accepted even when they resolve outside the active sandbox boundary because they are user intent from config. In a real sandbox, an out-of-bound path should fail with the underlying operation-not-permitted or access error instead of being pre-rejected by sandbox mode.
+- Relative `worktree_dir` values that escape the active anchor with `..` remain rejected in sandbox mode, preserving current path-safety behavior.
+- Absolute `worktree_dir` values remain accepted even when they point outside the active sandbox boundary because they are explicit user intent from config. In a real sandbox, an out-of-bound path should fail with the underlying operation-not-permitted or access error instead of being pre-rejected by sandbox mode.
 - Existing git worktree relationships, including a secondary worktree whose main working tree is outside the sandbox boundary, should also be followed rather than rejected solely by sandbox mode. If resolving or using that relationship needs access outside the real sandbox, surface the underlying git/filesystem error.
 - Existing copy/symlink/hook behavior remains unchanged after the target path is resolved.
 
@@ -55,13 +56,14 @@ Sandbox-mode config lookup algorithm:
 
 1. Determine the sandbox boundary before loading config:
    - if the current working directory has immediate child git repositories, the boundary is the current working directory
-   - otherwise, if the current working directory is inside git, the boundary is the current repository root
+   - otherwise, if the current working directory is inside git, resolve the repository's main working tree root and use that as the boundary
    - otherwise, there is no valid boundary and `ww` returns `not a git repository`
 2. Search for `.ww.toml` from the current working directory upward, but stop at the sandbox boundary.
-3. Do not check fallback directories outside the sandbox boundary.
-4. If no config is found within the boundary, use defaults.
+3. If the current working directory is a secondary worktree that is not a descendant of the main working tree root, check the main working tree root as an explicit fallback directory. Do not reject this solely because it is outside the current checkout; it is the git-defined repository root for existing `ww` behavior.
+4. Do not check fallback directories outside the sandbox boundary except for the explicit main working tree fallback described above.
+5. If no config is found within those locations, use defaults.
 
-Compatibility expectation: a user who previously used `ww` without sandbox mode may already have config or worktrees that point outside the sandbox-friendly defaults. Sandbox mode should not hide or reinterpret that state. It should attempt the configured operation and rely on the actual sandbox to report permission failures, making it clear to the user that the existing setup needs an unsandboxed run or migration.
+Compatibility expectation: a user who previously used `ww` without sandbox mode may already have absolute config paths or git worktree relationships that point outside the sandbox-friendly defaults. Sandbox mode should not hide or reinterpret that state. It should attempt the configured operation and rely on the actual sandbox to report permission failures, making it clear to the user that the existing setup needs an unsandboxed run or migration.
 
 ## Spec Changes
 
@@ -78,7 +80,8 @@ Update specs before code:
   - Add `sandbox = true`.
   - Define config lookup order in sandbox mode: search upward from the current working directory only until the active sandbox boundary.
   - Define relative `worktree_dir` anchoring to the current-directory workspace root in workspace mode or repo root in single-repo mode.
-  - Document that explicit `worktree_dir` values, including relative paths that escape with `..`, are honored even if they point outside the sandbox-friendly default area, with actual sandbox denial surfaced as the underlying filesystem/git error.
+  - Document that absolute `worktree_dir` values are honored even if they point outside the sandbox-friendly default area, with actual sandbox denial surfaced as the underlying filesystem/git error.
+  - Document that relative `worktree_dir` values that escape their anchor with `..` remain rejected in sandbox mode.
 - `docs/specs/shell-integration.md`
   - Confirm `ww create -q --sandbox <branch>` prints the repo-local `.worktrees` path.
 - `docs/project-plan.md`
@@ -103,7 +106,8 @@ Update specs before code:
 - `worktree/worktree.go`
   - Add a manager/config flag for sandbox-constrained path layout.
   - Change default and relative `worktree_dir` anchoring to repo root when sandbox mode is enabled.
-  - Do not add sandbox-mode validation that rejects explicit configured paths solely because they are outside the active sandbox boundary.
+  - Preserve existing relative `worktree_dir` escape rejection in sandbox mode.
+  - Do not add sandbox-mode validation that rejects absolute configured paths solely because they are outside the active sandbox boundary.
 - Command modules that accept `--repo`
   - Ensure `--repo` errors clearly in sandbox mode.
 - Tests
@@ -117,7 +121,7 @@ Update specs before code:
 - [ ] Implement global `--sandbox` flag and configuration field.
 - [ ] Implement sandbox-aware workspace detection without parent/grandparent scans while preserving current-directory child repo scans.
 - [ ] Implement sandbox-aware config search and path anchoring.
-- [ ] Preserve explicit out-of-bound config/git worktree intent and surface underlying permission errors instead of pre-rejecting it.
+- [ ] Preserve absolute out-of-bound config paths and existing git worktree relationships, while keeping relative `worktree_dir` escape rejection.
 - [ ] Add command-level `--repo` rejection coverage.
 - [ ] Add unit and integration tests.
 - [ ] Run `make test` and any narrower Go test commands needed while iterating.
@@ -137,7 +141,9 @@ Update specs before code:
 - Targeted integration tests covering:
   - `ww --sandbox create feat/x` creates `<repo_root>/.worktrees/<repo>@feat-x`
   - `ww --sandbox create -q feat/x` prints only that path
-  - explicit `worktree_dir` outside the sandbox-friendly default is attempted and reports the underlying filesystem/git error if blocked
+  - absolute `worktree_dir` outside the sandbox-friendly default is attempted and reports the underlying filesystem/git error if blocked
+  - relative `worktree_dir` escaping with `..` remains rejected in sandbox mode
+  - config lookup from a secondary worktree checks the main working tree root fallback
   - `ww --sandbox list` from a workspace root includes immediate child repos
   - `ww --sandbox list` from inside a child repo does not include parent workspace siblings
   - `ww --sandbox create --repo other feat/x` works from a current-directory workspace root
