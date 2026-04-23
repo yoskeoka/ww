@@ -18,6 +18,7 @@ tools:
 network: defaults
 
 safe-outputs:
+  report-failure-as-issue: false
   jobs:
     upsert_pr_comment:
       description: "Upsert an advisory PR comment with Approve or Request Changes"
