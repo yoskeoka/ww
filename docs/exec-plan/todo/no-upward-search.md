@@ -29,6 +29,8 @@ Options:
 
 Recommendation: implement a global `--sandbox` flag and matching `.ww.toml` field named `sandbox = true`. The flag should take precedence over config. During execution, update the project plan to rename FR-26 from `--no-upward-search` to sandbox-constrained mode so future work does not preserve the misleading name.
 
+This must not become a forced single-repo flag. If sandbox mode disabled downward scanning from a workspace root, the behavior would be better named `--single-repo` or similar. The intended contract is bounded filesystem access: use the current directory and descendants when they are the active workspace, but do not read or depend on parent directories.
+
 ## Behavior Contract
 
 When sandbox mode is enabled:
