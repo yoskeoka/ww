@@ -57,7 +57,9 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 #### Post-Phase 2
 
-- **FR-26**: Sandbox-constrained mode (`--sandbox` flag or `sandbox = true` in `.ww.toml`) — make `ww` usable in filesystem-sandboxed environments that cannot reliably read or use parent directories. Sandbox mode skips parent/grandparent containing workspace detection, skips parent-based sibling scans, limits config lookup to the active sandbox boundary, and uses repo-local `.worktrees` placement for single-repo defaults. It still supports current-directory workspace roots by scanning immediate child repositories, so `--repo` remains available when the user starts at a bounded workspace root.
+Post-Phase 2 (originally tracked as `--no-upward-search`) is complete. The planned follow-up landed via the sandbox implementation, so this item is no longer an open phase. Any remaining sandbox-related refinements should be tracked as separate follow-up tasks rather than under Post-Phase 2.
+
+- **FR-26**: Sandbox-constrained mode (`--sandbox` flag or `sandbox = true` in `.ww.toml`) — completed via the sandbox implementation. `ww` can operate in filesystem-sandboxed environments that cannot reliably read or use parent directories by skipping parent/grandparent containing workspace detection, skipping parent-based sibling scans, limiting config lookup to the active sandbox boundary, and using repo-local `.worktrees` placement for single-repo defaults. It still supports current-directory workspace roots by scanning immediate child repositories, so `--repo` remains available when the user starts at a bounded workspace root.
 
 #### Future
 
@@ -94,7 +96,7 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 - [x] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling.
 - [x] Phase 2: Workspace discovery (auto-detect parent/child git repos, `workspace = true`), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
-- [ ] Post-Phase 2: sandbox-constrained mode for sandboxed environments (FR-26). Independent of Phase 2 workspace discovery, but broader than a no-upward-search switch because it also affects config lookup and single-repo worktree placement.
+- [x] Post-Phase 2: sandbox-constrained mode for sandboxed environments (FR-26). Originally tracked as `--no-upward-search`, and completed via the sandbox implementation. Any further sandbox refinements should be handled as separate follow-up tasks rather than this phase.
 - [x] Phase 3: Polish — shell integration (`ww cd`, `cd $(ww create feat/x)`), SemVer release automation starting at `v0.3.0`, Homebrew tap distribution, documentation.
 - [x] Phase 4: Human interactive mode — add a people-first interactive flow for common operations such as create, list, remove, clean, and worktree selection without requiring users to remember the full flag surface.
 - [ ] Phase 5 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
