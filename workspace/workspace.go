@@ -226,19 +226,7 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 	var repos []Repo
 	for _, entry := range entries {
 		candidate := filepath.Join(dir, entry.Name())
-		if !entry.IsDir() {
-			info, err := os.Lstat(candidate)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					continue
-				}
-				return nil, err
-			}
-			if info.Mode()&os.ModeSymlink == 0 {
-				continue
-			}
-		}
-		if ok, err := isImmediateChildRepo(candidate); err != nil {
+		if ok, err := isImmediateChildRepo(entry, candidate); err != nil {
 			return nil, err
 		} else if ok {
 			repos = append(repos, Repo{Name: entry.Name(), Path: candidate})
@@ -247,18 +235,47 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 	return repos, nil
 }
 
-func isImmediateChildRepo(dir string) (bool, error) {
-	info, err := os.Lstat(dir)
+func isImmediateChildRepo(entry os.DirEntry, dir string) (bool, error) {
+	kind, err := classifyImmediateChild(entry, dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
 		return false, err
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
+	if kind.isSymlink || !kind.isDir {
 		return false, nil
 	}
 	return isStandaloneRepoRoot(dir)
+}
+
+type immediateChildKind struct {
+	isDir     bool
+	isSymlink bool
+}
+
+func classifyImmediateChild(entry os.DirEntry, path string) (immediateChildKind, error) {
+	if entry.IsDir() {
+		return immediateChildKind{isDir: true}, nil
+	}
+
+	if entry.Type()&os.ModeSymlink != 0 {
+		return immediateChildKind{isSymlink: true}, nil
+	}
+
+	if entry.Type() != 0 {
+		return immediateChildKind{}, nil
+	}
+
+	info, err := os.Lstat(path)
+	if err != nil {
+		return immediateChildKind{}, err
+	}
+
+	return immediateChildKind{
+		isDir:     info.IsDir(),
+		isSymlink: info.Mode()&os.ModeSymlink != 0,
+	}, nil
 }
 
 func isStandaloneRepoRoot(dir string) (bool, error) {

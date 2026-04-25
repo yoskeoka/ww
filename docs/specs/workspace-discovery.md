@@ -68,7 +68,8 @@ Sandbox mode does not inspect parent or grandparent directories while detecting 
 ## Edge Cases
 
 - `.git` presence alone is not sufficient for workspace membership. Candidate children are validated with git top-level and git-dir/common-dir resolution.
-- Immediate child symlink entries are ignored during workspace-member discovery. `ww` does not follow child symlinks by default.
+- Immediate child scanning may use cheap `DirEntry` metadata to prefilter obvious non-repository entries before git validation runs.
+- Immediate child symlink entries are ignored during workspace-member discovery even when they survive that cheap prefilter. `ww` does not follow child symlinks by default.
 - Linked worktree checkouts are ignored for workspace discovery even when their top-level path matches the child directory, because managed worktree checkouts are not real workspace members.
 - Helper directories containing stray or partial `.git` contents do not count as repositories unless git resolves them as standalone repo roots.
 - Only immediate children are scanned, and only within the bounded candidate window. Detection does not recurse through arbitrary ancestors or nested workspace structures.
