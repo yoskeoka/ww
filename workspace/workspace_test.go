@@ -241,6 +241,29 @@ func TestDetectIgnoresChildSymlinkToRepo(t *testing.T) {
 	}
 }
 
+func TestScanImmediateReposIgnoresRegularFilesAndChildSymlinks(t *testing.T) {
+	root := evalTempDir(t)
+	repo := filepath.Join(root, "repo")
+	file := filepath.Join(root, "notes.txt")
+	symlink := filepath.Join(root, "repo-link")
+
+	gitInit(t, repo)
+	if err := os.WriteFile(file, []byte("not a repo"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(repo, symlink); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := scanImmediateRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := repoNames(repos); !reflect.DeepEqual(got, []string{"repo"}) {
+		t.Fatalf("Repos = %v, want [repo]", got)
+	}
+}
+
 func TestDetectIgnoresLinkedWorktreeSibling(t *testing.T) {
 	root := evalTempDir(t)
 	child := filepath.Join(root, "child")
