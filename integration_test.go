@@ -950,6 +950,44 @@ func TestCdWithRepoFlagFromWorkspaceRoot(t *testing.T) {
 	}
 }
 
+func TestCdFindsJustCreatedWorktreeFromGitBackedWorkspaceRoot(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	outer, err := globalEnv.MkdirTemp("ww-git-backed-workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	workspaceRoot := path.Join(outer, "workspace")
+	initEmptyRepo(t, workspaceRoot)
+	writeConfig(t, workspaceRoot, `default_base = "main"`)
+
+	repo1 := path.Join(workspaceRoot, "repo1")
+	repo2 := path.Join(workspaceRoot, "repo2")
+	initEmptyRepo(t, repo1)
+	initEmptyRepo(t, repo2)
+
+	if _, err := runWW(t, workspaceRoot, "create", "feat/workspace-root-cd"); err != nil {
+		t.Fatalf("ww create from git-backed workspace root: %v", err)
+	}
+
+	stdout, stderr, err := runWWSplit(t, workspaceRoot, "cd", "feat/workspace-root-cd")
+	if err != nil {
+		t.Fatalf("ww cd from git-backed workspace root: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	wantPath := workspaceWorktreePath(workspaceRoot, "workspace", "feat/workspace-root-cd")
+	if strings.TrimSpace(stdout) != wantPath {
+		t.Fatalf("ww cd from git-backed workspace root stdout = %q, want %q", stdout, wantPath+"\n")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("ww cd from git-backed workspace root stderr should be empty, got: %s", stderr)
+	}
+}
+
 func TestCdErrorsWithoutSecondaryWorktrees(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")
