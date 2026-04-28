@@ -9,7 +9,9 @@ This plan supports `ww`'s shell-integration goal in `docs/project-plan.md` and t
 
 ## Background
 
-Workspace issue reference: `vibe-coding-workspace/docs/issues/ww-cd-cannot-find-just-created-worktree.md`
+Issue reference: `docs/issues/ww-cd-cannot-find-just-created-worktree.md`
+
+External workspace context: originally reported in `vibe-coding-workspace/docs/issues/ww-cd-cannot-find-just-created-worktree.md`
 
 Reported reproduction in the real workspace:
 
