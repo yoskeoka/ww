@@ -25,3 +25,14 @@ The original dogfooding report was first captured in:
 - `vibe-coding-workspace/docs/issues/ww-cd-cannot-find-just-created-worktree.md`
 
 That workspace issue should be treated as the source report. This `ww` issue tracks the product-side investigation and fix work inside the `ww` repository.
+
+## Resolution
+
+Resolved on `main` by the workspace-root parity fix and regression coverage:
+
+- `720ab5d` `fix: cover git-backed workspace-root create/cd parity (#213)`
+- `integration_test.go`: `TestCdFindsJustCreatedWorktreeFromGitBackedWorkspaceRoot`
+
+Verification:
+
+- `go test -C ww ./... -run TestCdFindsJustCreatedWorktreeFromGitBackedWorkspaceRoot -count=1`
