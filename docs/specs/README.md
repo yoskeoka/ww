@@ -11,5 +11,5 @@ Detailed specifications for `ww` CLI behavior.
 | [shell-integration.md](shell-integration.md) | `ww cd`, `ww create -q`, and shell wrapper patterns |
 | [interactive-mode.md](interactive-mode.md) | Human-oriented `ww i` flows for create, list, open, remove, and clean |
 | [release-versioning.md](release-versioning.md) | SemVer tagging, build metadata, and release automation |
-| [github-actions-pinning.md](github-actions-pinning.md) | `pinact` で普通の workflow YAML の `uses:` を管理する契約 |
+| [github-actions-pinning.md](github-actions-pinning.md) | Contract for managing ordinary workflow YAML `uses:` references with `pinact` |
 | [testing.md](testing.md) | Testing strategy and test utilities |
