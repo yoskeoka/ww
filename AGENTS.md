@@ -58,6 +58,11 @@ Three workflows automatically review PRs: `plan-review`, `impl-review`, `spec-co
 - Log each false positive as a `docs/issues/` entry describing the trigger and why it was wrong
 - Use logged false positives to refine the workflow prompts in `.github/workflows/*.md`
 
+## GitHub Actions Pinning
+
+- When editing ordinary GitHub Actions workflows or composite actions, use `pinact` to pin or update `uses:` references rather than hand-editing version tags.
+- Do not run `pinact` on `gh aw` source workflows (`.github/workflows/*.md`), generated `.lock.yml` files, or `.github/aw/actions-lock.json`.
+
 ## Lessons Learned
 
 - **Always pull before pushing on CI-active branches**: Agentic workflows may push commits (e.g., automated fixes) between your commits. Always `git pull --rebase` before pushing to avoid rejected pushes and merge conflicts.
