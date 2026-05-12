@@ -19,6 +19,8 @@ This mode exists for two adjacent workflows:
 - local checkout for review, inspection, and debugging of remote work such as an open PR branch
 - taking over an existing remote branch and continuing to add commits from a separate local worktree
 
+To make that contract reliable, `ww` should refresh remote information before attempting the Git-native remote-guessing checkout path. Users should not need to remember a manual `git fetch` step before `ww create --guess-remote <branch>`.
+
 ## Context
 
 - Project goal: `ww` should be a portable, git-native worktree CLI that works across environments without repo-host-specific assumptions.
@@ -61,8 +63,9 @@ Update specs before code changes:
 
 - `docs/specs/cli-commands.md`
   - add `--guess-remote` to `ww create`
-  - define that this mode requests checkout of an existing remote branch via Git-native resolution rather than new-branch creation from the default base
+  - define that this mode fetches the relevant remote information first, then requests checkout of an existing remote branch via Git-native resolution rather than new-branch creation from the default base
   - define the failure mode when Git cannot resolve a matching remote branch
+  - define the failure mode when the installed Git does not support `git worktree add --guess-remote`
   - clarify precedence between three cases:
     - existing local branch
     - explicit `--guess-remote`
@@ -70,6 +73,8 @@ Update specs before code changes:
 - `docs/specs/git-operations.md`
   - add the exact Git operation used for this mode
   - clarify that the remote-branch checkout path is Git-driven and does not require `gh`
+  - add the pre-checkout fetch contract
+  - define the actionable error for unsupported Git versions: surface the original Git error, tell the user to upgrade Git, and include a manual `git worktree add ... --track ...` fallback path that still achieves the same isolated-worktree workflow
   - document any supported limitations discovered during implementation, especially around remote uniqueness and branch-name matching
 
 Update human-facing usage docs if execution changes the supported command examples:
@@ -89,6 +94,7 @@ Planned implementation scope:
   - preserve current behavior for existing local branches and normal new-branch creation
 - `git/git.go`
   - add a dedicated helper for the Git-native remote-checkout operation if needed, instead of overloading the current "new branch" and "existing local branch" helpers
+  - add a helper for the pre-checkout fetch path and any Git-version-sensitive error shaping needed for unsupported `--guess-remote`
 - `internal/interactive/*`
   - decide whether the interactive create flow should stay unchanged for now or expose the new mode explicitly; if unchanged, document that this plan only covers the non-interactive CLI path
 
@@ -98,9 +104,16 @@ Planned implementation scope:
   - the branch exists only on the remote
   - no matching remote branch exists
   - a same-named local branch already exists
+  - the remote branch exists but was not fetched before the command started
+  - the installed Git does not support `git worktree add --guess-remote`
 - [ ] Update `docs/specs/cli-commands.md` with the explicit-flag contract.
 - [ ] Update `docs/specs/git-operations.md` with the Git-native operation and limits.
 - [ ] Implement `ww create --guess-remote <branch>` in the non-interactive CLI path.
+- [ ] Make the `--guess-remote` path fetch remote information before attempting checkout.
+- [ ] Return an actionable unsupported-Git error that includes:
+  - the original Git error text
+  - a request to upgrade Git
+  - a manual `git worktree add -b <branch> --track <path> <remote>/<branch>` fallback path
 - [ ] Add unit/integration coverage for remote-only branch checkout and failure cases.
 - [ ] Update `README.md` examples if the new mode is accepted as public user-facing behavior.
 
@@ -109,7 +122,9 @@ Planned implementation scope:
 - `go test ./...`
 - targeted tests covering:
   - create from a remote-only branch with `--guess-remote`
+  - create from a remote branch that becomes available only after the command's fetch step
   - failure when `--guess-remote` cannot resolve a remote branch
+  - failure when `git worktree add --guess-remote` is unsupported, including the actionable error text
   - unchanged behavior for normal `ww create <branch>`
   - unchanged behavior for existing local branches
 - optional manual confirmation in a temp repo with a bare `origin` remote and a branch that exists remotely but not locally
