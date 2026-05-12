@@ -11,6 +11,7 @@ func createCmd() command {
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
 	quiet := fset.BoolP("quiet", "q", false, "Print only the worktree path")
+	guessRemote := fset.Bool("guess-remote", false, "Refresh origin and check out an existing remote branch with the same name")
 	repo := fset.String("repo", "", "Target a detected workspace repository by name")
 
 	return command{
@@ -35,7 +36,7 @@ func createCmd() command {
 				return err
 			}
 
-			info, dryLog, err := mgr.Create(branch, worktreeCreateOpts(glOpts, *quiet))
+			info, dryLog, err := mgr.Create(branch, worktreeCreateOpts(glOpts, *quiet, *guessRemote))
 			if err != nil {
 				return err
 			}

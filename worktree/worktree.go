@@ -45,9 +45,10 @@ type Manager struct {
 
 // CreateOpts configures worktree creation.
 type CreateOpts struct {
-	DryRun   bool
-	Output   io.Writer // destination for text-mode output (nil defaults to os.Stdout)
-	TextMode bool      // when true, print human-readable progress (e.g. hook announcement)
+	DryRun      bool
+	Output      io.Writer // destination for text-mode output (nil defaults to os.Stdout)
+	TextMode    bool      // when true, print human-readable progress (e.g. hook announcement)
+	GuessRemote bool
 }
 
 // RemoveOpts configures worktree removal.
@@ -166,9 +167,10 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 	}
 
 	branchExists := m.Git.BranchExists(branch)
+	guessRemote := opts.GuessRemote && !branchExists
 
 	var base string
-	if !branchExists {
+	if !branchExists && !guessRemote {
 		baseInfo, err := m.baseRef(m.Git)
 		if err != nil {
 			return nil, nil, unresolvedCreateBaseError(err)
@@ -181,6 +183,8 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 	if opts.DryRun {
 		if branchExists {
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would create worktree at %s (existing branch: %s)", wtPath, branch))
+		} else if guessRemote {
+			dryRunLog = append(dryRunLog, fmt.Sprintf("Would fetch origin and create worktree at %s (remote branch: %s, mode: guess-remote)", wtPath, branch))
 		} else {
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would create worktree at %s (branch: %s, base: %s)", wtPath, branch, base))
 		}
@@ -201,6 +205,13 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		if err := m.Git.WorktreeAddExisting(wtPath, branch); err != nil {
 			return nil, nil, fmt.Errorf("adding worktree for existing branch: %w", err)
 		}
+	} else if guessRemote {
+		if err := m.Git.Fetch(); err != nil {
+			return nil, nil, fmt.Errorf("refreshing origin before remote checkout: %w", err)
+		}
+		if err := m.Git.WorktreeAddGuessRemote(wtPath, branch); err != nil {
+			return nil, nil, guessRemoteCreateError(err, wtPath, branch)
+		}
 	} else {
 		if err := m.Git.WorktreeAdd(wtPath, branch, base); err != nil {
 			return nil, nil, fmt.Errorf("creating worktree with new branch: %w", err)
@@ -213,6 +224,25 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	info := &WorktreeInfo{Path: wtPath, Branch: branch, Created: true, Base: base}
 	return info, nil, nil
+}
+
+func guessRemoteCreateError(err error, wtPath, branch string) error {
+	if isGuessRemoteUnsupported(err) {
+		return fmt.Errorf("git worktree add --guess-remote is unsupported by the installed Git. Upgrade Git and retry, or run manually:\n  git worktree add -b %s --track %s origin/%s\nOriginal error: %w", branch, wtPath, branch, err)
+	}
+	return fmt.Errorf("cannot resolve remote branch %q with --guess-remote after refreshing origin. Make sure a matching remote branch exists and can be resolved by Git.\nOriginal error: %w", branch, err)
+}
+
+func isGuessRemoteUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "guess-remote") &&
+		(strings.Contains(msg, "unknown option") ||
+			strings.Contains(msg, "unknown switch") ||
+			strings.Contains(msg, "unrecognized option") ||
+			strings.Contains(msg, "unsupported option"))
 }
 
 // List returns all worktrees.

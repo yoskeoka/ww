@@ -1359,6 +1359,15 @@ func setupRepoWithBareRemote(t *testing.T) string {
 	return repo
 }
 
+func mustRemoteURL(t *testing.T, repo string) string {
+	t.Helper()
+	out, err := globalEnv.Git(repo, "remote", "get-url", "origin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(out)
+}
+
 func makeStaleWorktree(t *testing.T, repo, branch string, dirty bool) {
 	t.Helper()
 
@@ -1618,6 +1627,105 @@ func TestCreateExistingBranch(t *testing.T) {
 	wtPath := path.Join(path.Dir(repo), "myrepo@feat-existing")
 	if !globalEnv.PathExists(path.Join(wtPath, "main.go")) {
 		t.Error("worktree for existing branch should contain main.go")
+	}
+}
+
+func TestCreateGuessRemoteRemoteOnlyBranch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/remote-only"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "remote-only.txt"), "remote only\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: remote only"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "-u", "origin", "feat/remote-only"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "branch", "-D", "feat/remote-only"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, repo, "create", "--guess-remote", "feat/remote-only")
+	if err != nil {
+		t.Fatalf("ww create --guess-remote: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Created worktree") {
+		t.Fatalf("unexpected output: %s", out)
+	}
+
+	wtPath := worktreePath(repo, "feat/remote-only")
+	if !globalEnv.PathExists(path.Join(wtPath, "remote-only.txt")) {
+		t.Fatalf("worktree should contain remote-only.txt: %s", wtPath)
+	}
+	upstream, err := globalEnv.Git(wtPath, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	if err != nil {
+		t.Fatalf("worktree upstream lookup: %v\n%s", err, upstream)
+	}
+	if strings.TrimSpace(upstream) != "origin/feat/remote-only" {
+		t.Fatalf("upstream = %q, want %q", strings.TrimSpace(upstream), "origin/feat/remote-only")
+	}
+}
+
+func TestCreateGuessRemoteFetchesOriginBeforeCheckout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepoWithBareRemote(t)
+	writeConfig(t, repo, `default_base = "main"`)
+
+	peer := setupRepo(t)
+	if _, err := globalEnv.Git(peer, "remote", "set-url", "origin", mustRemoteURL(t, repo)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(peer, "checkout", "-b", "feat/from-peer"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(peer, "from-peer.txt"), "from peer\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(peer, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(peer, "commit", "-m", "feat: from peer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(peer, "push", "-u", "origin", "feat/from-peer"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := globalEnv.Git(repo, "rev-parse", "--verify", "refs/remotes/origin/feat/from-peer"); err == nil {
+		t.Fatal("expected origin/feat/from-peer to be absent before ww create fetches origin")
+	}
+
+	out, err := runWW(t, repo, "create", "--guess-remote", "feat/from-peer")
+	if err != nil {
+		t.Fatalf("ww create --guess-remote after peer push: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Created worktree") {
+		t.Fatalf("unexpected output: %s", out)
+	}
+
+	wtPath := worktreePath(repo, "feat/from-peer")
+	if !globalEnv.PathExists(path.Join(wtPath, "from-peer.txt")) {
+		t.Fatalf("worktree should contain fetched branch content: %s", wtPath)
 	}
 }
 

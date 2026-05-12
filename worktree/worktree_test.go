@@ -3,6 +3,7 @@ package worktree
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -410,6 +411,108 @@ func TestCreateExistingBranchDoesNotRequireBase(t *testing.T) {
 	}
 }
 
+func TestCreateGuessRemoteExistingLocalBranchTakesPrecedence(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "branch", "feat/existing")
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	info, log, err := mgr.Create("feat/existing", CreateOpts{DryRun: true, GuessRemote: true})
+	if err != nil {
+		t.Fatalf("Create() existing branch with GuessRemote should not fail, got: %v", err)
+	}
+	if info.Base != "" {
+		t.Fatalf("Create() existing branch Base = %q, want empty", info.Base)
+	}
+	if len(log) == 0 || !strings.Contains(log[0], "existing branch: feat/existing") {
+		t.Fatalf("Create() dry-run log = %#v, want existing branch message", log)
+	}
+}
+
+func TestCreateGuessRemoteMissingRemoteBranchIsActionable(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	runner := &git.Runner{Dir: repo}
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	_, _, err := mgr.Create("feat/missing", CreateOpts{GuessRemote: true})
+	if err == nil {
+		t.Fatal("Create() error = nil, want guess-remote resolution failure")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		`cannot resolve remote branch "feat/missing" with --guess-remote after refreshing origin`,
+		"Make sure a matching remote branch exists and can be resolved by Git",
+		"Original error:",
+		"invalid reference: feat/missing",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Create() diagnostic missing %q:\n%s", want, msg)
+		}
+	}
+}
+
+func TestCreateGuessRemoteUnsupportedGitIsActionable(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	baseRunner := &git.Runner{Dir: repo}
+
+	mustGit(t, baseRunner, "checkout", "-b", "feat/remote-only")
+	writeStatusFile(t, repo, "remote-only.txt", "remote only\n")
+	mustGit(t, baseRunner, "add", ".")
+	mustGit(t, baseRunner, "commit", "-m", "feat: remote only")
+	mustGit(t, baseRunner, "push", "-u", "origin", "feat/remote-only")
+	mustGit(t, baseRunner, "checkout", "main")
+	mustGit(t, baseRunner, "branch", "-D", "feat/remote-only")
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(t.TempDir(), "fake-git.sh")
+	scriptBody := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"worktree\" ] && [ \"$2\" = \"add\" ] && [ \"$3\" = \"--guess-remote\" ]; then\n" +
+		"  echo \"error: unknown option guess-remote\" 1>&2\n" +
+		"  exit 129\n" +
+		"fi\n" +
+		"exec \"" + realGit + "\" \"$@\"\n"
+	if err := os.WriteFile(script, []byte(scriptBody), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := &Manager{
+		Git:     &git.Runner{Dir: repo, GitBin: script},
+		Config:  Config{},
+		RepoDir: repo,
+	}
+
+	_, _, err = mgr.Create("feat/remote-only", CreateOpts{GuessRemote: true})
+	if err == nil {
+		t.Fatal("Create() error = nil, want unsupported guess-remote diagnostic")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"git worktree add --guess-remote is unsupported by the installed Git",
+		"Upgrade Git and retry",
+		"git worktree add -b feat/remote-only --track",
+		"origin/feat/remote-only",
+		"Original error:",
+		"unknown option guess-remote",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("Create() diagnostic missing %q:\n%s", want, msg)
+		}
+	}
+}
+
 func TestCreateSandboxSingleRepoUsesRepoLocalWorktrees(t *testing.T) {
 	repo, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -733,6 +836,33 @@ func mustGit(t *testing.T, runner *git.Runner, args ...string) {
 	if _, err := runner.Run(args...); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func setupGitRepo(t *testing.T) string {
+	t.Helper()
+
+	repo := t.TempDir()
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "init", "-b", "main")
+	mustGit(t, runner, "config", "user.email", "test@example.com")
+	mustGit(t, runner, "config", "user.name", "Test User")
+	writeStatusFile(t, repo, "README.md", "# repo\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "initial")
+	return repo
+}
+
+func setupGitRepoWithRemote(t *testing.T) (string, string) {
+	t.Helper()
+
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	mustGit(t, &git.Runner{Dir: t.TempDir()}, "init", "--bare", remote)
+
+	repo := setupGitRepo(t)
+	runner := &git.Runner{Dir: repo}
+	mustGit(t, runner, "remote", "add", "origin", remote)
+	mustGit(t, runner, "push", "-u", "origin", "main")
+	return repo, remote
 }
 
 func writeStatusFile(t *testing.T, repo, name, content string) {
