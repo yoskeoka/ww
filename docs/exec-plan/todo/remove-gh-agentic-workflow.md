@@ -24,6 +24,7 @@ Past decisions reviewed before planning:
 Update the specs and durable docs so they describe the post-removal state accurately:
 
 - remove or retire `docs/specs/agentic-review-workflows.md`
+- update `docs/spec-code-mapping.md` so it no longer maps removed `gh aw` workflow assets to the retired spec surface
 - update `docs/specs/github-actions-pinning.md` so it no longer treats `gh aw` review workflow sources and generated lock files as active repo assets that must be preserved
 - update `AGENTS.md` to remove the `gh-aw` automated review section and any workflow-editing guidance that becomes stale after removal
 - update any remaining durable docs that still instruct contributors to maintain or regenerate these workflows
@@ -36,6 +37,7 @@ Remove the workflow assets and supporting repository metadata for the current `g
 - delete `.github/workflows/impl-review.md`
 - delete `.github/workflows/spec-code-sync.md`
 - delete the generated lock files for those workflows
+- delete `.github/aw/actions-lock.json` if the inventory confirms it is only retained for this `gh aw` review workflow line
 - remove any now-unused `gh aw` repository assets that only exist to support these review workflows, if confirmed unused after a repo-wide sweep
 - update any remaining GitHub-side workflow/config references that assume these review checks still exist
 
