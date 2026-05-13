@@ -26,7 +26,7 @@ When run from a secondary worktree, `ww` resolves back to the main working tree 
 
 ## Commands
 
-### `ww create <branch>`
+### `ww create [--guess-remote] <branch>`
 
 Create a new worktree for the given branch.
 
@@ -38,11 +38,16 @@ Create a new worktree for the given branch.
    - In sandbox mode, `--repo` is allowed only when the current directory itself is detected as a workspace root. From inside a child repository, sandbox mode resolves only that repository, so `--repo` returns: `--repo can only be used inside a detected workspace`.
    - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
 2. If a worktree directory already exists at the target path, return an error: `worktree already exists at <path>`.
-3. If the branch does not exist: create a new branch from `default_base` (config), `origin/HEAD`, or the heuristic `origin/main` / `origin/master` fallback and add a worktree for it.
-4. If the branch already exists: add a worktree that checks out the existing branch.
-5. After worktree creation, copy files listed in `copy_files` config.
-6. Create symlinks for files listed in `symlink_files` config.
-7. Run `post_create_hook` if configured. In text mode, print `Running post_create_hook: <command>` immediately before streaming the hook's own output.
+3. If the branch already exists locally: add a worktree that checks out the existing local branch. This takes precedence over `--guess-remote`.
+4. If `--guess-remote` is set and the branch does not exist locally:
+   - refresh `origin` before checkout so recently created remote branches can be resolved without a manual fetch step
+   - ask Git to resolve and check out an existing remote branch with the same branch name using `git worktree add --guess-remote`
+   - if Git cannot resolve a matching remote branch, surface an actionable error explaining that no matching remote branch could be resolved after refreshing `origin`
+   - if the installed Git does not support `git worktree add --guess-remote`, surface the original Git error, tell the user to upgrade Git, and include a manual `git worktree add -b <branch> --track <path> origin/<branch>` fallback
+5. Otherwise: create a new branch from `default_base` (config), `origin/HEAD`, or the heuristic `origin/main` / `origin/master` fallback and add a worktree for it.
+6. After worktree creation, copy files listed in `copy_files` config.
+7. Create symlinks for files listed in `symlink_files` config.
+8. Run `post_create_hook` if configured. In text mode, print `Running post_create_hook: <command>` immediately before streaming the hook's own output.
 
 If no base can be resolved for a new branch, the command must return an actionable error. The error must explain that no explicit `default_base` is configured, `origin/HEAD` could not be used, and heuristic fallback could not find a usable `origin/main` or `origin/master`. It must include both supported remediation paths: set `default_base` in `.ww.toml`, or run `git remote set-head origin --auto` when the remote exposes a default branch.
 
@@ -53,6 +58,7 @@ In sandbox single-repo mode, the default path is repo-local: `<repo_root>/.workt
 **Flags:**
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--guess-remote` | bool | false | Refresh `origin` and ask Git to check out an existing remote branch with the same name instead of creating a new branch |
 | `--repo` | string | empty | Target a detected workspace repository by name instead of the current repo |
 | `-q`, `--quiet` | bool | false | Suppress human-readable output and print only the created worktree path on `stdout` |
 | `--dry-run` | bool | false | Show planned actions without executing |

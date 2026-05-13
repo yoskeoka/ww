@@ -72,6 +72,13 @@ func (r *Runner) WorktreeAdd(path, branch, base string) error {
 	return err
 }
 
+// WorktreeAddGuessRemote creates a worktree by asking Git to resolve a
+// same-named remote branch.
+func (r *Runner) WorktreeAddGuessRemote(path, branch string) error {
+	_, err := r.Run("worktree", "add", "--guess-remote", path, branch)
+	return err
+}
+
 // WorktreeAddExisting creates a worktree for an existing branch.
 func (r *Runner) WorktreeAddExisting(path, branch string) error {
 	_, err := r.Run("worktree", "add", path, branch)

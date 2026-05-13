@@ -38,6 +38,14 @@ ww create feat/my-feature
 
 This creates a new branch from `default_base` when configured, otherwise from `origin/HEAD`, and sets up a worktree for it. If the branch already exists, it checks out the existing branch.
 
+To check out a branch that exists only on the remote, use the explicit Git-native path:
+
+```sh
+ww create --guess-remote feat/existing-pr-branch
+```
+
+This refreshes `origin` first, then asks Git to resolve and check out the same-named remote branch with `git worktree add --guess-remote`.
+
 ### List worktrees
 
 ```sh

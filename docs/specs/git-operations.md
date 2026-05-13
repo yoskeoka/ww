@@ -49,6 +49,17 @@ git worktree add -b <branch> <path> <base>
 git worktree add <path> <branch>
 ```
 
+**Create worktree from an existing remote branch via Git-native resolution:**
+```
+git fetch origin
+git worktree add --guess-remote <path> <branch>
+```
+
+This path is opt-in through `ww create --guess-remote <branch>`. `ww` refreshes
+`origin` first so a recently created remote branch can be resolved without a
+manual fetch step. The checkout itself remains Git-driven; `ww` does not use
+`gh`, PR APIs, or custom remote-branch resolution logic.
+
 **List all worktrees (porcelain format):**
 ```
 git worktree list --porcelain
@@ -138,6 +149,26 @@ Commands that require a base branch, such as `ww create` for a new branch, must 
 ```
 git fetch origin
 ```
+
+When `ww create --guess-remote <branch>` is used, this fetch happens
+immediately before `git worktree add --guess-remote ...`.
+
+If `git worktree add --guess-remote` fails because the installed Git does not
+support that flag, `ww` must return an actionable error that:
+
+- includes the original Git error text
+- tells the user to upgrade Git
+- includes a manual fallback command of the form:
+
+```text
+git worktree add -b <branch> --track <path> origin/<branch>
+```
+
+If Git still cannot resolve the branch after the fetch, `ww` must surface an
+actionable error explaining that no matching remote branch could be resolved
+after refreshing `origin`. The message should preserve the underlying Git error
+for debugging and note the supported limitation that Git-native guessing depends
+on a same-named matching remote branch being resolvable by Git.
 
 ## Error Handling
 

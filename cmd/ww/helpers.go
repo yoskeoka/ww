@@ -11,11 +11,12 @@ import (
 	"github.com/yoskeoka/ww/worktree"
 )
 
-func worktreeCreateOpts(glOpts *globalOpts, quiet bool) worktree.CreateOpts {
+func worktreeCreateOpts(glOpts *globalOpts, quiet bool, guessRemote bool) worktree.CreateOpts {
 	return worktree.CreateOpts{
-		DryRun:   glOpts.dryRun,
-		Output:   glOpts.output,
-		TextMode: !glOpts.json && !quiet,
+		DryRun:      glOpts.dryRun,
+		Output:      glOpts.output,
+		TextMode:    !glOpts.json && !quiet,
+		GuessRemote: guessRemote,
 	}
 }
 
