@@ -2,13 +2,14 @@
 
 ## Summary
 
-During workflow dogfooding from the workspace root, an AI agent started `ww create --repo ai-arena plan/dungeon-sidecar-boundary`
-and `ww cd --repo ai-arena plan/dungeon-sidecar-boundary` in parallel instead of waiting for `create` to finish first.
+During workflow dogfooding from the workspace root, an AI agent used `multi_tool_use.parallel` to start
+`ww create --repo ai-arena plan/dungeon-sidecar-boundary` and `ww cd --repo ai-arena plan/dungeon-sidecar-boundary`
+at the same time instead of waiting for `create` to finish first.
 
 - repo: `ai-arena`
 - triggering workspace: `vibe-coding-workspace`
 - cwd: workspace root `vibe-coding-workspace/`
-- commands started in parallel:
+- commands started in parallel via `multi_tool_use.parallel`:
   - `ww create --repo ai-arena plan/dungeon-sidecar-boundary`
   - `ww cd --repo ai-arena plan/dungeon-sidecar-boundary`
 - actual:
