@@ -1,5 +1,7 @@
 # gh-aw Custom Safe Output Fallback
 
+Status: obsoleted by `docs/exec-plan/done/remove-gh-agentic-workflow.md`. The `gh aw` review workflow line was removed instead of repaired, so this plan was moved to `done/` without execution.
+
 **Execution**: Use `/execute-task` to implement this plan.
 
 ## Objective
