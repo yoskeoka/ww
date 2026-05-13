@@ -1,5 +1,7 @@
 # Plan Review `upsert_pr_comment` fails with integration-permission error
 
+Status: obsoleted by `docs/exec-plan/done/remove-gh-agentic-workflow.md`. The repository removed the `gh aw` PR review workflows instead of repairing this comment-upsert path.
+
 ## Summary
 
 The `Plan Review` workflow can fail in the `upsert_pr_comment` job even after

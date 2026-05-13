@@ -44,24 +44,9 @@ This project follows the AI-Centered Development workflow defined in the parent 
 3. **Log issues**: Unrelated problems found during work go in `docs/issues/`.
 4. **PR for everything**: All changes go through GitHub PR review.
 
-## Automated PR Review (gh-aw)
-
-Three workflows automatically review PRs: `plan-review`, `impl-review`, `spec-code-sync`. They post Approve or Request Changes based on file path patterns.
-
-**Editing agentic workflows:**
-- Source files are `.github/workflows/*.md` — edit these, never the `.lock.yml` files.
-- After editing, always run `gh aw compile` to regenerate lock files.
-- Commit both `.md` and `.lock.yml` changes together.
-
-**Handling false positives:**
-- If a review requests changes incorrectly, bypass the rule to merge
-- Log each false positive as a `docs/issues/` entry describing the trigger and why it was wrong
-- Use logged false positives to refine the workflow prompts in `.github/workflows/*.md`
-
 ## GitHub Actions Pinning
 
 - When editing ordinary GitHub Actions workflows or composite actions, use `pinact` to pin or update `uses:` references rather than hand-editing version tags.
-- Do not run `pinact` on `gh aw` source workflows (`.github/workflows/*.md`), generated `.lock.yml` files, or `.github/aw/actions-lock.json`.
 
 ## Lessons Learned
 

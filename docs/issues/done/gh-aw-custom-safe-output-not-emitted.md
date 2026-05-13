@@ -1,5 +1,7 @@
 # gh-aw custom safe-output is not emitted by Copilot agent
 
+Status: obsoleted by `docs/exec-plan/done/remove-gh-agentic-workflow.md`. The repository removed the `gh aw` PR review workflows instead of fixing this path.
+
 ## Summary
 
 PR #190 changed the agentic review workflows to expose a custom `upsert_pr_comment` safe-output job. During PR follow-up, the runtime registered the custom tool as `safeoutputs-upsert_pr_comment`, but Copilot still did not emit that safe-output type directly. The agent instead wrote fallback JSON files such as `/tmp/gh-aw/agent_output.json`, which the gh-aw `output_types` detector did not count as a custom job output. As a result, the compiled `upsert_pr_comment` job stayed `SKIPPED` even though the agent reached an `APPROVE` decision.
