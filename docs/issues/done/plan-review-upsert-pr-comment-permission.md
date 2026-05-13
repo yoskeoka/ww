@@ -53,3 +53,7 @@ Concrete checks:
 Medium. This does not block the underlying code verification, but it causes a
 review workflow to fail for workflow-infrastructure reasons and should be fixed
 before relying on the durable PR-comment path.
+
+## Follow-up
+
+If CI-side agentic PR review is reconsidered in this repository, revisit this issue together with [docs/issues/gh-aw-reintroduction-needs-fresh-decision.md](../gh-aw-reintroduction-needs-fresh-decision.md).
