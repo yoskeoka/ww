@@ -502,8 +502,8 @@ func TestCreateGuessRemoteUnsupportedGitIsActionable(t *testing.T) {
 	for _, want := range []string{
 		"git worktree add --guess-remote is unsupported by the installed Git",
 		"Upgrade Git and retry",
-		"git worktree add -b feat/remote-only --track",
-		"origin/feat/remote-only",
+		"git worktree add -b 'feat/remote-only' --track",
+		"'origin/feat/remote-only'",
 		"Original error:",
 		"unknown option guess-remote",
 	} {

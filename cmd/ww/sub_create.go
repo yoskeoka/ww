@@ -27,7 +27,7 @@ func createCmd() command {
 
 			remaining := fset.Args()
 			if len(remaining) == 0 {
-				return fmt.Errorf("usage: ww create <branch>")
+				return fmt.Errorf("usage: ww create [--guess-remote] <branch>")
 			}
 			branch := remaining[0]
 

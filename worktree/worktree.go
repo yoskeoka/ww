@@ -228,7 +228,7 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 func guessRemoteCreateError(err error, wtPath, branch string) error {
 	if isGuessRemoteUnsupported(err) {
-		return fmt.Errorf("git worktree add --guess-remote is unsupported by the installed Git. Upgrade Git and retry, or run manually:\n  git worktree add -b %s --track %s origin/%s\nOriginal error: %w", branch, wtPath, branch, err)
+		return fmt.Errorf("git worktree add --guess-remote is unsupported by the installed Git. Upgrade Git and retry, or run manually:\n  git worktree add -b %s --track %s %s\nOriginal error: %w", shellQuotePOSIX(branch), shellQuotePOSIX(wtPath), shellQuotePOSIX("origin/"+branch), err)
 	}
 	return fmt.Errorf("cannot resolve remote branch %q with --guess-remote after refreshing origin. Make sure a matching remote branch exists and can be resolved by Git.\nOriginal error: %w", branch, err)
 }
