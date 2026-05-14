@@ -22,4 +22,4 @@ High for workflow correctness. The current PR removes stale formal reviews, but 
 
 ## Follow-up
 
-If CI-side agentic PR review is reconsidered in this repository, revisit this issue together with [docs/issues/gh-aw-reintroduction-needs-fresh-decision.md](../gh-aw-reintroduction-needs-fresh-decision.md).
+If CI-side agentic PR review is reconsidered in this repository, revisit this issue together with [docs/issues/0036-gh-aw-reintroduction-needs-fresh-decision.md](../0036-gh-aw-reintroduction-needs-fresh-decision.md).

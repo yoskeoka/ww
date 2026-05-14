@@ -7,7 +7,7 @@ Reduce duplicate `Lstat` work in the child-entry prefilter inside `scanImmediate
 
 ## Context
 
-- `docs/issues/workspace-direntry-prefilter-followup.md` identifies this as a low-priority refactor: current behavior is correct, but non-directory paths can trigger redundant `Lstat` calls.
+- `docs/issues/0032-workspace-direntry-prefilter-followup.md` identifies this as a low-priority refactor: current behavior is correct, but non-directory paths can trigger redundant `Lstat` calls.
 - Existing spec expectations (`docs/specs/workspace-discovery.md`) must remain intact: immediate child symlinks are not followed by default, and only real git repositories are treated as workspace members.
 - Consistent with ADR direction (2026-03-31, 2026-04-23), workspace detection should stay bounded and conservative.
 
