@@ -27,6 +27,10 @@ of a narrow just-created race window.
 
 - `ww cd <branch>` tolerates a narrow just-created race window instead of
   failing immediately when the worktree registration appears moments later.
+- The retry budget is explicit and reviewable in advance: named `ww cd <branch>`
+  performs the normal immediate lookup first, then retries up to 5 additional
+  times with 100ms intervals before returning the existing error, for a maximum
+  added wait of 500ms.
 - The real observed race is covered by regression tests with a bounded,
   intentional retry contract rather than an unbounded poll loop.
 
@@ -66,6 +70,12 @@ of a narrow just-created race window.
 
 - Keep the retry bounded and small. The goal is to absorb a narrow race window,
   not to hide genuine lookup errors indefinitely.
+- Recommended contract for this plan:
+  - apply only to named `ww cd <branch>` lookups
+  - keep the current immediate first lookup
+  - after a named lookup misses, retry up to 5 times with 100ms intervals
+  - preserve the current error text after the retry budget is exhausted
+  - do not apply the retry to no-argument recency lookup
 - Prefer the retry only for named `ww cd <branch>` lookups. No-argument
   recency lookup should stay simple unless the investigation shows the same race
   applies there in practice.
@@ -74,8 +84,9 @@ of a narrow just-created race window.
 
 ## Sub-tasks
 
-- [ ] Specify the exact bounded retry contract for `ww cd <branch>`:
-  retry count, total wait budget, and which failure path triggers retry
+- [ ] Confirm the bounded retry contract stays:
+  immediate first lookup, then up to 5 retries with 100ms intervals for named
+  `ww cd <branch>` misses only
 - [ ] [parallel] Update `docs/specs/cli-commands.md` and
   `docs/specs/shell-integration.md` with the retry contract
 - [ ] [depends on: retry contract] Implement the bounded retry in the named
