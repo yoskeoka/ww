@@ -29,11 +29,18 @@ go build -o ww ./cmd/ww
 
 `ww` works out of the box in any git repository — no configuration required.
 
-### Basic flow
+### Basic flows
+
+Create and enter a new worktree:
 
 ```sh
 ww list
 cd "$(ww create -q feat/my-feature)"
+```
+
+Reopen an existing worktree later:
+
+```sh
 cd "$(ww cd feat/my-feature)"
 ww clean
 ```

@@ -18,7 +18,7 @@ func createCmd() command {
 		fmt.Fprintln(out, "Create a new worktree for a branch")
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Usage:")
-		fmt.Fprintln(out, "  ww create [flags] [--guess-remote] <branch>")
+		fmt.Fprintln(out, "  ww create [flags] <branch>")
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Examples:")
 		fmt.Fprintln(out, "  ww create feat/my-feature")
@@ -46,7 +46,7 @@ func createCmd() command {
 
 			remaining := fset.Args()
 			if len(remaining) == 0 {
-				return fmt.Errorf("usage: ww create [--guess-remote] <branch>")
+				return fmt.Errorf("usage: ww create [flags] <branch>")
 			}
 			branch := remaining[0]
 

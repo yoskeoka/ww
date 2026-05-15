@@ -61,7 +61,7 @@ func cdCmd() command {
 
 			remaining := fset.Args()
 			if len(remaining) > 1 {
-				return fmt.Errorf("usage: ww cd [branch]")
+				return fmt.Errorf("usage: ww cd [flags] [branch]")
 			}
 
 			mgr, err := managerForSelectedRepo(*repo, true, glOpts.sandbox)
