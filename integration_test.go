@@ -8,7 +8,9 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/yoskeoka/ww/internal/testutil"
 )
@@ -985,6 +987,50 @@ func TestCdFindsJustCreatedWorktreeFromGitBackedWorkspaceRoot(t *testing.T) {
 	}
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("ww cd from git-backed workspace root stderr should be empty, got: %s", stderr)
+	}
+}
+
+func TestCdAbsorbsParallelCreateRaceForNamedLookup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	const branch = "plan/parallel-create-cd-race"
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	var createOut string
+	var createErr error
+	go func() {
+		defer wg.Done()
+		<-start
+		time.Sleep(100 * time.Millisecond)
+		createOut, createErr = runWW(t, ws.RootDir, "create", "--repo", "repo2", branch)
+	}()
+
+	close(start)
+	stdout, stderr, err := runWWSplit(t, ws.RootDir, "cd", "--repo", "repo2", branch)
+	wg.Wait()
+
+	if createErr != nil {
+		t.Fatalf("ww create in parallel goroutine: %v\n%s", createErr, createOut)
+	}
+	if err != nil {
+		t.Fatalf("ww cd during parallel create: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+
+	wantPath := workspaceWorktreePath(ws.RootDir, "repo2", branch)
+	if strings.TrimSpace(stdout) != wantPath {
+		t.Fatalf("ww cd stdout = %q, want %q", stdout, wantPath+"\n")
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("ww cd stderr should be empty, got: %s", stderr)
 	}
 }
 

@@ -108,6 +108,11 @@ Print the absolute path of a worktree for shell navigation.
    - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
 2. If no branch argument is provided, resolve the most recently created secondary worktree for the target repository.
 3. If a branch argument is provided, match it against worktree branch names. `refs/heads/<branch>` and `<branch>` are treated as equivalent.
+4. Named lookup uses a bounded just-created retry contract:
+   - perform the normal immediate lookup first
+   - if the named worktree is still missing, retry up to 5 additional times with 100ms intervals
+   - preserve the existing named-miss error text after the retry budget is exhausted
+   - do not apply this retry to no-argument recency lookup
 4. On success in text mode, print only the absolute path to `stdout`, terminated by a newline.
 5. If no matching secondary worktree exists, return an error:
    - no-argument mode: `no secondary worktrees found`

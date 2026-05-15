@@ -1,7 +1,7 @@
 # 0025: Create/Cd Race Absorption in `ww cd`
 **Execution**: Use `/execute-task` to implement this plan.
 
-Addresses: `docs/issues/ww-create-and-cd-run-in-parallel-can-fail.md`
+Addresses: `docs/issues/done/ww-create-and-cd-run-in-parallel-can-fail.md`
 
 ## Objective
 
@@ -84,16 +84,16 @@ of a narrow just-created race window.
 
 ## Sub-tasks
 
-- [ ] Confirm the bounded retry contract stays:
+- [x] Confirm the bounded retry contract stays:
   immediate first lookup, then up to 5 retries with 100ms intervals for named
   `ww cd <branch>` misses only
-- [ ] [parallel] Update `docs/specs/cli-commands.md` and
+- [x] [parallel] Update `docs/specs/cli-commands.md` and
   `docs/specs/shell-integration.md` with the retry contract
-- [ ] [depends on: retry contract] Implement the bounded retry in the named
+- [x] [depends on: retry contract] Implement the bounded retry in the named
   `ww cd` path
-- [ ] [depends on: implementation] Add regression coverage for a parallel
+- [x] [depends on: implementation] Add regression coverage for a parallel
   `create` / `cd` startup on the same branch and repo
-- [ ] [depends on: implementation] Confirm normal `ww cd` failures still return
+- [x] [depends on: implementation] Confirm normal `ww cd` failures still return
   promptly for a truly missing branch after the bounded retry budget ends
 
 ## Verification

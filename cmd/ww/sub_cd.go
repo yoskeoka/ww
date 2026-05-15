@@ -2,11 +2,20 @@ package main
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 
 	"github.com/yoskeoka/ww/worktree"
 )
+
+const (
+	cdNamedLookupRetryCount    = 5
+	cdNamedLookupRetryInterval = 100 * time.Millisecond
+)
+
+var cdSleep = time.Sleep
 
 func cdCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" cd", pflag.ContinueOnError)
@@ -37,7 +46,9 @@ func cdCmd() command {
 			if len(remaining) == 0 {
 				info, err = mgr.MostRecent(glOpts.json)
 			} else {
-				info, err = mgr.FindByName(remaining[0], glOpts.json)
+				info, err = findNamedWorktreeWithRetry(func() (*worktree.WorktreeInfo, error) {
+					return mgr.FindByName(remaining[0], glOpts.json)
+				})
 			}
 			if err != nil {
 				return err
@@ -50,4 +61,24 @@ func cdCmd() command {
 			return nil
 		},
 	}
+}
+
+func findNamedWorktreeWithRetry(find func() (*worktree.WorktreeInfo, error)) (*worktree.WorktreeInfo, error) {
+	info, err := find()
+	if err == nil || !isNamedWorktreeMiss(err) {
+		return info, err
+	}
+
+	for i := 0; i < cdNamedLookupRetryCount; i++ {
+		cdSleep(cdNamedLookupRetryInterval)
+		info, err = find()
+		if err == nil || !isNamedWorktreeMiss(err) {
+			return info, err
+		}
+	}
+	return nil, err
+}
+
+func isNamedWorktreeMiss(err error) bool {
+	return strings.Contains(err.Error(), "no worktree found for branch ")
 }
