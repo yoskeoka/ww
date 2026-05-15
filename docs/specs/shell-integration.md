@@ -26,6 +26,9 @@ Phase 3 shell integration adds explicit path-printing interfaces for shell navig
 
 - Resolves the worktree for the specified branch.
 - `refs/heads/<branch>` and `<branch>` are treated as the same branch name.
+- Performs the normal immediate named lookup first, then retries up to 5 additional times with 100ms intervals when the branch is temporarily not yet discoverable.
+- Preserves the existing `no worktree found for branch "<branch>"` error after the bounded retry budget is exhausted.
+- Does not apply the retry contract to no-argument recency lookup.
 - If no matching worktree exists, the command exits non-zero and prints `no worktree found for branch "<branch>"` to `stderr`.
 
 ### `ww cd --json`
