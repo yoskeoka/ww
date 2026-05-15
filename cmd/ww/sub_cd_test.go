@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -71,17 +72,17 @@ func TestFindNamedWorktreeWithRetryStopsAfterBudgetAndPreservesError(t *testing.
 	})
 	defer restoreSleep()
 
-	wantErr := errors.New(`no worktree found for branch "feat/missing"`)
+	wantErrText := `no worktree found for branch "feat/missing"`
 	calls := 0
 	info, err := findNamedWorktreeWithRetry(func() (*worktree.WorktreeInfo, error) {
 		calls++
-		return nil, wantErr
+		return nil, errors.New(wantErrText)
 	})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("error = %v, want %v", err, wantErr)
+	if err.Error() != wantErrText {
+		t.Fatalf("error = %q, want %q", err.Error(), wantErrText)
 	}
 	if info != nil {
 		t.Fatalf("info = %#v, want nil", info)
@@ -114,10 +115,71 @@ func TestFindNamedWorktreeWithRetryDoesNotRetryOtherErrors(t *testing.T) {
 	}
 }
 
+func TestCDNamedLookupRetryConfigFromEnvDefaults(t *testing.T) {
+	restoreCount := swapEnv(cdTestRetryCountEnv, "")
+	defer restoreCount()
+	restoreInterval := swapEnv(cdTestRetryIntervalEnv, "")
+	defer restoreInterval()
+
+	cfg := cdNamedLookupRetryConfigFromEnv()
+	if cfg.retryCount != cdNamedLookupRetryCount {
+		t.Fatalf("retryCount = %d, want %d", cfg.retryCount, cdNamedLookupRetryCount)
+	}
+	if cfg.retryInterval != cdNamedLookupRetryInterval {
+		t.Fatalf("retryInterval = %s, want %s", cfg.retryInterval, cdNamedLookupRetryInterval)
+	}
+}
+
+func TestCDNamedLookupRetryConfigFromEnvOverrides(t *testing.T) {
+	restoreCount := swapEnv(cdTestRetryCountEnv, "9")
+	defer restoreCount()
+	restoreInterval := swapEnv(cdTestRetryIntervalEnv, "250")
+	defer restoreInterval()
+
+	cfg := cdNamedLookupRetryConfigFromEnv()
+	if cfg.retryCount != 9 {
+		t.Fatalf("retryCount = %d, want 9", cfg.retryCount)
+	}
+	if cfg.retryInterval != 250*time.Millisecond {
+		t.Fatalf("retryInterval = %s, want %s", cfg.retryInterval, 250*time.Millisecond)
+	}
+}
+
+func TestCDNamedLookupRetryConfigFromEnvIgnoresInvalidValues(t *testing.T) {
+	restoreCount := swapEnv(cdTestRetryCountEnv, "0")
+	defer restoreCount()
+	restoreInterval := swapEnv(cdTestRetryIntervalEnv, "bad")
+	defer restoreInterval()
+
+	cfg := cdNamedLookupRetryConfigFromEnv()
+	if cfg.retryCount != cdNamedLookupRetryCount {
+		t.Fatalf("retryCount = %d, want %d", cfg.retryCount, cdNamedLookupRetryCount)
+	}
+	if cfg.retryInterval != cdNamedLookupRetryInterval {
+		t.Fatalf("retryInterval = %s, want %s", cfg.retryInterval, cdNamedLookupRetryInterval)
+	}
+}
+
 func swapCDSleep(fn func(time.Duration)) func() {
 	orig := cdSleep
 	cdSleep = fn
 	return func() {
 		cdSleep = orig
+	}
+}
+
+func swapEnv(name, value string) func() {
+	orig, ok := os.LookupEnv(name)
+	if value == "" {
+		_ = os.Unsetenv(name)
+	} else {
+		_ = os.Setenv(name, value)
+	}
+	return func() {
+		if ok {
+			_ = os.Setenv(name, orig)
+			return
+		}
+		_ = os.Unsetenv(name)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -56,6 +57,16 @@ func runWW(t *testing.T, dir string, args ...string) (string, error) {
 func runWWSplit(t *testing.T, dir string, args ...string) (string, string, error) {
 	t.Helper()
 	return globalEnv.RunWWSplit(dir, args...)
+}
+
+func runWWWithEnv(t *testing.T, dir string, extraEnv []string, args ...string) (string, error) {
+	t.Helper()
+	return globalEnv.RunWWWithEnv(dir, extraEnv, args...)
+}
+
+func runWWSplitWithEnv(t *testing.T, dir string, extraEnv []string, args ...string) (string, string, error) {
+	t.Helper()
+	return globalEnv.RunWWSplitWithEnv(dir, extraEnv, args...)
 }
 
 func TestVersionCommand(t *testing.T) {
@@ -1000,22 +1011,45 @@ func TestCdAbsorbsParallelCreateRaceForNamedLookup(t *testing.T) {
 	writeConfig(t, ws.RootDir, `default_base = "main"`)
 
 	const branch = "plan/parallel-create-cd-race"
+	syncDir := t.TempDir()
+	missMarker := filepath.Join(syncDir, "cd-miss.marker")
+	retryRelease := filepath.Join(syncDir, "cd-retry.release")
+	cdEnv := []string{
+		"WW_TEST_CD_NAMED_LOOKUP_RETRY_COUNT=20",
+		"WW_TEST_CD_NAMED_LOOKUP_RETRY_INTERVAL_MS=20",
+		"WW_TEST_CD_NAMED_LOOKUP_MISS_MARKER=" + missMarker,
+		"WW_TEST_CD_NAMED_LOOKUP_RETRY_RELEASE=" + retryRelease,
+	}
 
 	start := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 
+	var stdout string
+	var stderr string
+	var err error
 	var createOut string
 	var createErr error
 	go func() {
 		defer wg.Done()
 		<-start
-		time.Sleep(100 * time.Millisecond)
-		createOut, createErr = runWW(t, ws.RootDir, "create", "--repo", "repo2", branch)
+		stdout, stderr, err = runWWSplitWithEnv(t, ws.RootDir, cdEnv, "cd", "--repo", "repo2", branch)
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-start
+		if waitErr := waitForPath(missMarker); waitErr != nil {
+			createErr = waitErr
+			return
+		}
+		createOut, createErr = runWWWithEnv(t, ws.RootDir, nil, "create", "--repo", "repo2", branch)
+		if writeErr := os.WriteFile(retryRelease, []byte("release\n"), 0644); writeErr != nil {
+			t.Errorf("write retry release marker: %v", writeErr)
+		}
 	}()
 
 	close(start)
-	stdout, stderr, err := runWWSplit(t, ws.RootDir, "cd", "--repo", "repo2", branch)
 	wg.Wait()
 
 	if createErr != nil {
@@ -1027,11 +1061,21 @@ func TestCdAbsorbsParallelCreateRaceForNamedLookup(t *testing.T) {
 
 	wantPath := workspaceWorktreePath(ws.RootDir, "repo2", branch)
 	if strings.TrimSpace(stdout) != wantPath {
-		t.Fatalf("ww cd stdout = %q, want %q", stdout, wantPath+"\n")
+		t.Fatalf("ww cd stdout = %q, want trimmed path %q", stdout, wantPath)
 	}
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("ww cd stderr should be empty, got: %s", stderr)
 	}
+}
+
+func waitForPath(target string) error {
+	for i := 0; i < 500; i++ {
+		if _, err := os.Stat(target); err == nil {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return fmt.Errorf("timed out waiting for %s", target)
 }
 
 func TestCdErrorsWithoutSecondaryWorktrees(t *testing.T) {

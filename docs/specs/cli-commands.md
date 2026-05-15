@@ -113,8 +113,8 @@ Print the absolute path of a worktree for shell navigation.
    - if the named worktree is still missing, retry up to 5 additional times with 100ms intervals
    - preserve the existing named-miss error text after the retry budget is exhausted
    - do not apply this retry to no-argument recency lookup
-4. On success in text mode, print only the absolute path to `stdout`, terminated by a newline.
-5. If no matching secondary worktree exists, return an error:
+5. On success in text mode, print only the absolute path to `stdout`, terminated by a newline.
+6. If no matching secondary worktree exists, return an error:
    - no-argument mode: `no secondary worktrees found`
    - named mode: `no worktree found for branch "<branch>"`
 

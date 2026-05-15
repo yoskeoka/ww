@@ -118,20 +118,35 @@ func (e *HostEnv) RunWW(dir string, args ...string) (string, error) {
 	return e.Exec(dir, e.wwBinaryPath, args...)
 }
 
+// RunWWWithEnv runs the ww binary with additional environment overrides.
+func (e *HostEnv) RunWWWithEnv(dir string, extraEnv []string, args ...string) (string, error) {
+	return e.ExecWithEnv(dir, extraEnv, e.wwBinaryPath, args...)
+}
+
 // RunWWSplit runs the ww binary with stdout and stderr captured separately.
 func (e *HostEnv) RunWWSplit(dir string, args ...string) (string, string, error) {
 	return e.ExecSplit(dir, e.wwBinaryPath, args...)
+}
+
+// RunWWSplitWithEnv runs the ww binary with additional environment overrides.
+func (e *HostEnv) RunWWSplitWithEnv(dir string, extraEnv []string, args ...string) (string, string, error) {
+	return e.ExecSplitWithEnv(dir, extraEnv, e.wwBinaryPath, args...)
 }
 
 // Exec runs cmd with args on the host, optionally in the given working
 // directory. Stdout and stderr are combined and returned. A non-zero exit code
 // is returned as an error.
 func (e *HostEnv) Exec(dir string, cmd string, args ...string) (string, error) {
+	return e.ExecWithEnv(dir, nil, cmd, args...)
+}
+
+// ExecWithEnv runs cmd with args on the host with additional environment overrides.
+func (e *HostEnv) ExecWithEnv(dir string, extraEnv []string, cmd string, args ...string) (string, error) {
 	c := exec.CommandContext(e.ctx, cmd, args...)
 	if dir != "" {
 		c.Dir = dir
 	}
-	c.Env = e.env()
+	c.Env = e.env(extraEnv...)
 
 	out, err := c.CombinedOutput()
 	outStr := string(out)
@@ -147,12 +162,17 @@ func (e *HostEnv) Exec(dir string, cmd string, args ...string) (string, error) {
 
 // ExecSplit runs cmd with stdout and stderr captured separately.
 func (e *HostEnv) ExecSplit(dir string, cmd string, args ...string) (string, string, error) {
+	return e.ExecSplitWithEnv(dir, nil, cmd, args...)
+}
+
+// ExecSplitWithEnv runs cmd with stdout and stderr captured separately and env overrides.
+func (e *HostEnv) ExecSplitWithEnv(dir string, extraEnv []string, cmd string, args ...string) (string, string, error) {
 	c := exec.CommandContext(e.ctx, cmd, args...)
 	if dir != "" {
 		c.Dir = dir
 	}
 
-	c.Env = e.env()
+	c.Env = e.env(extraEnv...)
 
 	var stdoutBuf bytes.Buffer
 	var stderrBuf bytes.Buffer
