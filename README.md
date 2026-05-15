@@ -29,6 +29,18 @@ go build -o ww ./cmd/ww
 
 `ww` works out of the box in any git repository — no configuration required.
 
+### Basic flow
+
+```sh
+ww list
+cd "$(ww create -q feat/my-feature)"
+cd "$(ww cd feat/my-feature)"
+ww clean
+```
+
+- Use `cd "$(ww create -q ...)"` when creating and entering a new worktree.
+- Use `ww cd` when the worktree already exists and you want to reopen it.
+
 ### Create a worktree
 
 ```sh
@@ -119,6 +131,12 @@ cd "$(ww create -q feat/my-feature)"
 ```
 
 Quiet mode suppresses human-readable output and prints only the created worktree path, making it ideal for shell composition.
+
+When the worktree already exists, use the same shell pattern with `ww cd`:
+
+```sh
+cd "$(ww cd feat/my-feature)"
+```
 
 ## Workspace Mode
 

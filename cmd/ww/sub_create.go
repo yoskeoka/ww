@@ -13,6 +13,25 @@ func createCmd() command {
 	quiet := fset.BoolP("quiet", "q", false, "Print only the worktree path")
 	guessRemote := fset.Bool("guess-remote", false, "Refresh origin and check out an existing remote branch with the same name")
 	repo := fset.String("repo", "", "Target a detected workspace repository by name")
+	fset.Usage = func() {
+		out := fset.Output()
+		fmt.Fprintln(out, "Create a new worktree for a branch")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Usage:")
+		fmt.Fprintln(out, "  ww create [flags] [--guess-remote] <branch>")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Examples:")
+		fmt.Fprintln(out, "  ww create feat/my-feature")
+		fmt.Fprintln(out, "  cd \"$(ww create -q feat/my-feature)\"")
+		fmt.Fprintln(out, "  ww create --repo backend feat/my-feature")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Notes:")
+		fmt.Fprintln(out, "  - use -q or --quiet when you want only the created path")
+		fmt.Fprintln(out, "  - for existing worktrees, use ww cd instead of creating again")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Flags:")
+		fset.PrintDefaults()
+	}
 
 	return command{
 		name:        "create",

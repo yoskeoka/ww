@@ -57,11 +57,23 @@ func cliMain() int {
 	sandbox := fset.Bool("sandbox", false, "Constrain discovery and worktree defaults to the current sandbox boundary")
 
 	fset.Usage = func() {
-		fmt.Fprintf(fset.Output(), "Usage: %s <command> [flags]\n\n", mainCmdName)
-		fmt.Fprintln(fset.Output(), "Commands:")
-		printCommands(fset.Output(), commands)
-		fmt.Fprintln(fset.Output())
-		fmt.Fprintln(fset.Output(), "Flags:")
+		out := fset.Output()
+		fmt.Fprintf(out, "Usage: %s <command> [flags]\n\n", mainCmdName)
+		fmt.Fprintln(out, "Commands:")
+		printCommands(out, commands)
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Basic flow:")
+		fmt.Fprintln(out, "  1. List existing worktrees: ww list")
+		fmt.Fprintln(out, "  2. Create and enter a new worktree: cd \"$(ww create -q feat/my-feature)\"")
+		fmt.Fprintln(out, "  3. Print an existing worktree path: ww cd feat/my-feature")
+		fmt.Fprintln(out, "  4. Clean merged or stale worktrees: ww clean")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Examples:")
+		fmt.Fprintln(out, "  cd \"$(ww create -q feat/my-feature)\"")
+		fmt.Fprintln(out, "  ww cd feat/my-feature")
+		fmt.Fprintln(out, "  ww create --repo backend feat/my-feature")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Flags:")
 		fset.PrintDefaults()
 	}
 

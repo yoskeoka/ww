@@ -29,6 +29,25 @@ func cdCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" cd", pflag.ContinueOnError)
 	jsonFlag := fset.Bool("json", false, "Output JSON")
 	repo := fset.String("repo", "", "Target a detected workspace repository by name")
+	fset.Usage = func() {
+		out := fset.Output()
+		fmt.Fprintln(out, "Print a worktree path for shell navigation")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Usage:")
+		fmt.Fprintln(out, "  ww cd [flags] [branch]")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Examples:")
+		fmt.Fprintln(out, "  ww cd")
+		fmt.Fprintln(out, "  ww cd feat/my-feature")
+		fmt.Fprintln(out, "  ww cd --repo backend feat/my-feature")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Notes:")
+		fmt.Fprintln(out, "  - ww cd prints the path of an existing worktree")
+		fmt.Fprintln(out, "  - to create and enter in one step, use cd \"$(ww create -q feat/my-feature)\"")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "Flags:")
+		fset.PrintDefaults()
+	}
 
 	return command{
 		name:        "cd",

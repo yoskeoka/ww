@@ -131,6 +131,67 @@ func TestHelpIncludesInteractiveCommand(t *testing.T) {
 	if !strings.Contains(out, "i             Start interactive mode") {
 		t.Fatalf("help output should list interactive command: %s", out)
 	}
+	if !strings.Contains(out, "Basic flow:") {
+		t.Fatalf("help output should include basic flow section: %s", out)
+	}
+	if !strings.Contains(out, "cd \"$(ww create -q feat/my-feature)\"") {
+		t.Fatalf("help output should include create-and-enter example: %s", out)
+	}
+	if !strings.Contains(out, "ww cd feat/my-feature") {
+		t.Fatalf("help output should include existing-worktree example: %s", out)
+	}
+	if !strings.Contains(out, "ww create --repo backend feat/my-feature") {
+		t.Fatalf("help output should include workspace repo example: %s", out)
+	}
+}
+
+func TestCreateHelpDescribesQuietCreateAndEnterFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+
+	out, err := runWW(t, repo, "create", "--help")
+	if err != nil {
+		t.Fatalf("ww create --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Create a new worktree for a branch") {
+		t.Fatalf("ww create --help should describe the command: %s", out)
+	}
+	if !strings.Contains(out, "cd \"$(ww create -q feat/my-feature)\"") {
+		t.Fatalf("ww create --help should mention create-and-enter pattern: %s", out)
+	}
+	if !strings.Contains(out, "use -q or --quiet when you want only the created path") {
+		t.Fatalf("ww create --help should explain quiet mode role: %s", out)
+	}
+	if !strings.Contains(out, "use ww cd instead of creating again") {
+		t.Fatalf("ww create --help should point existing worktrees to ww cd: %s", out)
+	}
+}
+
+func TestCDHelpDescribesExistingWorktreeRole(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+
+	out, err := runWW(t, repo, "cd", "--help")
+	if err != nil {
+		t.Fatalf("ww cd --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Print a worktree path for shell navigation") {
+		t.Fatalf("ww cd --help should describe the command: %s", out)
+	}
+	if !strings.Contains(out, "ww cd prints the path of an existing worktree") {
+		t.Fatalf("ww cd --help should explain existing-worktree role: %s", out)
+	}
+	if !strings.Contains(out, "cd \"$(ww create -q feat/my-feature)\"") {
+		t.Fatalf("ww cd --help should redirect create-and-enter usage: %s", out)
+	}
 }
 
 func TestInteractiveCommandRejectsJSONBeforeTTYCheck(t *testing.T) {
