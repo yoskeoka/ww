@@ -15,6 +15,10 @@ Phase 3 shell integration adds explicit path-printing interfaces for shell navig
 
 `ww cd` resolves a worktree path for navigation without mutating shell state.
 
+- Use `ww cd` when the target worktree already exists and you want its path.
+- Use `cd "$(ww create -q <branch>)"` when you want to create and enter a new
+  worktree in one step.
+
 ### `ww cd`
 
 - Resolves the most recently created secondary worktree for the target repository.
@@ -44,6 +48,8 @@ Phase 3 shell integration adds explicit path-printing interfaces for shell navig
 `ww create -q <branch>` suppresses human-readable success output and prints only the created worktree path to `stdout`.
 
 - This is intended for shell composition such as `cd "$(ww create -q feat/x)"`.
+- This is the preferred built-in create-and-enter pattern; `ww cd` is for
+  reopening an existing worktree later.
 - In quiet mode, human-oriented progress is not printed to `stdout`.
 - If `post_create_hook` runs in quiet mode, its output is routed to `stderr` so `stdout` remains path-only.
 - With `--dry-run`, quiet mode prints the path that would be created.
@@ -64,6 +70,12 @@ wcd() {
 
 ```sh
 cd "$(ww create -q feat/my-branch)"
+```
+
+### Open Existing Worktree
+
+```sh
+cd "$(ww cd feat/my-branch)"
 ```
 
 ## Non-Goals

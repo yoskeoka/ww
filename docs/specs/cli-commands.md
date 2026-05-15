@@ -24,11 +24,46 @@ When run from a secondary worktree, `ww` resolves back to the main working tree 
 | `--sandbox` | bool | false | Constrain workspace/config discovery and single-repo worktree defaults to the current sandbox boundary |
 | `--version` | bool | false | Print version and exit |
 
+## Help Output Contract
+
+`ww --help` must keep a compact lifecycle-oriented overview near the CLI entry
+point so first-time users can discover the default worktree flow without
+opening the README or workflow docs.
+
+- The top-level help output must include, in this order:
+  - usage
+  - command list
+  - a short `Basic flow:` section
+  - an `Examples:` section
+  - global flags
+- The `Basic flow:` section must cover:
+  - `ww list` for browsing existing worktrees
+  - `cd "$(ww create -q ...)"` for create-and-enter
+  - `ww cd` for opening an existing worktree path
+  - `ww clean` for cleanup
+- The `Examples:` section must include concrete examples for:
+  - `cd "$(ww create -q feat/my-feature)"`
+  - `ww cd feat/my-feature`
+  - `ww create --repo backend feat/my-feature`
+- `ww create --help` must explicitly describe `-q` / `--quiet` as the
+  preferred path-only mode for the create-and-enter shell pattern
+  `cd "$(ww create -q ...)"`.
+- `ww cd --help` must explicitly describe `ww cd` as the existing-worktree
+  path resolver and redirect create-and-enter usage to
+  `cd "$(ww create -q ...)"`.
+
 ## Commands
 
 ### `ww create [--guess-remote] <branch>`
 
 Create a new worktree for the given branch.
+
+The built-in help for `ww create` must preserve the create-vs-cd role split:
+
+- `ww create <branch>` creates the worktree
+- `ww create -q <branch>` is the preferred path-only form for
+  `cd "$(ww create -q <branch>)"`
+- `ww cd` remains the command for opening an existing worktree path later
 
 **Behavior:**
 1. Resolve the target repository:
@@ -98,6 +133,9 @@ Would run hook: npm install
 ### `ww cd [branch]`
 
 Print the absolute path of a worktree for shell navigation.
+
+The built-in help for `ww cd` must describe it as the existing-worktree path
+resolver, not the primary create-and-enter entry point.
 
 **Behavior:**
 1. Resolve the target repository:
