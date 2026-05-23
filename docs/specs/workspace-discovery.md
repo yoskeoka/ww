@@ -56,6 +56,8 @@ When the start directory is inside git:
 
 Sandbox mode is enabled by the global `--sandbox` flag or by `sandbox = true` in `.ww.toml` when that config can be loaded. It constrains default discovery to the current sandbox boundary instead of trying to infer a containing workspace from parent directories.
 
+Immediate-child scanning remains best-effort for entries that are not established as repositories. Unreadable immediate children that cannot be proven to be real child repos are skipped instead of aborting detection.
+
 When sandbox mode is enabled:
 
 1. Scan only the current directory's immediate children for real git repositories.
@@ -69,6 +71,7 @@ Sandbox mode does not inspect parent or grandparent directories while detecting 
 
 - `.git` presence alone is not sufficient for workspace membership. Candidate children are validated with git top-level and git-dir/common-dir resolution.
 - Immediate child scanning may use cheap `DirEntry` metadata to prefilter obvious non-repository entries before git validation runs.
+- Immediate child entries that disappear during scanning, or that fail metadata reads with a permission error before they can be established as real repos, are skipped as non-members.
 - Immediate child symlink entries are ignored during workspace-member discovery even when they survive that cheap prefilter. `ww` does not follow child symlinks by default.
 - Linked worktree checkouts are ignored for workspace discovery even when their top-level path matches the child directory, because managed worktree checkouts are not real workspace members.
 - Helper directories containing stray or partial `.git` contents do not count as repositories unless git resolves them as standalone repo roots.

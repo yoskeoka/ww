@@ -218,7 +218,7 @@ func reposAtWorkspaceRoot(root string) ([]Repo, error) {
 }
 
 func scanImmediateRepos(dir string) ([]Repo, error) {
-	entries, err := os.ReadDir(dir)
+	entries, err := immediateChildReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 func isImmediateChildRepo(entry os.DirEntry, dir string) (bool, error) {
 	kind, err := classifyImmediateChild(entry, dir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if isIgnorableImmediateChildError(err) {
 			return false, nil
 		}
 		return false, err
@@ -254,6 +254,9 @@ type immediateChildKind struct {
 	isSymlink bool
 }
 
+var immediateChildReadDir = os.ReadDir
+var immediateChildLstat = os.Lstat
+
 func classifyImmediateChild(entry os.DirEntry, path string) (immediateChildKind, error) {
 	if entry.IsDir() {
 		return immediateChildKind{isDir: true}, nil
@@ -267,7 +270,7 @@ func classifyImmediateChild(entry os.DirEntry, path string) (immediateChildKind,
 		return immediateChildKind{}, nil
 	}
 
-	info, err := os.Lstat(path)
+	info, err := immediateChildLstat(path)
 	if err != nil {
 		return immediateChildKind{}, err
 	}
@@ -276,6 +279,10 @@ func classifyImmediateChild(entry os.DirEntry, path string) (immediateChildKind,
 		isDir:     info.IsDir(),
 		isSymlink: info.Mode()&os.ModeSymlink != 0,
 	}, nil
+}
+
+func isIgnorableImmediateChildError(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission)
 }
 
 func isStandaloneRepoRoot(dir string) (bool, error) {
