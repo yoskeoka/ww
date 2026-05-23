@@ -35,7 +35,7 @@ Addresses: https://github.com/yoskeoka/ww/issues/211
   - Clarify that immediate-child scanning is best-effort for non-repository entries.
   - State that unreadable immediate children which cannot be established as real child repos are skipped instead of aborting detection.
   - Preserve the existing rules that child symlinks are ignored and only real child repo roots count as workspace members.
-- Update `docs/specs/cli-commands.md` only if needed to make the `ww create --sandbox` expectation explicit: unreadable gitignored/non-repo files encountered during detection must not block create.
+- Update `docs/specs/cli-commands.md` only if needed to make the `ww --sandbox create` expectation explicit: unreadable gitignored/non-repo files encountered during detection must not block create.
 
 ## Code Changes
 
