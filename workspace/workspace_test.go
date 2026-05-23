@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -264,6 +265,42 @@ func TestScanImmediateReposIgnoresRegularFilesAndChildSymlinks(t *testing.T) {
 	}
 }
 
+func TestScanImmediateReposSkipsUnreadableUnknownTypeEntry(t *testing.T) {
+	root := evalTempDir(t)
+	repo := filepath.Join(root, "repo")
+	gitInit(t, repo)
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	originalReadDir := immediateChildReadDir
+	originalLstat := immediateChildLstat
+	t.Cleanup(func() {
+		immediateChildReadDir = originalReadDir
+		immediateChildLstat = originalLstat
+	})
+
+	immediateChildReadDir = func(string) ([]os.DirEntry, error) {
+		return append(entries, fakeDirEntry{name: "blocked"}), nil
+	}
+	immediateChildLstat = func(path string) (os.FileInfo, error) {
+		if path == filepath.Join(root, "blocked") {
+			return nil, &os.PathError{Op: "lstat", Path: path, Err: os.ErrPermission}
+		}
+		return originalLstat(path)
+	}
+
+	repos, err := scanImmediateRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := repoNames(repos); !reflect.DeepEqual(got, []string{"repo"}) {
+		t.Fatalf("Repos = %v, want [repo]", got)
+	}
+}
+
 func TestDetectIgnoresLinkedWorktreeSibling(t *testing.T) {
 	root := evalTempDir(t)
 	child := filepath.Join(root, "child")
@@ -446,6 +483,59 @@ func TestDetectSandboxCurrentDirectoryWorkspaceRoot(t *testing.T) {
 		t.Fatalf("Repos = %v, want [child-a child-b]", got)
 	}
 }
+
+func TestDetectSandboxWorkspaceRootSkipsUnreadableUnknownTypeEntry(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	childB := filepath.Join(root, "child-b")
+	gitInit(t, childA)
+	gitInit(t, childB)
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	originalReadDir := immediateChildReadDir
+	originalLstat := immediateChildLstat
+	t.Cleanup(func() {
+		immediateChildReadDir = originalReadDir
+		immediateChildLstat = originalLstat
+	})
+
+	immediateChildReadDir = func(string) ([]os.DirEntry, error) {
+		return append(entries, fakeDirEntry{name: "blocked"}), nil
+	}
+	immediateChildLstat = func(path string) (os.FileInfo, error) {
+		if path == filepath.Join(root, "blocked") {
+			return nil, &os.PathError{Op: "lstat", Path: path, Err: os.ErrPermission}
+		}
+		return originalLstat(path)
+	}
+
+	ws, err := DetectWithOptions(root, DetectOptions{Sandbox: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Mode != ModeWorkspace {
+		t.Fatalf("Mode = %q, want %q", ws.Mode, ModeWorkspace)
+	}
+	if ws.Root != root {
+		t.Fatalf("Root = %q, want %q", ws.Root, root)
+	}
+	if got := repoNames(ws.Repos); !reflect.DeepEqual(got, []string{"child-a", "child-b"}) {
+		t.Fatalf("Repos = %v, want [child-a child-b]", got)
+	}
+}
+
+type fakeDirEntry struct {
+	name string
+}
+
+func (d fakeDirEntry) Name() string               { return d.name }
+func (d fakeDirEntry) IsDir() bool                { return false }
+func (d fakeDirEntry) Type() os.FileMode          { return 0 }
+func (d fakeDirEntry) Info() (os.FileInfo, error) { return nil, errors.New("not implemented") }
 
 func repoNames(repos []Repo) []string {
 	names := make([]string, len(repos))
