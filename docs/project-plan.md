@@ -37,70 +37,78 @@ When working in a meta-repo environment with many child repositories, parallel d
 
 ## Requirements
 
+Status legend: `implemented` = shipped in current mainline behavior, `partial` = some but not all promised scope shipped, `planned` = intentionally not started yet, `blocked` = intentionally deferred due to external constraints.
+
 ### Functional Requirements
 
 #### Core (MVP)
 
-- **FR-1**: Detect workspace automatically by scanning parent and child directories for git repos. Support `workspace = true` in `.ww.toml` for explicit declaration.
-- **FR-2**: Create a worktree for a single repo (`ww create <branch>`). Support `--repo` flag to target any repo in the workspace.
-- **FR-3**: List all worktrees across the workspace (`ww list`). Show REPO and STATUS columns. Support `--cleanable` filter for `merged`/`stale` worktrees.
-- **FR-4**: Remove a worktree from a single repo (`ww remove <branch>`). Support `--repo` flag to target any repo in the workspace.
-- **FR-5**: Copy/symlink gitignored files (`.env`, IDE configs) into new worktrees automatically, configured per-repo.
-- **FR-6**: Run post-create hooks (e.g., dependency install) per-repo.
+- **FR-1** (`partial`): Detect workspace automatically by scanning bounded parent/child directories for git repos. Zero-config detection is shipped, but explicit workspace declaration via `workspace = true` in config is not yet implemented.
+- **FR-2** (`implemented`): Create a worktree for a single repo (`ww create <branch>`). Support `--repo` to target any detected repo in the workspace.
+- **FR-3** (`implemented`): List all worktrees across the workspace (`ww list`). Show REPO and STATUS columns. Support `--cleanable` filtering for `merged`/`stale` worktrees.
+- **FR-4** (`implemented`): Remove a worktree from a single repo (`ww remove <branch>`). Support `--repo` to target any detected repo in the workspace.
+- **FR-5** (`implemented`): Copy/symlink selected gitignored files (`.env`, IDE configs, dependency directories) into new worktrees automatically via config.
+- **FR-6** (`implemented`): Run a post-create hook (for example, dependency install) from config after worktree creation.
 
 #### Enhanced (Phase 2)
 
-- **FR-7**: STATUS column in `ww list` — `merged` (branch merged into base), `stale` (remote tracking set but remote branch gone + unmerged), `active` (neither).
-- **FR-8**: Clean merged/stale worktrees in bulk (`ww clean`). Safe delete by default, `--force` for dirty worktrees.
-- **FR-9**: Single-repo mode — when no workspace is detected, `ww` works on the current repo only (Phase 1 compatible).
-- **FR-10**: Shell integration — output that enables `cd` into created worktrees (e.g., `cd $(ww create feat/x)`).
+- **FR-7** (`implemented`): STATUS column in `ww list` — `merged` (branch merged into base), `stale` (remote tracking set but remote branch gone + unmerged), `active` (neither).
+- **FR-8** (`implemented`): Clean merged/stale worktrees in bulk (`ww clean`). Safe delete by default, `--force` for dirty worktrees.
+- **FR-9** (`implemented`): Single-repo mode — when no workspace is detected, `ww` works on the current repo only.
+- **FR-10** (`implemented`): Shell integration — output that enables `cd` into created or existing worktrees (`ww create -q`, `ww cd`).
 
 #### Post-Phase 2
 
 Post-Phase 2 (originally tracked as `--no-upward-search`) is complete. The planned follow-up landed via the sandbox implementation, so this item is no longer an open phase. Any remaining sandbox-related refinements should be tracked as separate follow-up tasks rather than under Post-Phase 2.
 
-- **FR-26**: Sandbox-constrained mode (`--sandbox` flag or `sandbox = true` in `.ww.toml`) — completed via the sandbox implementation. `ww` can operate in filesystem-sandboxed environments that cannot reliably read or use parent directories by skipping parent/grandparent containing workspace detection, skipping parent-based sibling scans, limiting config lookup to the active sandbox boundary, and using repo-local `.worktrees` placement for single-repo defaults. It still supports current-directory workspace roots by scanning immediate child repositories, so `--repo` remains available when the user starts at a bounded workspace root.
+- **FR-26** (`implemented`): Sandbox-constrained mode (`--sandbox` flag or `sandbox = true` in `.ww.toml`) — completed via the sandbox implementation. `ww` can operate in filesystem-sandboxed environments that cannot reliably read or use parent directories by skipping parent/grandparent containing workspace detection, skipping parent-based sibling scans, limiting config lookup to the active sandbox boundary, and using repo-local `.worktrees` placement for single-repo defaults. It still supports current-directory workspace roots by scanning immediate child repositories, so `--repo` remains available when the user starts at a bounded workspace root.
 
 #### Future
 
-- **FR-16**: Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (e.g., AI agent orchestrators running long tasks). Configurable per-repo or per-command flag. To avoid clone-based workspaces being misdetected as real workspace member repos, `ww`-managed clones should carry an explicit managed marker such as `.ww-metadata`.
-- **FR-17**: Lifecycle hooks beyond post-create — support `pre-create`, `post-create`, `pre-remove`, and `post-remove` hooks per-repo. Enables container orchestration (e.g., `docker compose up` on create, DB cleanup + `docker compose down` on remove).
-- **FR-18**: Inject environment variables into hooks — `WW_BRANCH`, `WW_WORKTREE_PATH`, `WW_REPO_NAME`, `WW_WORKTREE_INDEX` (numeric, for port offset derivation). Enables worktree-aware compose files without hardcoding.
-- **FR-19**: Multi-repo batch worktree operations — `ww create feat/x --repos ai-arena,ww` to create worktrees across multiple repos simultaneously. Useful when child repos have dependencies on each other.
-- **FR-20**: `ww cd` — shell navigation between worktrees and workspace root.
-- **FR-21**: Child repo `.ww.toml` override — child repos can override workspace-level `copy_files`, `post_create_hook` etc.
-- **FR-22**: Recursive workspace detection — respect `workspace = true` in child repos to support nested workspace structures.
-- **FR-23**: Time-based stale detection — mark worktrees as stale after N days since last commit. Configurable via `--stale-days`.
-- **FR-24**: Human interactive mode — provide a guided mode for people using `ww` directly, including interactive repo/branch selection, preview-oriented create/remove/clean flows, and confirmation for destructive actions without requiring shell composition or raw flag memorization.
-- **FR-25**: Sandboxed environment compatibility — enable `ww` to operate fully within filesystem-sandboxed AI agent environments (e.g., Claude Code). The core issue is that `git worktree add` fails on repos with submodules because the sandbox blocks creation of `.gitmodules` and writes to `.git/config` (`Operation not permitted`). This is not a `ww` bug but an interaction between the sandbox's filesystem restrictions and git's internal operations. **Precondition for work**: upstream Claude Code sandbox issues are resolved or root cause is definitively identified — [Issue #13195](https://github.com/anthropics/claude-code/issues/13195) (`.git/config` write blocked), [Issue #21942](https://github.com/anthropics/claude-code/issues/21942) (`com.apple.provenance` xattr causing EPERM). FR-26 (`--no-upward-search`) addresses one aspect (parent directory access), but the `.gitmodules`/`.git/config` write failures are outside `ww`'s control. See `docs/issues/sandbox-worktree-compatibility.md` for full investigation and reference links.
+- **FR-16** (`planned`): Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (for example, long-running AI agent tasks). To avoid clone-based workspaces being misdetected as real workspace member repos, `ww`-managed clones should carry an explicit managed marker such as `.ww-metadata`.
+- **FR-17** (`partial`): Lifecycle hooks beyond post-create — `post_create_hook` is shipped, but `pre-create`, `pre-remove`, and `post-remove` are not yet implemented.
+- **FR-18** (`partial`): Inject environment variables into hooks — `WW_BRANCH` and `WW_WORKTREE_PATH` are shipped today; `WW_REPO_NAME` and `WW_WORKTREE_INDEX` are not yet implemented.
+- **FR-19** (`planned`): Multi-repo batch worktree operations — `ww create feat/x --repos ai-arena,ww` to create worktrees across multiple repos simultaneously.
+- **FR-20** (`implemented`): `ww cd` — shell navigation between worktrees and workspace root.
+- **FR-21** (`planned`): Child repo `.ww.toml` override — child repos can override workspace-level `copy_files`, `post_create_hook`, and related settings.
+- **FR-22** (`planned`): Recursive workspace detection — respect nested workspace structures beyond the current bounded model.
+- **FR-23** (`planned`): Time-based stale detection — mark worktrees as stale after N days since last commit. Configurable via `--stale-days`.
+- **FR-24** (`implemented`): Human interactive mode — provide a guided mode for people using `ww` directly, including interactive repo/branch selection, preview-oriented create/remove/clean flows, and confirmation for destructive actions without requiring shell composition or raw flag memorization.
+- **FR-25** (`blocked`): Sandboxed environment full compatibility — enable `ww` to operate end-to-end within filesystem-sandboxed AI agent environments (for example, Claude Code) even when the underlying git worktree flow touches `.git/config`, `.gitmodules`, submodules, or platform-specific sandbox artifacts. `ww` already addresses bounded discovery via FR-26, but fully reliable compatibility still depends partly on external sandbox behavior. Claude Code Issue #13195 is now closed, so it should no longer be treated as an active open blocker by itself; however, closing that issue does not yet prove that all `git worktree add` cases needed by `ww` are solved across real sandboxed repos. Track this as a verification-and-gap item rather than as purely internal feature work.
+- **FR-27** (`planned`): Global config file support — allow `ww` to load user-owned global configuration such as `$HOME/.ww/config.toml` so teams or individuals can avoid committing `.ww.toml` into every target repository.
+- **FR-28** (`planned`): Global project-target matching — allow global config to select per-project settings using the main worktree as the stable target anchor, so similar repository layouts or tech stacks can share one centrally maintained config set.
+- **FR-29** (`planned`): Hook-driven materialization profiles — allow global config to define reusable copy/symlink/setup profiles for sandbox-friendly worktree setup, including patterns such as linking `.env`, dependency directories, or tool caches from the main worktree when direct copying is disallowed or expensive.
+- **FR-30** (`planned`): Safe global-config guidance for sandboxed agents — document recommended permission patterns for `$HOME/.ww/*` (for example, allow reads but deny writes for agent sandboxes) so global hook/config workflows reduce prompt-injection and config-tampering risk.
 
 #### Agent-Friendly CLI Design
 
-- **FR-11**: `--dry-run` flag for mutation commands (create, remove, clean) — validate and show what would happen without executing.
-- **FR-12**: `--json` flag on all commands — output NDJSON (one JSON object per line) for stream-friendly machine consumption.
-- **FR-13**: `--fields` flag to limit output fields (e.g., `ww list --json --fields path,branch,dirty`), reducing context window cost for AI agents.
-- **FR-14**: `ww schema <command>` — runtime introspection exposing available params, flags, and types as JSON. Agents discover capabilities without parsing `--help`.
-- **FR-15**: Ship agent skill files (e.g., `.claude/skills/ww-operator`) encoding invariants agents cannot infer from help text (e.g., "always use `--dry-run` before mutations").
+- **FR-11** (`implemented`): `--dry-run` for mutation commands (create, remove, clean) — validate and show what would happen without executing.
+- **FR-12** (`partial`): `--json` on standard non-interactive commands — machine-readable output is shipped broadly, but interactive mode intentionally rejects `--json` and the exact shape is JSON or NDJSON depending on command.
+- **FR-13** (`planned`): `--fields` to limit output fields (for example, `ww list --json --fields path,branch,dirty`), reducing context window cost for AI agents.
+- **FR-14** (`planned`): `ww schema <command>` — runtime introspection exposing available params, flags, and types as JSON. Agents discover capabilities without parsing `--help`.
+- **FR-15** (`planned`, low priority): Ship optional agent skill files or equivalent packaged guidance for environments that need stronger operator conventions than built-in help and examples provide.
 
 ### Non-Functional Requirements
 
-- **NFR-1**: Written in Go. Single static binary, no runtime dependencies.
-- **NFR-2**: Fast — worktree creation for a single repo should add negligible overhead over raw `git worktree add`.
-- **NFR-3**: Git operations use `git` CLI internally (not a Go git library) for maximum compatibility.
-- **NFR-4**: Configuration via a simple file (TOML or YAML) in the workspace root.
-- **NFR-5**: Works on macOS and Linux. Windows is not a priority.
-- **NFR-6**: Installable via `go install` and Homebrew.
-- **NFR-7**: Hardened input validation — reject invalid branch names, path traversals, control characters. Assume agent-generated inputs can be adversarial.
+- **NFR-1** (`implemented`): Written in Go. Distributed as a single binary with no bundled runtime dependencies beyond the host tooling it intentionally invokes, chiefly `git` and an optional shell for configured hooks.
+- **NFR-2** (`partial`): Fast — the tool remains lightweight in normal use, but the project plan does not yet carry explicit benchmark-backed proof for every command path.
+- **NFR-3** (`implemented`): Git operations use the `git` CLI internally (not a Go git library) for maximum compatibility.
+- **NFR-4** (`partial`): Configuration via a simple file. Repo-local TOML config is shipped today; future work should extend this with optional global config rather than replacing the simple-file model.
+- **NFR-5** (`implemented`): Works on macOS and Linux. Windows is not a priority.
+- **NFR-6** (`implemented`): Installable via `go install` and Homebrew.
+- **NFR-7** (`implemented`): Hardened input validation — reject invalid branch names, path traversals, and control characters. Assume agent-generated inputs can be adversarial.
 
 ## Milestones
 
 - [x] Phase 1 (MVP): Single-repo worktree management — create, list, remove with post-create hooks and gitignored file handling.
-- [x] Phase 2: Workspace discovery (auto-detect parent/child git repos, `workspace = true`), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
+- [x] Phase 2: Workspace discovery (bounded auto-detect for practical parent/child git repo layouts), cross-repo `ww list` with STATUS (`active`/`merged`/`stale`), `--cleanable` filter, `ww clean`, `--repo` flag for create/remove.
 - [x] Post-Phase 2: sandbox-constrained mode for sandboxed environments (FR-26). Originally tracked as `--no-upward-search`, and completed via the sandbox implementation. Any further sandbox refinements should be handled as separate follow-up tasks rather than this phase.
 - [x] Phase 3: Polish — shell integration (`ww cd`, `cd $(ww create feat/x)`), SemVer release automation starting at `v0.3.0`, Homebrew tap distribution, documentation.
 - [x] Phase 4: Human interactive mode — add a people-first interactive flow for common operations such as create, list, remove, clean, and worktree selection without requiring users to remember the full flag surface.
-- [ ] Phase 5 (nice-to-have): Hook trust hardening — first-run confirmation prompt, config change detection, sandbox execution, dangerous pattern warning.
-- [ ] Future: Sandboxed environment full compatibility (FR-25). Blocked on upstream Claude Code sandbox issue resolution.
+- [ ] Phase 5: Global config and hook workflow portability — add user-owned global config, per-project target matching, reusable hook/materialization profiles, and safe sandbox guidance so agent workflows do not require committing `.ww.toml` into every repository.
+- [ ] Phase 6: Lifecycle hook expansion — extend today's post-create-only model with broader hook phases and richer hook context so setup/teardown workflows remain expressible without ad hoc wrapper scripts.
+- [ ] Phase 7 (hardening): Hook trust hardening — once the hook/config surface is powerful enough, add first-run confirmation, config-change detection, sandbox execution options, and dangerous-pattern warnings.
+- [ ] Future: Sandboxed environment full compatibility (FR-25). Treat this as a verification-and-gap track across real Claude Code sandbox cases, not as a single internal feature that `ww` can finish in isolation.
 
 ## Design Principles
 
