@@ -90,7 +90,7 @@ Post-Phase 2 (originally tracked as `--no-upward-search`) is complete. The plann
 
 ### Non-Functional Requirements
 
-- **NFR-1** (`implemented`): Written in Go. Single binary, no runtime dependencies beyond `git`.
+- **NFR-1** (`implemented`): Written in Go. Distributed as a single binary with no bundled runtime dependencies beyond the host tooling it intentionally invokes, chiefly `git` and an optional shell for configured hooks.
 - **NFR-2** (`partial`): Fast — the tool remains lightweight in normal use, but the project plan does not yet carry explicit benchmark-backed proof for every command path.
 - **NFR-3** (`implemented`): Git operations use the `git` CLI internally (not a Go git library) for maximum compatibility.
 - **NFR-4** (`partial`): Configuration via a simple file. Repo-local TOML config is shipped today; future work should extend this with optional global config rather than replacing the simple-file model.
