@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yoskeoka/ww/internal/config"
 )
 
 func TestNewManagerWithoutGlobalConfigKeepsRepoLocalBehavior(t *testing.T) {
@@ -42,7 +44,7 @@ default_base = "origin/main"
 copy_files = [".env"]
 sandbox = true
 `
-	if err := os.WriteFile(filepath.Join(globalDir, "config.toml"), []byte(globalConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(globalDir, config.GlobalFileName), []byte(globalConfig), 0644); err != nil {
 		t.Fatal(err)
 	}
 

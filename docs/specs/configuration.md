@@ -4,7 +4,7 @@
 
 `ww` reads configuration from two optional layers:
 
-- a user-owned global config file at `$XDG_CONFIG_HOME/ww/config.toml` when `XDG_CONFIG_HOME` is set, otherwise `$HOME/.config/ww/config.toml`
+- a user-owned global config file at `$XDG_CONFIG_HOME/ww/config.toml` when `XDG_CONFIG_HOME` is set, otherwise the current user's default home config location for `ww` (`.config/ww/config.toml` under the home directory)
 - a repo-local `.ww.toml` file discovered from the current working directory
 
 If no config file is found in either layer, sensible defaults are used (zero-config mode).
@@ -52,7 +52,7 @@ Both repo-local `.ww.toml` and user-owned global `config.toml` are treated as **
 ### Global Config Search
 
 1. If `XDG_CONFIG_HOME` is set, the global config path is `$XDG_CONFIG_HOME/ww/config.toml`.
-2. Otherwise, the global config path is `$HOME/.config/ww/config.toml`.
+2. Otherwise, the global config path is the current user's default home config location for `ww`: `.config/ww/config.toml` under the home directory.
 3. If that file does not exist, the global layer is absent.
 
 ### Repo-Local Config Search
