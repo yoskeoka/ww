@@ -89,3 +89,12 @@
 - **Pattern**: Reaching for filesystem implementation details first can make both plans and code depend on git's current storage format rather than its supported command interface.
 - **Rule**: When distinguishing repository states in `ww`, prefer stable git CLI contracts such as `rev-parse --show-toplevel`, `--git-dir`, and `--git-common-dir` over inspecting `.git` file contents directly. Only rely on raw `.git` internals when no stable git command can express the required distinction.
 - **Applied**: Workspace-member detection, linked-worktree exclusion, and any future repo-shape validation logic.
+
+---
+
+### L-011: Config layering semantics must be stated per key before implementation
+
+- **Mistake**: Started from a file-level "repo-local wins" framing before the user clarified that global/local precedence must be evaluated independently for each config field.
+- **Pattern**: Layered config work becomes ambiguous when "override" is discussed without concrete examples for mixed global/local coverage and without stating how arrays or hooks behave.
+- **Rule**: For layered config changes in `ww`, specify precedence per config key with explicit mixed-case examples before coding. Treat arrays and hook/script fields with the same full-replacement rule unless an explicit additive design is approved.
+- **Applied**: Phase 5 global config work, future project-target/profile layering, and any config feature that combines multiple sources.

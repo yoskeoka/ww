@@ -6,7 +6,14 @@ import (
 	"testing"
 )
 
+func disableGlobalConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+}
+
 func TestLoadDefaults(t *testing.T) {
+	disableGlobalConfig(t)
 	dir := t.TempDir()
 	cfg, err := Load(dir)
 	if err != nil {
@@ -24,6 +31,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadFromFile(t *testing.T) {
+	disableGlobalConfig(t)
 	dir := t.TempDir()
 	content := `
 worktree_dir = ".worktrees"
@@ -59,6 +67,7 @@ sandbox = true
 }
 
 func TestLoadSearchUpward(t *testing.T) {
+	disableGlobalConfig(t)
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "a", "b")
 	if err := os.MkdirAll(sub, 0755); err != nil {
@@ -79,6 +88,7 @@ func TestLoadSearchUpward(t *testing.T) {
 }
 
 func TestLoadFallbackDir(t *testing.T) {
+	disableGlobalConfig(t)
 	// startDir has no config, but fallback dir does
 	startDir := t.TempDir()
 	fallbackDir := t.TempDir()
@@ -97,6 +107,7 @@ func TestLoadFallbackDir(t *testing.T) {
 }
 
 func TestUpwardSearchTakesPriorityOverFallback(t *testing.T) {
+	disableGlobalConfig(t)
 	parentDir := t.TempDir()
 	startDir := filepath.Join(parentDir, "sub")
 	if err := os.MkdirAll(startDir, 0755); err != nil {
@@ -123,6 +134,7 @@ func TestUpwardSearchTakesPriorityOverFallback(t *testing.T) {
 }
 
 func TestLoadFallbackDirWithoutConfig(t *testing.T) {
+	disableGlobalConfig(t)
 	startDir := t.TempDir()
 	fallbackDir := t.TempDir() // no .ww.toml here
 
@@ -136,6 +148,7 @@ func TestLoadFallbackDirWithoutConfig(t *testing.T) {
 }
 
 func TestLoadFallbackSkipsEmptyString(t *testing.T) {
+	disableGlobalConfig(t)
 	startDir := t.TempDir()
 	fallbackDir := t.TempDir()
 
@@ -154,6 +167,7 @@ func TestLoadFallbackSkipsEmptyString(t *testing.T) {
 }
 
 func TestLoadSandboxStopsAtBoundary(t *testing.T) {
+	disableGlobalConfig(t)
 	parentDir := t.TempDir()
 	boundary := filepath.Join(parentDir, "repo")
 	startDir := filepath.Join(boundary, "sub")
@@ -177,6 +191,7 @@ func TestLoadSandboxStopsAtBoundary(t *testing.T) {
 }
 
 func TestLoadSandboxIgnoresConfigAboveBoundary(t *testing.T) {
+	disableGlobalConfig(t)
 	parentDir := t.TempDir()
 	boundary := filepath.Join(parentDir, "repo")
 	startDir := filepath.Join(boundary, "sub")
@@ -197,6 +212,7 @@ func TestLoadSandboxIgnoresConfigAboveBoundary(t *testing.T) {
 }
 
 func TestLoadSandboxAllowsMainWorktreeFallback(t *testing.T) {
+	disableGlobalConfig(t)
 	currentCheckout := t.TempDir()
 	mainWorktree := t.TempDir()
 	if err := os.WriteFile(filepath.Join(mainWorktree, FileName), []byte(`worktree_dir = "from-main"`), 0644); err != nil {
@@ -213,5 +229,147 @@ func TestLoadSandboxAllowsMainWorktreeFallback(t *testing.T) {
 	}
 	if cfg.WorktreeDir != "from-main" {
 		t.Errorf("WorktreeDir = %q, want from-main", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadUsesXDGGlobalConfig(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(`worktree_dir = "from-global"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-global" {
+		t.Fatalf("WorktreeDir = %q, want from-global", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadUsesHomeConfigWhenXDGUnset(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	globalDir := filepath.Join(homeDir, ".config", "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(`worktree_dir = "from-home-global"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-home-global" {
+		t.Fatalf("WorktreeDir = %q, want from-home-global", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadRepoLocalOverlaysGlobalPerKey(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+worktree_dir = "from-global"
+default_base = "origin/main"
+copy_files = [".env", ".tool-versions"]
+symlink_files = ["node_modules"]
+post_create_hook = "global-hook"
+sandbox = true
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoDir := t.TempDir()
+	localConfig := `
+default_base = "origin/release"
+copy_files = ["local.env"]
+post_create_hook = "local-hook"
+`
+	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-global" {
+		t.Fatalf("WorktreeDir = %q, want from-global", cfg.WorktreeDir)
+	}
+	if cfg.DefaultBase != "origin/release" {
+		t.Fatalf("DefaultBase = %q, want origin/release", cfg.DefaultBase)
+	}
+	if got, want := cfg.CopyFiles, []string{"local.env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+	if got, want := cfg.SymlinkFiles, []string{"node_modules"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("SymlinkFiles = %v, want %v", got, want)
+	}
+	if cfg.PostCreateHook != "local-hook" {
+		t.Fatalf("PostCreateHook = %q, want local-hook", cfg.PostCreateHook)
+	}
+	if !cfg.Sandbox {
+		t.Fatal("Sandbox = false, want true from global config")
+	}
+}
+
+func TestLoadRepoLocalReplacesArraysHooksAndFalseValues(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+copy_files = [".env", ".tool-versions"]
+post_create_hook = "global-hook"
+sandbox = true
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoDir := t.TempDir()
+	localConfig := `
+copy_files = []
+post_create_hook = ""
+sandbox = false
+`
+	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.CopyFiles) != 0 {
+		t.Fatalf("CopyFiles = %v, want empty replacement", cfg.CopyFiles)
+	}
+	if cfg.PostCreateHook != "" {
+		t.Fatalf("PostCreateHook = %q, want empty replacement", cfg.PostCreateHook)
+	}
+	if cfg.Sandbox {
+		t.Fatal("Sandbox = true, want false replacement")
 	}
 }
