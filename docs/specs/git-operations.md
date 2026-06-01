@@ -18,6 +18,8 @@ git rev-parse --path-format=absolute --git-common-dir
 
 This returns the shared `.git` directory; its parent is the main working tree root. The repository name is derived from this path.
 
+The same resolved main working tree root is also the stable anchor for global project-target matching. Global `[[projects]]` rules are evaluated against that main-root path, not against the current secondary worktree path.
+
 ## Workspace Member Validation
 
 When validating whether an immediate child directory is a standalone workspace repository, `ww` uses git's resolved paths rather than trusting `.git` markers alone:

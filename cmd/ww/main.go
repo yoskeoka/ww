@@ -144,7 +144,11 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 
 	sandboxMode := sandboxFlag
 	if !sandboxMode {
-		preCfg, err := config.Load(dir)
+		projectRoot := dir
+		if mainDir, err := (&git.Runner{Dir: dir}).MainWorktreeDir(); err == nil {
+			projectRoot = mainDir
+		}
+		preCfg, err := config.LoadWithOptions(dir, config.LoadOptions{ProjectRoot: projectRoot})
 		if err != nil {
 			return nil, fmt.Errorf("loading config: %w", err)
 		}
@@ -206,6 +210,7 @@ func loadManagerContext(dir string, requireRepo bool, sandboxMode bool) (*manage
 		Sandbox:      sandboxMode,
 		Boundary:     sandboxBoundary(ws, mainDir),
 		FallbackDirs: sandboxFallbackDirs(sandboxMode, mainDir, ws.Root),
+		ProjectRoot:  mainDir,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)

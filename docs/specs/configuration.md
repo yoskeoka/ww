@@ -32,6 +32,21 @@ sandbox = false
 
 Global config uses the same TOML fields, but lives in `config.toml` at the global path above instead of repo-local `.ww.toml`.
 
+Global config may also declare ordered project-specific overrides:
+
+```toml
+worktree_dir = ".worktrees"
+
+[[projects]]
+root = "/home/user/src/workspace/ww"
+default_base = "origin/main"
+
+[[projects]]
+root_prefix = "/home/user/src/workspace"
+copy_files = [".env"]
+post_create_hook = "make setup"
+```
+
 ## Fields
 
 | Field | Type | Default | Description |
@@ -42,6 +57,25 @@ Global config uses the same TOML fields, but lives in `config.toml` at the globa
 | `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `post_create_hook` | string | `""` | Shell command to run in the new worktree directory after creation. Empty = no hook. |
 | `sandbox` | bool | `false` | Constrain workspace/config discovery and single-repo worktree defaults to the current sandbox boundary. The `--sandbox` CLI flag takes precedence and enables sandbox mode even when this field is absent or false. |
+
+## Global Project Blocks
+
+Global config may contain zero or more `[[projects]]` blocks. Each block adds project-specific overrides on top of the base global config.
+
+Each `[[projects]]` block must define exactly one targeting field:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `root` | string | Exact absolute path of the repository main worktree root to match. |
+| `root_prefix` | string | Absolute path prefix of the repository main worktree root to match. Prefix matching is path-segment aware, so `/workspace/repo` does not match `/workspace/repo2`. |
+
+Project blocks may also use any ordinary config fields from the table above. Those fields use the same full-replacement semantics as any other config layer.
+
+Invalid project blocks are rejected during config loading. Examples of invalid blocks include:
+
+- both `root` and `root_prefix` are set
+- neither `root` nor `root_prefix` is set
+- the selected targeting value is empty or not an absolute path
 
 ## Trust Model
 
@@ -69,17 +103,23 @@ Both repo-local `.ww.toml` and user-owned global `config.toml` are treated as **
 When both config layers are present:
 
 1. Load the global config first.
-2. Load the repo-local config second.
-3. Resolve values per configuration field, not per file:
+2. If the global config contains `[[projects]]` blocks, evaluate them against the repository main worktree root in declared order and select the first matching block.
+3. Merge the selected project block, if any, onto the base global config.
+4. Load the repo-local config second.
+5. Resolve values per configuration field, not per file:
    - if a field is defined only in global config, use the global value
+   - if a field is defined only in the selected project block, use the project value
    - if a field is defined only in repo-local config, use the repo-local value
-   - if a field is defined in both, the repo-local value replaces the global value completely
-4. Replacement uses the same rule for every field type:
+   - if a field is defined in both the base global config and the selected project block, the project value replaces the base global value completely
+   - if a field is defined in repo-local config and any global layer, the repo-local value replaces the global value completely
+6. Replacement uses the same rule for every field type:
    - scalar fields replace scalar fields
    - array fields replace the entire array without append or merge behavior
    - hook/script fields replace the entire hook value without composition
 
 There is no implicit deep merge, list append, or hook concatenation.
+
+If no `[[projects]]` block matches the repository main worktree root, the base global config remains unchanged.
 
 ### Sandbox Config Search
 
