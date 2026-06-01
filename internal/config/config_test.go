@@ -439,6 +439,42 @@ worktree_dir = "second"
 	}
 }
 
+func TestLoadGlobalProjectRootPrefixMatchesFilesystemRoot(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+[[projects]]
+root_prefix = "/"
+worktree_dir = "from-root-prefix"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(t.TempDir(), LoadOptions{ProjectRoot: "/workspace/repo-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-root-prefix" {
+		t.Fatalf("WorktreeDir = %q, want from-root-prefix", cfg.WorktreeDir)
+	}
+}
+
+func TestHasPathPrefixIsSegmentAware(t *testing.T) {
+	if hasPathPrefix("/workspace/repo2", "/workspace/repo") {
+		t.Fatal("hasPathPrefix matched sibling path, want false")
+	}
+	if !hasPathPrefix("/workspace/repo/sub", "/workspace/repo") {
+		t.Fatal("hasPathPrefix = false, want true for child path")
+	}
+}
+
 func TestLoadGlobalProjectUnmatchedLeavesBaseGlobalConfig(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)

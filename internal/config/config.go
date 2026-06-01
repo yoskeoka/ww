@@ -244,13 +244,11 @@ func projectMatches(projectRoot string, project projectDocument) bool {
 }
 
 func hasPathPrefix(path, prefix string) bool {
-	if path == prefix {
-		return true
-	}
-	if !strings.HasPrefix(path, prefix) {
+	rel, err := filepath.Rel(prefix, path)
+	if err != nil {
 		return false
 	}
-	return strings.HasPrefix(path[len(prefix):], string(filepath.Separator))
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func globalConfigPath() string {
