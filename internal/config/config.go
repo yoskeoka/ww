@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,7 @@ type LoadOptions struct {
 	Sandbox      bool
 	Boundary     string
 	FallbackDirs []string
+	ProjectRoot  string
 }
 
 // Load resolves the global config layer plus any repo-local .ww.toml layer.
@@ -51,11 +53,12 @@ func LoadWithOptions(startDir string, opts LoadOptions) (*Config, error) {
 
 	var cfg Config
 	if globalPath != "" {
-		globalLayer, err := decodeConfigLayer(globalPath)
+		globalLayer, projectLayer, err := decodeGlobalConfig(globalPath, opts.ProjectRoot)
 		if err != nil {
 			return nil, err
 		}
 		mergeConfig(&cfg, globalLayer)
+		mergeConfig(&cfg, projectLayer)
 	}
 
 	if localPath != "" {
@@ -79,22 +82,75 @@ type configLayer struct {
 	sandbox      bool
 }
 
+type configFields struct {
+	WorktreeDir    *string   `toml:"worktree_dir"`
+	DefaultBase    *string   `toml:"default_base"`
+	CopyFiles      *[]string `toml:"copy_files"`
+	SymlinkFiles   *[]string `toml:"symlink_files"`
+	PostCreateHook *string   `toml:"post_create_hook"`
+	Sandbox        *bool     `toml:"sandbox"`
+}
+
+type globalConfigDocument struct {
+	configFields
+	Projects []projectDocument `toml:"projects"`
+}
+
+type projectDocument struct {
+	configFields
+	Root       *string `toml:"root"`
+	RootPrefix *string `toml:"root_prefix"`
+}
+
 func decodeConfigLayer(path string) (*configLayer, error) {
-	var cfg Config
-	md, err := toml.DecodeFile(path, &cfg)
-	if err != nil {
+	var doc configFields
+	if _, err := toml.DecodeFile(path, &doc); err != nil {
 		return nil, err
 	}
+	return decodeFields(doc), nil
+}
 
-	return &configLayer{
-		cfg:          cfg,
-		worktreeDir:  md.IsDefined("worktree_dir"),
-		defaultBase:  md.IsDefined("default_base"),
-		copyFiles:    md.IsDefined("copy_files"),
-		symlinkFiles: md.IsDefined("symlink_files"),
-		postHook:     md.IsDefined("post_create_hook"),
-		sandbox:      md.IsDefined("sandbox"),
-	}, nil
+func decodeGlobalConfig(path, projectRoot string) (*configLayer, *configLayer, error) {
+	var doc globalConfigDocument
+	if _, err := toml.DecodeFile(path, &doc); err != nil {
+		return nil, nil, err
+	}
+
+	baseLayer := decodeFields(doc.configFields)
+	projectLayer, err := selectProjectLayer(doc.Projects, projectRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	return baseLayer, projectLayer, nil
+}
+
+func decodeFields(fields configFields) *configLayer {
+	layer := &configLayer{}
+	if fields.WorktreeDir != nil {
+		layer.cfg.WorktreeDir = *fields.WorktreeDir
+		layer.worktreeDir = true
+	}
+	if fields.DefaultBase != nil {
+		layer.cfg.DefaultBase = *fields.DefaultBase
+		layer.defaultBase = true
+	}
+	if fields.CopyFiles != nil {
+		layer.cfg.CopyFiles = cloneStrings(*fields.CopyFiles)
+		layer.copyFiles = true
+	}
+	if fields.SymlinkFiles != nil {
+		layer.cfg.SymlinkFiles = cloneStrings(*fields.SymlinkFiles)
+		layer.symlinkFiles = true
+	}
+	if fields.PostCreateHook != nil {
+		layer.cfg.PostCreateHook = *fields.PostCreateHook
+		layer.postHook = true
+	}
+	if fields.Sandbox != nil {
+		layer.cfg.Sandbox = *fields.Sandbox
+		layer.sandbox = true
+	}
+	return layer
 }
 
 func mergeConfig(dst *Config, layer *configLayer) {
@@ -128,6 +184,73 @@ func cloneStrings(src []string) []string {
 	dst := make([]string, len(src))
 	copy(dst, src)
 	return dst
+}
+
+func selectProjectLayer(projects []projectDocument, projectRoot string) (*configLayer, error) {
+	if len(projects) == 0 {
+		return nil, nil
+	}
+	for i, project := range projects {
+		if err := validateProjectDocument(project, i); err != nil {
+			return nil, err
+		}
+	}
+	if projectRoot == "" {
+		return nil, nil
+	}
+
+	cleanRoot := filepath.Clean(projectRoot)
+	for _, project := range projects {
+		if projectMatches(cleanRoot, project) {
+			return decodeFields(project.configFields), nil
+		}
+	}
+	return nil, nil
+}
+
+func validateProjectDocument(project projectDocument, index int) error {
+	hasRoot := project.Root != nil
+	hasPrefix := project.RootPrefix != nil
+	if hasRoot == hasPrefix {
+		return fmt.Errorf("invalid projects[%d]: define exactly one of root or root_prefix", index)
+	}
+
+	targetValue := ""
+	targetName := ""
+	if hasRoot {
+		targetName = "root"
+		targetValue = strings.TrimSpace(*project.Root)
+	} else {
+		targetName = "root_prefix"
+		targetValue = strings.TrimSpace(*project.RootPrefix)
+	}
+	if targetValue == "" {
+		return fmt.Errorf("invalid projects[%d]: %s must not be empty", index, targetName)
+	}
+	if !filepath.IsAbs(targetValue) {
+		return fmt.Errorf("invalid projects[%d]: %s must be an absolute path", index, targetName)
+	}
+	return nil
+}
+
+func projectMatches(projectRoot string, project projectDocument) bool {
+	if project.Root != nil {
+		return filepath.Clean(projectRoot) == filepath.Clean(strings.TrimSpace(*project.Root))
+	}
+	if project.RootPrefix != nil {
+		return hasPathPrefix(filepath.Clean(projectRoot), filepath.Clean(strings.TrimSpace(*project.RootPrefix)))
+	}
+	return false
+}
+
+func hasPathPrefix(path, prefix string) bool {
+	if path == prefix {
+		return true
+	}
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	return strings.HasPrefix(path[len(prefix):], string(filepath.Separator))
 }
 
 func globalConfigPath() string {

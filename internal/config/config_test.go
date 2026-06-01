@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -371,5 +372,201 @@ sandbox = false
 	}
 	if cfg.Sandbox {
 		t.Fatal("Sandbox = true, want false replacement")
+	}
+}
+
+func TestLoadGlobalProjectExactRootMatchOverridesBaseConfig(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+worktree_dir = "from-global"
+
+[[projects]]
+root = "/target/repo"
+worktree_dir = "from-project"
+default_base = "origin/main"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(t.TempDir(), LoadOptions{ProjectRoot: "/target/repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-project" {
+		t.Fatalf("WorktreeDir = %q, want from-project", cfg.WorktreeDir)
+	}
+	if cfg.DefaultBase != "origin/main" {
+		t.Fatalf("DefaultBase = %q, want origin/main", cfg.DefaultBase)
+	}
+}
+
+func TestLoadGlobalProjectFirstMatchWins(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+[[projects]]
+root_prefix = "/workspace"
+worktree_dir = "first"
+
+[[projects]]
+root = "/workspace/repo-a"
+worktree_dir = "second"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(t.TempDir(), LoadOptions{ProjectRoot: "/workspace/repo-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "first" {
+		t.Fatalf("WorktreeDir = %q, want first", cfg.WorktreeDir)
+	}
+}
+
+func TestLoadGlobalProjectUnmatchedLeavesBaseGlobalConfig(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+worktree_dir = "from-global"
+
+[[projects]]
+root = "/workspace/repo-a"
+default_base = "origin/main"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(t.TempDir(), LoadOptions{ProjectRoot: "/workspace/repo-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "from-global" {
+		t.Fatalf("WorktreeDir = %q, want from-global", cfg.WorktreeDir)
+	}
+	if cfg.DefaultBase != "" {
+		t.Fatalf("DefaultBase = %q, want empty", cfg.DefaultBase)
+	}
+}
+
+func TestLoadRepoLocalOverridesSelectedProjectPerKey(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+worktree_dir = "from-global"
+copy_files = [".env"]
+
+[[projects]]
+root = "/workspace/repo-a"
+copy_files = ["project.env"]
+post_create_hook = "project-hook"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoDir := t.TempDir()
+	localConfig := `
+copy_files = ["local.env"]
+`
+	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(repoDir, LoadOptions{ProjectRoot: "/workspace/repo-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.CopyFiles, []string{"local.env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+	if cfg.PostCreateHook != "project-hook" {
+		t.Fatalf("PostCreateHook = %q, want project-hook", cfg.PostCreateHook)
+	}
+}
+
+func TestLoadGlobalProjectRejectsInvalidTargetDefinitions(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name: "both root and prefix",
+			content: `
+[[projects]]
+root = "/workspace/repo-a"
+root_prefix = "/workspace"
+`,
+			want: "define exactly one of root or root_prefix",
+		},
+		{
+			name: "missing target",
+			content: `
+[[projects]]
+worktree_dir = "from-project"
+`,
+			want: "define exactly one of root or root_prefix",
+		},
+		{
+			name: "relative root",
+			content: `
+[[projects]]
+root = "workspace/repo-a"
+`,
+			want: "root must be an absolute path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			xdgDir := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", xdgDir)
+			t.Setenv("HOME", t.TempDir())
+
+			globalDir := filepath.Join(xdgDir, "ww")
+			if err := os.MkdirAll(globalDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := LoadWithOptions(t.TempDir(), LoadOptions{ProjectRoot: "/workspace/repo-a"})
+			if err == nil {
+				t.Fatal("LoadWithOptions error = nil, want invalid project error")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), tt.want)
+			}
+		})
 	}
 }
