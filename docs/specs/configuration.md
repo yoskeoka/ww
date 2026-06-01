@@ -2,7 +2,12 @@
 
 ## Overview
 
-`ww` reads configuration from a `.ww.toml` file. The file is located by searching upward from the current working directory. If no file is found, sensible defaults are used (zero-config mode).
+`ww` reads configuration from two optional layers:
+
+- a user-owned global config file at `$XDG_CONFIG_HOME/ww/config.toml` when `XDG_CONFIG_HOME` is set, otherwise the current user's default home config location for `ww` (`.config/ww/config.toml` under the home directory)
+- a repo-local `.ww.toml` file discovered from the current working directory
+
+If no config file is found in either layer, sensible defaults are used (zero-config mode).
 
 ## File Format
 
@@ -25,6 +30,8 @@ post_create_hook = "npm install"
 sandbox = false
 ```
 
+Global config uses the same TOML fields, but lives in `config.toml` at the global path above instead of repo-local `.ww.toml`.
+
 ## Fields
 
 | Field | Type | Default | Description |
@@ -38,16 +45,41 @@ sandbox = false
 
 ## Trust Model
 
-`.ww.toml` is treated as **trusted input**, the same trust model as `.gitconfig`. The `post_create_hook` value is passed directly to `sh -c` without sanitization because it is authored by the repository owner. Users should review `.ww.toml` before using an untrusted repository, just as they would review `.gitconfig` aliases.
+Both repo-local `.ww.toml` and user-owned global `config.toml` are treated as **trusted input**, the same trust model as `.gitconfig`. The `post_create_hook` value is passed directly to `sh -c` without sanitization because it is authored by a trusted config owner. Users should review repository-local config before using an untrusted repository, just as they would review `.gitconfig` aliases.
 
 ## Config Search
+
+### Global Config Search
+
+1. If `XDG_CONFIG_HOME` is set, the global config path is `$XDG_CONFIG_HOME/ww/config.toml`.
+2. Otherwise, the global config path is the current user's default home config location for `ww`: `.config/ww/config.toml` under the home directory.
+3. If that file does not exist, the global layer is absent.
+
+### Repo-Local Config Search
 
 1. Start from the current working directory.
 2. Look for `.ww.toml` in the current directory.
 3. If not found, move to the parent directory and repeat.
 4. Stop at the filesystem root.
-5. If not found via upward search, check caller-provided fallback directories (e.g., the main worktree's root directory or the detected workspace root).
-6. If no file is found, use defaults.
+5. If not found via upward search, check caller-provided fallback directories (for example, the main worktree's root directory or the detected workspace root).
+6. If no file is found, the repo-local layer is absent.
+
+### Layering and Precedence
+
+When both config layers are present:
+
+1. Load the global config first.
+2. Load the repo-local config second.
+3. Resolve values per configuration field, not per file:
+   - if a field is defined only in global config, use the global value
+   - if a field is defined only in repo-local config, use the repo-local value
+   - if a field is defined in both, the repo-local value replaces the global value completely
+4. Replacement uses the same rule for every field type:
+   - scalar fields replace scalar fields
+   - array fields replace the entire array without append or merge behavior
+   - hook/script fields replace the entire hook value without composition
+
+There is no implicit deep merge, list append, or hook concatenation.
 
 ### Sandbox Config Search
 
@@ -57,10 +89,15 @@ When sandbox mode is enabled by `--sandbox` or by an already-loaded `sandbox = t
    - if the current working directory has immediate child git repositories, the boundary is the current working directory
    - otherwise, if the current working directory is inside git, the boundary is that repository's main working tree root
    - otherwise, config loading uses defaults and command setup returns `not a git repository`
-2. Search from the current working directory upward, stopping at the sandbox boundary.
+2. Search for repo-local `.ww.toml` from the current working directory upward, stopping at the sandbox boundary.
 3. If the current working directory is a secondary worktree that is not a descendant of the main working tree root, the main working tree root may be checked as an explicit fallback because git defines it as the repository's primary root.
-4. Other fallback directories outside the sandbox boundary are ignored.
-5. If no config is found within those locations, use defaults.
+4. Other repo-local fallback directories outside the sandbox boundary are ignored.
+5. Global config still uses its explicit user-owned path. Sandbox mode does not change the global config path or turn it into an upward search.
+6. If neither config layer is found, use defaults.
+
+### Sandboxed Agent Guidance
+
+For agent sandboxes, prefer granting read access to the global config path while denying write access to that path and any referenced hook/config assets unless write access is intentionally required for the task. This keeps user-owned defaults available without making global config a mutable sandbox target.
 
 ## Worktree Path Layout
 

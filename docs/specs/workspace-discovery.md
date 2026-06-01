@@ -56,6 +56,8 @@ When the start directory is inside git:
 
 Sandbox mode is enabled by the global `--sandbox` flag or by `sandbox = true` in `.ww.toml` when that config can be loaded. It constrains default discovery to the current sandbox boundary instead of trying to infer a containing workspace from parent directories.
 
+Sandbox mode does not disable the explicit global config path. It only constrains workspace detection and repo-local config discovery.
+
 Immediate-child scanning remains best-effort for entries that are not established as repositories. Unreadable immediate children that cannot be proven to be real child repos are skipped instead of aborting detection.
 
 When sandbox mode is enabled:

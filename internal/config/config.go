@@ -9,6 +9,7 @@ import (
 )
 
 const FileName = ".ww.toml"
+const GlobalFileName = "config.toml"
 
 // Config represents the ww configuration.
 type Config struct {
@@ -27,33 +28,122 @@ type LoadOptions struct {
 	FallbackDirs []string
 }
 
-// Load searches upward from startDir for .ww.toml and parses it.
-// If the upward search fails, it checks each directory in fallbackDirs
-// for .ww.toml. Returns default config if no file is found.
+// Load resolves the global config layer plus any repo-local .ww.toml layer.
+// Repo-local values replace same-key global values completely. If no config is
+// found, it returns the default zero-value config.
 func Load(startDir string, fallbackDirs ...string) (*Config, error) {
 	return LoadWithOptions(startDir, LoadOptions{FallbackDirs: fallbackDirs})
 }
 
-// LoadWithOptions searches for .ww.toml using the provided search options and parses it.
+// LoadWithOptions resolves the global config layer plus any repo-local
+// .ww.toml using the provided search options.
 func LoadWithOptions(startDir string, opts LoadOptions) (*Config, error) {
-	var path string
+	globalPath := globalConfigPath()
+	localPath := ""
 	if opts.Sandbox {
-		path = findConfigBounded(startDir, opts.Boundary)
+		localPath = findConfigBounded(startDir, opts.Boundary)
 	} else {
-		path = findConfig(startDir)
+		localPath = findConfig(startDir)
 	}
-	if path == "" {
-		path = findConfigInDirs(opts.FallbackDirs)
-	}
-	if path == "" {
-		return &Config{}, nil
+	if localPath == "" {
+		localPath = findConfigInDirs(opts.FallbackDirs)
 	}
 
 	var cfg Config
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+	if globalPath != "" {
+		globalLayer, err := decodeConfigLayer(globalPath)
+		if err != nil {
+			return nil, err
+		}
+		mergeConfig(&cfg, globalLayer)
+	}
+
+	if localPath != "" {
+		localLayer, err := decodeConfigLayer(localPath)
+		if err != nil {
+			return nil, err
+		}
+		mergeConfig(&cfg, localLayer)
+	}
+
+	return &cfg, nil
+}
+
+type configLayer struct {
+	cfg          Config
+	worktreeDir  bool
+	defaultBase  bool
+	copyFiles    bool
+	symlinkFiles bool
+	postHook     bool
+	sandbox      bool
+}
+
+func decodeConfigLayer(path string) (*configLayer, error) {
+	var cfg Config
+	md, err := toml.DecodeFile(path, &cfg)
+	if err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+
+	return &configLayer{
+		cfg:          cfg,
+		worktreeDir:  md.IsDefined("worktree_dir"),
+		defaultBase:  md.IsDefined("default_base"),
+		copyFiles:    md.IsDefined("copy_files"),
+		symlinkFiles: md.IsDefined("symlink_files"),
+		postHook:     md.IsDefined("post_create_hook"),
+		sandbox:      md.IsDefined("sandbox"),
+	}, nil
+}
+
+func mergeConfig(dst *Config, layer *configLayer) {
+	if layer == nil {
+		return
+	}
+	if layer.worktreeDir {
+		dst.WorktreeDir = layer.cfg.WorktreeDir
+	}
+	if layer.defaultBase {
+		dst.DefaultBase = layer.cfg.DefaultBase
+	}
+	if layer.copyFiles {
+		dst.CopyFiles = cloneStrings(layer.cfg.CopyFiles)
+	}
+	if layer.symlinkFiles {
+		dst.SymlinkFiles = cloneStrings(layer.cfg.SymlinkFiles)
+	}
+	if layer.postHook {
+		dst.PostCreateHook = layer.cfg.PostCreateHook
+	}
+	if layer.sandbox {
+		dst.Sandbox = layer.cfg.Sandbox
+	}
+}
+
+func cloneStrings(src []string) []string {
+	if src == nil {
+		return nil
+	}
+	dst := make([]string, len(src))
+	copy(dst, src)
+	return dst
+}
+
+func globalConfigPath() string {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil || home == "" {
+			return ""
+		}
+		base = filepath.Join(home, ".config")
+	}
+	candidate := filepath.Join(base, "ww", GlobalFileName)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return ""
 }
 
 // findConfig searches upward from dir for .ww.toml.
