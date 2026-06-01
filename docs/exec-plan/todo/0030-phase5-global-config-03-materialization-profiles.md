@@ -1,34 +1,32 @@
-# 0030: Phase 5 profile reuse
+# 0030: Phase 5 Global Config Materialization Profiles
 
-> **Execution**
-> Run `/execute-task` for this plan.
+> **Execution**: Use `/execute-task` to implement this plan.
 
-**Parent plan series**
-`0028-phase5-global-config-01-foundation.md` -> `0029-phase5-global-config-02-project-target-matching.md` -> `0030-phase5-global-config-03-materialization-profiles.md`
+**Parent plan series**: `0028-phase5-global-config-01-foundation.md` -> `0029-phase5-global-config-02-project-target-matching.md` -> `0030-phase5-global-config-03-materialization-profiles.md`
 
 ## Objective
 
-Add reusable profiles on top of the Phase 5 global config base. Users should be able to define common worktree setup once and reuse it across repos.
+Add reusable materialization profiles on top of the Phase 5 global-config foundation so users can centrally define common worktree setup patterns such as copy/symlink selections and hook-driven setup flows without committing the same `.ww.toml` payload into every repository.
 
 ## Context
 
-- `docs/project-plan.md` defines FR-29 as hook-driven profiles for sandbox-friendly setup patterns.
-- After Phase 5-01 and Phase 5-02, `ww` will have layered config and deterministic project selection.
-- Profiles touch hooks and file/link setup, so the design must keep the agreed full-override model.
+- `docs/project-plan.md` defines FR-29 as hook-driven materialization profiles for sandbox-friendly setup patterns.
+- After Phase 5-01 and Phase 5-02, `ww` will have a layered config source and deterministic project selection. This child plan uses that foundation to reduce repetition in real worktree-setup workflows.
+- Materialization profiles interact directly with hooks and file/link setup, so the design must preserve the agreed full-override model and avoid hidden composition.
 
 ## Options and Trade-offs
 
-1. **Use one named profile per project with full expansion (recommended)**
-   - Pros: Keeps the runtime model simple.
+1. **Named single-profile selection per project with explicit full expansion (recommended)**
+   - Pros: Keeps the runtime model simple. One chosen profile expands to ordinary config values before command execution.
    - Cons: Users cannot stack multiple profiles implicitly.
-2. **Combine multiple profiles in order**
+2. **Multiple profiles combined in order**
    - Pros: More flexible for advanced reuse.
-   - Cons: Reintroduces the same merge and append ambiguity avoided in Phase 5-01.
-3. **Skip profiles and repeat per-project config**
+   - Cons: Reintroduces the same merge/append ambiguity Phase 5-01 deliberately avoided.
+3. **No profile concept, only repeated per-project config**
    - Pros: Smallest implementation.
-   - Cons: Misses the portability goal.
+   - Cons: Misses the stated portability goal and keeps global config noisy and repetitive.
 
-**Recommended option** Allow one explicit profile selection that expands to normal config values.
+**Recommendation**: Option 1. Allow one explicit profile selection that expands to normal config values, with the existing complete-override semantics still applying at the final selected layer.
 
 ## Scope
 
@@ -49,7 +47,7 @@ Add reusable profiles on top of the Phase 5 global config base. Users should be 
 
 | File | Change |
 |------|--------|
-| `docs/specs/configuration.md` | Add named profile syntax, reference rules, expansion rules, and invalid-reference behavior |
+| `docs/specs/configuration.md` | Add named profile syntax, reference rules, expansion semantics, and invalid-reference behavior |
 | `docs/specs/cli-commands.md` | Document any CLI-visible output or diagnostics affected by profile expansion |
 | `docs/project-plan.md` | Mark FR-29 status only if this child plan fully lands profile support |
 
@@ -57,13 +55,13 @@ Add reusable profiles on top of the Phase 5 global config base. Users should be 
 
 | File | Change |
 |------|--------|
-| `docs/design-decisions/adr.md` | Add an ADR if needed to record why one profile was chosen over stacked composition |
+| `docs/design-decisions/adr.md` | Append ADR if needed to record why single-profile expansion was chosen over stacked profile composition |
 
 ## Code Changes
 
 | File | Change |
 |------|--------|
-| `internal/config/config.go` | Add named materialization profiles to config resolution |
+| `internal/config/config.go` | Extend config schema and resolution for named materialization profiles |
 | `internal/config/config_test.go` | Add profile expansion and invalid-reference tests |
 | `cmd/ww/main.go` | Use the fully resolved config produced by profile expansion without changing command-level behavior |
 | `worktree/worktree.go` | Consume the resolved copy/symlink/hook values without new runtime policy branching |
@@ -78,14 +76,14 @@ Add reusable profiles on top of the Phase 5 global config base. Users should be 
 
 ## Design Notes
 
-- Profiles should stay as resolution-time sugar.
+- Profiles should be resolution-time sugar, not a second execution policy layer inside `worktree.Manager`.
 - Preserve the current trust boundary: if a selected profile defines a hook, that hook is still trusted config authored by the user.
-- Skip multiple-profile composition in this phase. If users eventually need composition, add it as an explicit design.
+- Do not combine multiple profiles in this phase. If users eventually need composition, it should be explicit and separately designed.
 
 ## Sub-tasks
 
 - [ ] [parallel] Specify named profile syntax and expansion semantics in `docs/specs/configuration.md`
-- [ ] [depends on: 0028 foundation and 0029 target matching] Add profile parsing and single-profile expansion in `internal/config`
+- [ ] [depends on: 0028 foundation and 0029 target matching] Implement profile parsing and single-profile expansion in `internal/config`
 - [ ] [depends on: implementation] Ensure command setup consumes only fully resolved config values
 - [ ] [depends on: implementation] Add regression tests for valid expansion, invalid references, and no-profile compatibility
 - [ ] [depends on: verification] Update `docs/project-plan.md` status markers if FR-29 is fully complete
