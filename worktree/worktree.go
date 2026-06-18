@@ -216,6 +216,9 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		if err := m.Git.WorktreeAdd(wtPath, branch, base); err != nil {
 			return nil, nil, fmt.Errorf("creating worktree with new branch: %w", err)
 		}
+		if err := m.Git.BranchUnsetUpstream(branch); err != nil {
+			return nil, nil, fmt.Errorf("clearing inherited upstream for new branch: %w", err)
+		}
 	}
 
 	m.copyFiles(wtPath)

@@ -81,6 +81,8 @@ The built-in help for `ww create` must preserve the create-vs-cd role split:
    - if Git cannot resolve a matching remote branch, surface an actionable error explaining that no matching remote branch could be resolved after refreshing `origin`
    - if the installed Git does not support `git worktree add --guess-remote`, surface the original Git error, tell the user to upgrade Git, and include a manual `git worktree add -b <branch> --track <path> origin/<branch>` fallback
 5. Otherwise: create a new branch from `default_base` (config), `origin/HEAD`, or the heuristic `origin/main` / `origin/master` fallback and add a worktree for it.
+   - the created local branch must not keep an upstream that points at the base branch used only for branch creation
+   - example: if `ww create feat/x` creates `feat/x` from `origin/main`, the new local `feat/x` branch must end up with no upstream instead of tracking `origin/main`
 6. After worktree creation, copy files listed in `copy_files` config.
 7. Create symlinks for files listed in `symlink_files` config.
 8. Run `post_create_hook` if configured. In text mode, print `Running post_create_hook: <command>` immediately before streaming the hook's own output.

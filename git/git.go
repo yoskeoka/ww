@@ -72,6 +72,23 @@ func (r *Runner) WorktreeAdd(path, branch, base string) error {
 	return err
 }
 
+// BranchUnsetUpstream removes any upstream configured for branch.
+func (r *Runner) BranchUnsetUpstream(branch string) error {
+	remote, err := r.BranchRemote(branch)
+	if err != nil {
+		return err
+	}
+	mergeRef, err := r.BranchMergeRef(branch)
+	if err != nil {
+		return err
+	}
+	if remote == "" && mergeRef == "" {
+		return nil
+	}
+	_, err = r.Run("branch", "--unset-upstream", branch)
+	return err
+}
+
 // WorktreeAddGuessRemote creates a worktree by asking Git to resolve a
 // same-named remote branch.
 func (r *Runner) WorktreeAddGuessRemote(path, branch string) error {
