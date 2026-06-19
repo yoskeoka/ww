@@ -554,6 +554,13 @@ func TestCreateNewBranchDoesNotTrackBaseRemoteBranch(t *testing.T) {
 		Config:  Config{},
 		RepoDir: repo,
 	}
+	baseInfo, err := mgr.baseRef(runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseInfo.Ref != "origin/main" {
+		t.Fatalf("baseRef().Ref = %q, want %q", baseInfo.Ref, "origin/main")
+	}
 
 	info, _, err := mgr.Create("feat/no-upstream", CreateOpts{})
 	if err != nil {
