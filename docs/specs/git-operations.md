@@ -44,7 +44,14 @@ This excludes linked worktree checkouts while still allowing valid standalone re
 **Create worktree with new branch:**
 ```
 git worktree add -b <branch> <path> <base>
+git branch --unset-upstream <branch>
 ```
+
+Git may automatically record `<base>` as the new branch's upstream when `<base>`
+is a remote-tracking ref such as `origin/main`. `ww` uses that ref only as the
+branch creation start-point, so after creating a new local branch from a base
+ref it must remove that auto-created upstream. This keeps normal `ww create
+<branch>` output from leaving the new branch tracking `origin/main` by mistake.
 
 **Create worktree for existing branch:**
 ```

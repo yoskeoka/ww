@@ -545,6 +545,36 @@ func TestCreateSandboxSingleRepoUsesRepoLocalWorktrees(t *testing.T) {
 	}
 }
 
+func TestCreateNewBranchDoesNotTrackBaseRemoteBranch(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	runner := &git.Runner{Dir: repo}
+
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{},
+		RepoDir: repo,
+	}
+	baseInfo, err := mgr.baseRef(runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseInfo.Ref != "origin/main" {
+		t.Fatalf("baseRef().Ref = %q, want %q", baseInfo.Ref, "origin/main")
+	}
+
+	info, _, err := mgr.Create("feat/no-upstream", CreateOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracking, err := runner.BranchTrackingConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg, ok := tracking["feat/no-upstream"]; ok && (cfg.Remote != "" || cfg.MergeRef != "") {
+		t.Fatalf("tracking[feat/no-upstream] = %+v, want no upstream after creating %s", cfg, info.Path)
+	}
+}
+
 func TestCreateSandboxRelativeEscapeRejected(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(repo, 0755); err != nil {
