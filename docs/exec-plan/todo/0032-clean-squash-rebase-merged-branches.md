@@ -15,7 +15,7 @@ Addresses: https://github.com/yoskeoka/ww/issues/263
 ## Existing Implementation References
 
 - `worktree/worktree.go`
-  - `listRepoWithStatus`, lines 355-418 - current merged/stale status pipeline,
+  - `listRepo`, lines 354-418 - current merged/stale status pipeline,
     including the `git branch --merged` fast path and stale fallback.
   - `resolveStatus`, lines 521-536 - current precedence order:
     main/branchless -> merged -> stale -> active.
