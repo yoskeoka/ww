@@ -323,7 +323,7 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 | Status | Meaning |
 |--------|---------|
 | `active` | Main worktree, or a branch that is neither merged nor stale |
-| `merged` | Branch is present in `git branch --merged <base>` |
+| `merged` | Branch changes are already integrated into the resolved base branch by direct merge, squash merge, or rebase merge |
 | `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
 | `unknown` | Base branch could not be determined; status classification was skipped |
 
@@ -333,7 +333,7 @@ When the base branch cannot be resolved at all (no `default_base` config, `origi
 
 In text output, any non-empty `status_detail` renders as `<status>(<detail>)`. In JSON output, `status` and `status_detail` are emitted as separate fields.
 
-`--cleanable` and `ww clean` only act on `merged` and `stale` worktrees. `unknown` worktrees are never eligible for cleanup.
+`--cleanable` and `ww clean` only act on `merged` and `stale` worktrees. `unknown` worktrees are never eligible for cleanup. A branch can be `merged` even when `git branch --merged <base>` does not report it, as long as the branch-intended changes are already present in the resolved base branch through squash merge or rebase merge. Local-only branches without integrated changes remain `active`.
 
 **Output (text):**
 ```text
@@ -432,6 +432,7 @@ Remove all cleanable worktrees for the current repository or detected workspace.
 
 Cleanable worktrees are those whose `STATUS` is `merged` or `stale` in `ww list`.
 Main worktrees and `active` worktrees are never removed by this command.
+This includes worktrees whose branches were integrated into the resolved base branch through direct merge, squash merge, or rebase merge, even if the local branch has no tracking remote.
 
 In workspace mode, `ww clean` operates across all detected repositories. When run
 from a non-git workspace root, it still cleans the workspace repositories.

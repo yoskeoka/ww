@@ -143,6 +143,99 @@ func TestMergedBranchesWorktreePrefix(t *testing.T) {
 	}
 }
 
+func TestPatchEquivalentBranches(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &Runner{Dir: repo}
+
+	if _, err := runner.Run("checkout", "-b", "feat/squash"); err != nil {
+		t.Fatal(err)
+	}
+	writeGitFile(t, repo, "squash.txt", "squash\n")
+	if _, err := runner.Run("add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "feat: squash source"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("-c", "merge.ff=true", "merge", "--squash", "feat/squash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "feat: squash merged"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := runner.Run("checkout", "-b", "feat/rebased"); err != nil {
+		t.Fatal(err)
+	}
+	writeGitFile(t, repo, "rebased.txt", "rebased\n")
+	if _, err := runner.Run("add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "feat: rebased source"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	writeGitFile(t, repo, "rebase-base.txt", "base shift\n")
+	if _, err := runner.Run("add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "chore: rebase base shift"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("cherry-pick", "feat/rebased"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := runner.Run("checkout", "-b", "feat/partial"); err != nil {
+		t.Fatal(err)
+	}
+	writeGitFile(t, repo, "partial.txt", "integrated\n")
+	if _, err := runner.Run("add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "feat: partial integrated"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("cherry-pick", "feat/partial"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("checkout", "feat/partial"); err != nil {
+		t.Fatal(err)
+	}
+	writeGitFile(t, repo, "partial-extra.txt", "pending\n")
+	if _, err := runner.Run("add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "feat: partial pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	branches, err := runner.PatchEquivalentBranches("main", []string{"feat/squash", "feat/rebased", "feat/partial"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(branches, "feat/squash") {
+		t.Fatalf("PatchEquivalentBranches did not include feat/squash: %v", branches)
+	}
+	if !contains(branches, "feat/rebased") {
+		t.Fatalf("PatchEquivalentBranches did not include feat/rebased: %v", branches)
+	}
+	if contains(branches, "feat/partial") {
+		t.Fatalf("PatchEquivalentBranches should exclude feat/partial with extra work: %v", branches)
+	}
+}
+
 func TestBranchRemote(t *testing.T) {
 	repo, remote := setupGitRepoWithRemote(t)
 	runner := &Runner{Dir: repo}

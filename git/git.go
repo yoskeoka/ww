@@ -133,6 +133,51 @@ func (r *Runner) MergedBranches(base string) ([]string, error) {
 	return branches, nil
 }
 
+// PatchEquivalentBranches returns candidate branches whose branch-intended
+// changes are already present in base even though the branch tip is not a
+// direct ancestor of base (for example after squash merge or cherry-pick).
+func (r *Runner) PatchEquivalentBranches(base string, branches []string) ([]string, error) {
+	integrated := make([]string, 0, len(branches))
+	for _, branch := range branches {
+		ok, err := r.branchPatchEquivalent(base, branch)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			integrated = append(integrated, branch)
+		}
+	}
+	return integrated, nil
+}
+
+func (r *Runner) branchPatchEquivalent(base, branch string) (bool, error) {
+	out, err := r.Run("cherry", base, branch)
+	if err != nil {
+		return false, err
+	}
+	return cherryOutputFullyIntegrated(out), nil
+}
+
+func cherryOutputFullyIntegrated(output string) bool {
+	sawCommit := false
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		sawCommit = true
+		switch line[0] {
+		case '-':
+			continue
+		case '+':
+			return false
+		default:
+			return false
+		}
+	}
+	return sawCommit
+}
+
 // BranchRemote returns the remote configured for branch, or empty string if
 // the branch has no tracking remote.
 func (r *Runner) BranchRemote(branch string) (string, error) {

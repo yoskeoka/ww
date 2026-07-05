@@ -375,6 +375,24 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 	// The base branch itself is always active even though git reports it as merged.
 	delete(mergedSet, baseInfo.Ref)
 
+	patchCandidates := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.Main || e.Branch == "" {
+			continue
+		}
+		if _, ok := mergedSet[e.Branch]; ok {
+			continue
+		}
+		patchCandidates = append(patchCandidates, e.Branch)
+	}
+	patchMerged, err := runner.PatchEquivalentBranches(baseInfo.Ref, patchCandidates)
+	if err != nil {
+		return nil, fmt.Errorf("listing patch-equivalent merged branches for %s: %w", repoName, err)
+	}
+	for _, branch := range patchMerged {
+		mergedSet[branch] = struct{}{}
+	}
+
 	// Precompute branch→remote and batch ls-remote calls (one per unique remote).
 	branchRemote := make(map[string]string)
 	remoteBranches := make(map[string]map[string]struct{})
