@@ -2369,13 +2369,22 @@ func TestListCleanableIncludesPatchEquivalentMergedBranches(t *testing.T) {
 	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/squash"); err != nil {
 		t.Fatal(err)
 	}
-	if err := globalEnv.WriteFile(path.Join(repo, "squash.txt"), "squash\n"); err != nil {
+	if err := globalEnv.WriteFile(path.Join(repo, "squash-1.txt"), "squash one\n"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: squash"); err != nil {
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: squash 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "squash-2.txt"), "squash two\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: squash 2"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {

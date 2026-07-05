@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -45,9 +46,16 @@ func (r *Runner) Run(args ...string) (string, error) {
 }
 
 func (r *Runner) run(args []string, allowExitCode1 bool) (string, error) {
+	return r.runWithInput(args, "", allowExitCode1)
+}
+
+func (r *Runner) runWithInput(args []string, input string, allowExitCode1 bool) (string, error) {
 	cmd := exec.Command(r.gitBin(), args...)
 	if r.Dir != "" {
 		cmd.Dir = r.Dir
+	}
+	if input != "" {
+		cmd.Stdin = bytes.NewBufferString(input)
 	}
 	out, err := cmd.Output()
 	if err != nil {
@@ -135,7 +143,8 @@ func (r *Runner) MergedBranches(base string) ([]string, error) {
 
 // PatchEquivalentBranches returns candidate branches whose branch-intended
 // changes are already present in base even though the branch tip is not a
-// direct ancestor of base (for example after squash merge or cherry-pick).
+// direct ancestor of base (for example after rebase/cherry-pick, or after a
+// typical squash merge that lands as a single commit on base).
 func (r *Runner) PatchEquivalentBranches(base string, branches []string) ([]string, error) {
 	integrated := make([]string, 0, len(branches))
 	for _, branch := range branches {
@@ -153,9 +162,12 @@ func (r *Runner) PatchEquivalentBranches(base string, branches []string) ([]stri
 func (r *Runner) branchPatchEquivalent(base, branch string) (bool, error) {
 	out, err := r.Run("cherry", base, branch)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("git cherry %s %s: %w", base, branch, err)
 	}
-	return cherryOutputFullyIntegrated(out), nil
+	if cherryOutputFullyIntegrated(out) {
+		return true, nil
+	}
+	return r.branchSquashEquivalent(base, branch)
 }
 
 func cherryOutputFullyIntegrated(output string) bool {
@@ -176,6 +188,60 @@ func cherryOutputFullyIntegrated(output string) bool {
 		}
 	}
 	return sawCommit
+}
+
+func (r *Runner) branchSquashEquivalent(base, branch string) (bool, error) {
+	mergeBase, err := r.Run("merge-base", base, branch)
+	if err != nil {
+		return false, fmt.Errorf("git merge-base %s %s: %w", base, branch, err)
+	}
+
+	branchPatchID, err := r.diffPatchID("diff", mergeBase, branch)
+	if err != nil {
+		return false, fmt.Errorf("branch aggregate patch-id for %s against %s: %w", branch, base, err)
+	}
+	if branchPatchID == "" {
+		return false, nil
+	}
+
+	commits, err := r.Run("rev-list", mergeBase+".."+base)
+	if err != nil {
+		return false, fmt.Errorf("git rev-list %s..%s: %w", mergeBase, base, err)
+	}
+	for _, commit := range strings.Split(commits, "\n") {
+		commit = strings.TrimSpace(commit)
+		if commit == "" {
+			continue
+		}
+		commitPatchID, err := r.diffPatchID("show", "--format=", "--patch", commit)
+		if err != nil {
+			return false, fmt.Errorf("base commit patch-id for %s on %s: %w", commit, base, err)
+		}
+		if commitPatchID != "" && commitPatchID == branchPatchID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *Runner) diffPatchID(args ...string) (string, error) {
+	diff, err := r.Run(args...)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(diff) == "" {
+		return "", nil
+	}
+
+	out, err := r.runWithInput([]string{"patch-id", "--stable"}, diff, false)
+	if err != nil {
+		return "", err
+	}
+	fields := strings.Fields(out)
+	if len(fields) == 0 {
+		return "", nil
+	}
+	return fields[0], nil
 }
 
 // BranchRemote returns the remote configured for branch, or empty string if

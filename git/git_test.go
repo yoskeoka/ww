@@ -150,11 +150,18 @@ func TestPatchEquivalentBranches(t *testing.T) {
 	if _, err := runner.Run("checkout", "-b", "feat/squash"); err != nil {
 		t.Fatal(err)
 	}
-	writeGitFile(t, repo, "squash.txt", "squash\n")
+	writeGitFile(t, repo, "squash-1.txt", "squash one\n")
 	if _, err := runner.Run("add", "."); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runner.Run("commit", "-m", "feat: squash source"); err != nil {
+	if _, err := runner.Run("commit", "-m", "feat: squash source 1"); err != nil {
+		t.Fatal(err)
+	}
+	writeGitFile(t, repo, "squash-2.txt", "squash two\n")
+	if _, err := runner.Run("add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("commit", "-m", "feat: squash source 2"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runner.Run("checkout", "main"); err != nil {

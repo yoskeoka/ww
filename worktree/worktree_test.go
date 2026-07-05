@@ -291,6 +291,25 @@ func TestResolveStatus(t *testing.T) {
 	}
 }
 
+func TestBaseBranchNames(t *testing.T) {
+	got := baseBranchNames("origin/main")
+	want := []string{"origin/main", "main"}
+	if len(got) != len(want) {
+		t.Fatalf("baseBranchNames(origin/main) len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("baseBranchNames(origin/main)[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	got = baseBranchNames("main")
+	want = []string{"main"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("baseBranchNames(main) = %v, want %v", got, want)
+	}
+}
+
 func TestListRepoUnknown(t *testing.T) {
 	entries := []git.WorktreeEntry{
 		{Path: "/repo", Branch: "main", Head: "abc1234", Main: true},
@@ -887,9 +906,12 @@ func setupStatusRepo(t *testing.T) (string, *git.Runner) {
 	mustGit(t, runner, "push", "origin", ":feat/merged-stale")
 
 	mustGit(t, runner, "checkout", "-b", "feat/squash-merged")
-	writeStatusFile(t, repo, "squash-merged.txt", "squash merged\n")
+	writeStatusFile(t, repo, "squash-merged-1.txt", "squash merged one\n")
 	mustGit(t, runner, "add", ".")
-	mustGit(t, runner, "commit", "-m", "feat: squash merged source")
+	mustGit(t, runner, "commit", "-m", "feat: squash merged source 1")
+	writeStatusFile(t, repo, "squash-merged-2.txt", "squash merged two\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "feat: squash merged source 2")
 	mustGit(t, runner, "checkout", "main")
 	mustGit(t, runner, "-c", "merge.ff=true", "merge", "--squash", "feat/squash-merged")
 	mustGit(t, runner, "commit", "-m", "feat: squash merged")

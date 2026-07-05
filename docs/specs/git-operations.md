@@ -111,17 +111,22 @@ Returns the local branch names whose tips are reachable from `<base>`. `ww`
 uses this as the fast path for `merged` detection.
 
 When a local branch is not reported by `git branch --merged <base>`, `ww`
-falls back to checking patch equivalence:
+falls back to checking commit-level patch equivalence:
 
 ```
 git cherry <base> <branch>
 ```
 
 If every commit reported for `<branch>` is prefixed with `-`, `ww` treats the
-branch as `merged` because the branch-intended changes are already present in
-`<base>` through squash merge or rebase merge. If any commit is prefixed with
-`+`, the branch is not yet fully integrated and remains eligible for `active`
-or `stale` status depending on tracking state.
+branch as `merged` because the branch-intended commits are already present in
+`<base>` through rebase, cherry-pick, or single-commit equivalence.
+
+When commit-level patch equivalence is still false, `ww` checks whether the
+branch's aggregate diff from its merge-base matches a single commit already on
+`<base>`. This covers the typical GitHub-style squash merge that lands a
+multi-commit branch as one commit on the base branch. If neither fallback
+matches, the branch is not yet fully integrated and remains eligible for
+`active` or `stale` status depending on tracking state.
 
 **Check branch existence:**
 ```

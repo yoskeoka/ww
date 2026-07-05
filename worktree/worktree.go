@@ -373,7 +373,9 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		mergedSet[branch] = struct{}{}
 	}
 	// The base branch itself is always active even though git reports it as merged.
-	delete(mergedSet, baseInfo.Ref)
+	for _, branch := range baseBranchNames(baseInfo.Ref) {
+		delete(mergedSet, branch)
+	}
 
 	patchCandidates := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -551,6 +553,14 @@ func resolveStatus(entry git.WorktreeEntry, merged map[string]struct{}, branchRe
 		return StatusStale
 	}
 	return StatusActive
+}
+
+func baseBranchNames(baseRef string) []string {
+	names := []string{baseRef}
+	if strings.HasPrefix(baseRef, "origin/") {
+		names = append(names, strings.TrimPrefix(baseRef, "origin/"))
+	}
+	return names
 }
 
 func normalizeBranchName(name string) string {
