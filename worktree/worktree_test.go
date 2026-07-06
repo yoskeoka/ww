@@ -194,9 +194,24 @@ func TestResolveStatus(t *testing.T) {
 		mergedSet[branch] = struct{}{}
 	}
 	delete(mergedSet, "main")
+	allBranches := []string{
+		"feat/merged",
+		"feat/merged-stale",
+		"feat/squash-merged",
+		"feat/rebased",
+		"feat/stale",
+		"feat/local",
+		"feat/partial",
+	}
+	patchMerged, err := runner.PatchEquivalentBranches("main", allBranches)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, branch := range patchMerged {
+		mergedSet[branch] = struct{}{}
+	}
 
 	// Precompute branch→remote and remote branch sets.
-	allBranches := []string{"feat/merged", "feat/merged-stale", "feat/stale", "feat/local"}
 	branchRemote := make(map[string]string)
 	remoteBranches := make(map[string]map[string]struct{})
 	for _, branch := range allBranches {
@@ -240,6 +255,16 @@ func TestResolveStatus(t *testing.T) {
 			want:  StatusMerged,
 		},
 		{
+			name:  "squash merged branch",
+			entry: git.WorktreeEntry{Branch: "feat/squash-merged"},
+			want:  StatusMerged,
+		},
+		{
+			name:  "rebased branch",
+			entry: git.WorktreeEntry{Branch: "feat/rebased"},
+			want:  StatusMerged,
+		},
+		{
 			name:  "stale tracked branch",
 			entry: git.WorktreeEntry{Branch: "feat/stale"},
 			want:  StatusStale,
@@ -247,6 +272,11 @@ func TestResolveStatus(t *testing.T) {
 		{
 			name:  "local-only branch",
 			entry: git.WorktreeEntry{Branch: "feat/local"},
+			want:  StatusActive,
+		},
+		{
+			name:  "partially integrated local branch",
+			entry: git.WorktreeEntry{Branch: "feat/partial"},
 			want:  StatusActive,
 		},
 	}
@@ -258,6 +288,25 @@ func TestResolveStatus(t *testing.T) {
 				t.Fatalf("resolveStatus(%+v) = %q, want %q", tt.entry, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBaseBranchNames(t *testing.T) {
+	got := baseBranchNames("origin/main")
+	want := []string{"origin/main", "main"}
+	if len(got) != len(want) {
+		t.Fatalf("baseBranchNames(origin/main) len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("baseBranchNames(origin/main)[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	got = baseBranchNames("main")
+	want = []string{"main"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("baseBranchNames(main) = %v, want %v", got, want)
 	}
 }
 
@@ -690,10 +739,13 @@ func TestListRepoHeuristicStatusDetail(t *testing.T) {
 	repo, runner := setupStatusRepo(t)
 
 	worktrees := map[string]string{
-		"feat/merged":       filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-merged"),
-		"feat/merged-stale": filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-merged-stale"),
-		"feat/stale":        filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-stale"),
-		"feat/local":        filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-local"),
+		"feat/merged":        filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-merged"),
+		"feat/merged-stale":  filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-merged-stale"),
+		"feat/squash-merged": filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-squash-merged"),
+		"feat/rebased":       filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-rebased"),
+		"feat/stale":         filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-stale"),
+		"feat/local":         filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-local"),
+		"feat/partial":       filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@feat-partial"),
 	}
 	for branch, wtPath := range worktrees {
 		mustGit(t, runner, "worktree", "add", wtPath, branch)
@@ -730,11 +782,20 @@ func TestListRepoHeuristicStatusDetail(t *testing.T) {
 	if gotStatus["feat/merged-stale"] != StatusMerged {
 		t.Fatalf("feat/merged-stale status = %q, want %q", gotStatus["feat/merged-stale"], StatusMerged)
 	}
+	if gotStatus["feat/squash-merged"] != StatusMerged {
+		t.Fatalf("feat/squash-merged status = %q, want %q", gotStatus["feat/squash-merged"], StatusMerged)
+	}
+	if gotStatus["feat/rebased"] != StatusMerged {
+		t.Fatalf("feat/rebased status = %q, want %q", gotStatus["feat/rebased"], StatusMerged)
+	}
 	if gotStatus["feat/stale"] != StatusStale {
 		t.Fatalf("feat/stale status = %q, want %q", gotStatus["feat/stale"], StatusStale)
 	}
 	if gotStatus["feat/local"] != StatusActive {
 		t.Fatalf("feat/local status = %q, want %q", gotStatus["feat/local"], StatusActive)
+	}
+	if gotStatus["feat/partial"] != StatusActive {
+		t.Fatalf("feat/partial status = %q, want %q", gotStatus["feat/partial"], StatusActive)
 	}
 }
 
@@ -844,6 +905,29 @@ func setupStatusRepo(t *testing.T) (string, *git.Runner) {
 	mustGit(t, runner, "push", "origin", "main")
 	mustGit(t, runner, "push", "origin", ":feat/merged-stale")
 
+	mustGit(t, runner, "checkout", "-b", "feat/squash-merged")
+	writeStatusFile(t, repo, "squash-merged-1.txt", "squash merged one\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "feat: squash merged source 1")
+	writeStatusFile(t, repo, "squash-merged-2.txt", "squash merged two\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "feat: squash merged source 2")
+	mustGit(t, runner, "checkout", "main")
+	mustGit(t, runner, "-c", "merge.ff=true", "merge", "--squash", "feat/squash-merged")
+	mustGit(t, runner, "commit", "-m", "feat: squash merged")
+	mustGit(t, runner, "push", "origin", "main")
+
+	mustGit(t, runner, "checkout", "-b", "feat/rebased")
+	writeStatusFile(t, repo, "rebased.txt", "rebased\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "feat: rebased source")
+	mustGit(t, runner, "checkout", "main")
+	writeStatusFile(t, repo, "rebase-base.txt", "base shift\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "chore: rebase base shift")
+	mustGit(t, runner, "cherry-pick", "feat/rebased")
+	mustGit(t, runner, "push", "origin", "main")
+
 	mustGit(t, runner, "checkout", "-b", "feat/stale")
 	writeStatusFile(t, repo, "stale.txt", "stale\n")
 	mustGit(t, runner, "add", ".")
@@ -856,6 +940,19 @@ func setupStatusRepo(t *testing.T) (string, *git.Runner) {
 	writeStatusFile(t, repo, "local.txt", "local\n")
 	mustGit(t, runner, "add", ".")
 	mustGit(t, runner, "commit", "-m", "feat: local")
+	mustGit(t, runner, "checkout", "main")
+
+	mustGit(t, runner, "checkout", "-b", "feat/partial")
+	writeStatusFile(t, repo, "partial.txt", "partial integrated\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "feat: partial integrated")
+	mustGit(t, runner, "checkout", "main")
+	mustGit(t, runner, "cherry-pick", "feat/partial")
+	mustGit(t, runner, "push", "origin", "main")
+	mustGit(t, runner, "checkout", "feat/partial")
+	writeStatusFile(t, repo, "partial-extra.txt", "partial extra\n")
+	mustGit(t, runner, "add", ".")
+	mustGit(t, runner, "commit", "-m", "feat: partial extra")
 	mustGit(t, runner, "checkout", "main")
 
 	return repo, runner

@@ -2318,6 +2318,266 @@ func TestHeuristicBaseResolutionListAndClean(t *testing.T) {
 	}
 }
 
+func TestListCleanableIncludesPatchEquivalentMergedBranches(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := testutil.SetupRepo(t, globalEnv, testutil.RepoOpts{Name: "patch-cleanable"})
+	writeConfig(t, repo, "default_base = \"main\"\n")
+
+	remoteRoot, err := globalEnv.MkdirTemp("ww-patch-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := path.Join(remoteRoot, "origin.git")
+	if _, err := globalEnv.Git(remoteRoot, "init", "--bare", remote); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "remote", "add", "origin", remote); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "-u", "origin", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	mergedWT := worktreePath(repo, "feat/merged")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/merged"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "merged.txt"), "merged\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: merged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "merge", "--ff-only", "feat/merged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", mergedWT, "feat/merged"); err != nil {
+		t.Fatal(err)
+	}
+
+	squashWT := worktreePath(repo, "feat/squash")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/squash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "squash-1.txt"), "squash one\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: squash 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "squash-2.txt"), "squash two\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: squash 2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "-c", "merge.ff=true", "merge", "--squash", "feat/squash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: squash merged"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", squashWT, "feat/squash"); err != nil {
+		t.Fatal(err)
+	}
+
+	rebasedWT := worktreePath(repo, "feat/rebased")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/rebased"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "rebased.txt"), "rebased\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: rebased"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "rebase-base.txt"), "base shift\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "chore: rebase base shift"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "cherry-pick", "feat/rebased"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", rebasedWT, "feat/rebased"); err != nil {
+		t.Fatal(err)
+	}
+
+	staleWT := worktreePath(repo, "feat/stale")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "stale.txt"), "stale\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "-u", "origin", "feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "origin", ":feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", staleWT, "feat/stale"); err != nil {
+		t.Fatal(err)
+	}
+
+	activeWT := worktreePath(repo, "feat/active")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/active"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "active.txt"), "active\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: active"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", activeWT, "feat/active"); err != nil {
+		t.Fatal(err)
+	}
+
+	partialWT := worktreePath(repo, "feat/partial")
+	if _, err := globalEnv.Git(repo, "checkout", "-b", "feat/partial"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "partial.txt"), "integrated\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: partial integrated"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "cherry-pick", "feat/partial"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "feat/partial"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(path.Join(repo, "partial-extra.txt"), "pending\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "commit", "-m", "feat: partial pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "worktree", "add", partialWT, "feat/partial"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, repo, "list", "--json")
+	if err != nil {
+		t.Fatalf("ww list --json should succeed: %v\n%s", err, out)
+	}
+	seenStatuses := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		var obj map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Fatalf("invalid JSON line: %s", line)
+		}
+		branch, _ := obj["branch"].(string)
+		status, _ := obj["status"].(string)
+		seenStatuses[branch] = status
+	}
+	for branch, want := range map[string]string{
+		"main":         "active",
+		"feat/merged":  "merged",
+		"feat/squash":  "merged",
+		"feat/rebased": "merged",
+		"feat/stale":   "stale",
+		"feat/active":  "active",
+		"feat/partial": "active",
+	} {
+		if seenStatuses[branch] != want {
+			t.Fatalf("%s status = %q, want %q", branch, seenStatuses[branch], want)
+		}
+	}
+
+	out, err = runWW(t, repo, "list", "--cleanable", "--json")
+	if err != nil {
+		t.Fatalf("ww list --cleanable --json should succeed: %v\n%s", err, out)
+	}
+	for _, branch := range []string{"feat/merged", "feat/squash", "feat/rebased", "feat/stale"} {
+		if !strings.Contains(out, fmt.Sprintf(`"branch":"%s"`, branch)) {
+			t.Fatalf("cleanable output should include %s: %s", branch, out)
+		}
+	}
+	for _, branch := range []string{"feat/active", "feat/partial"} {
+		if strings.Contains(out, fmt.Sprintf(`"branch":"%s"`, branch)) {
+			t.Fatalf("cleanable output should exclude %s: %s", branch, out)
+		}
+	}
+
+	out, err = runWW(t, repo, "clean")
+	if err != nil {
+		t.Fatalf("ww clean should succeed: %v\n%s", err, out)
+	}
+	for _, wtPath := range []string{mergedWT, squashWT, rebasedWT, staleWT} {
+		if globalEnv.PathExists(wtPath) {
+			t.Fatalf("ww clean should remove %s", wtPath)
+		}
+	}
+	for _, wtPath := range []string{activeWT, partialWT} {
+		if !globalEnv.PathExists(wtPath) {
+			t.Fatalf("ww clean should preserve %s", wtPath)
+		}
+	}
+}
+
 func TestListCleanableExcludesUnknown(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")
