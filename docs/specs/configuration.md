@@ -37,14 +37,18 @@ Global config may also declare ordered project-specific overrides:
 ```toml
 worktree_dir = ".worktrees"
 
+[materialization_profiles.dev_setup]
+copy_files = [".env"]
+symlink_files = ["node_modules"]
+post_create_hook = "make setup"
+
 [[projects]]
 root = "/home/user/src/workspace/ww"
-default_base = "origin/main"
+materialization_profile = "dev_setup"
 
 [[projects]]
 root_prefix = "/home/user/src/workspace"
-copy_files = [".env"]
-post_create_hook = "make setup"
+default_base = "origin/main"
 ```
 
 ## Fields
@@ -56,7 +60,34 @@ post_create_hook = "make setup"
 | `copy_files` | string[] | `[]` | Files/directories to deep-copy from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `post_create_hook` | string | `""` | Shell command to run in the new worktree directory after creation. Empty = no hook. |
+| `materialization_profile` | string | `""` | Select one named global materialization profile and expand it into `copy_files`, `symlink_files`, and `post_create_hook` for this config layer. Empty = no profile selection. |
 | `sandbox` | bool | `false` | Constrain workspace/config discovery and single-repo worktree defaults to the current sandbox boundary. The `--sandbox` CLI flag takes precedence and enables sandbox mode even when this field is absent or false. |
+
+## Materialization Profiles
+
+Global config may define reusable materialization profiles under `[materialization_profiles.<name>]`.
+
+Each profile may contain only these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `copy_files` | string[] | Replacement value for `copy_files` when the profile is selected |
+| `symlink_files` | string[] | Replacement value for `symlink_files` when the profile is selected |
+| `post_create_hook` | string | Replacement value for `post_create_hook` when the profile is selected |
+
+Profile definitions are global-config-only. Repo-local `.ww.toml` files may reference a named profile with `materialization_profile`, but they cannot define new profiles.
+
+Profile selection is allowed in:
+
+- the base global config
+- ordered `[[projects]]` blocks in the global config
+- repo-local `.ww.toml`
+
+The selected profile expands into ordinary materialization fields before command execution. Expansion is configuration sugar only; runtime worktree behavior still consumes the resolved `copy_files`, `symlink_files`, and `post_create_hook` values exactly as if they had been written directly in the selected config layer.
+
+Within a single config layer, `materialization_profile` must not be combined with direct `copy_files`, `symlink_files`, or `post_create_hook` values. That combination is rejected during config loading to avoid hidden composition.
+
+Profile lookup is single-select only. `ww` does not stack or merge multiple profiles in one load.
 
 ## Global Project Blocks
 
@@ -76,6 +107,12 @@ Invalid project blocks are rejected during config loading. Examples of invalid b
 - both `root` and `root_prefix` are set
 - neither `root` nor `root_prefix` is set
 - the selected targeting value is empty or not an absolute path
+
+Invalid materialization profile configuration is also rejected during config loading. Examples include:
+
+- `materialization_profile` names a profile that does not exist in the global config
+- the same config layer sets both `materialization_profile` and one of `copy_files`, `symlink_files`, or `post_create_hook`
+- a named profile defines none of `copy_files`, `symlink_files`, or `post_create_hook`
 
 ## Trust Model
 
@@ -103,16 +140,19 @@ Both repo-local `.ww.toml` and user-owned global `config.toml` are treated as **
 When both config layers are present:
 
 1. Load the global config first.
-2. If the global config contains `[[projects]]` blocks, evaluate them against the repository main worktree root in declared order and select the first matching block.
-3. Merge the selected project block, if any, onto the base global config.
-4. Load the repo-local config second.
-5. Resolve values per configuration field, not per file:
+2. Expand any selected `materialization_profile` in the base global config into ordinary materialization fields for that layer.
+3. If the global config contains `[[projects]]` blocks, evaluate them against the repository main worktree root in declared order and select the first matching block.
+4. Expand any selected `materialization_profile` in the chosen project block into ordinary materialization fields for that layer.
+5. Merge the selected project block, if any, onto the base global config.
+6. Load the repo-local config second.
+7. If the repo-local config selects `materialization_profile`, expand it using the global profile table before applying repo-local precedence.
+8. Resolve values per configuration field, not per file:
    - if a field is defined only in global config, use the global value
    - if a field is defined only in the selected project block, use the project value
    - if a field is defined only in repo-local config, use the repo-local value
    - if a field is defined in both the base global config and the selected project block, the project value replaces the base global value completely
    - if a field is defined in repo-local config and any global layer, the repo-local value replaces the global value completely
-6. Replacement uses the same rule for every field type:
+9. Replacement uses the same rule for every field type:
    - scalar fields replace scalar fields
    - array fields replace the entire array without append or merge behavior
    - hook/script fields replace the entire hook value without composition
