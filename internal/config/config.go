@@ -173,7 +173,7 @@ func decodeFields(fields configFields) *configLayer {
 	}
 	if fields.MaterializationProfile != nil {
 		layer.materializationProfile = strings.TrimSpace(*fields.MaterializationProfile)
-		layer.hasMaterialization = true
+		layer.hasMaterialization = layer.materializationProfile != ""
 	}
 	if fields.Sandbox != nil {
 		layer.cfg.Sandbox = *fields.Sandbox
@@ -249,9 +249,6 @@ func expandMaterializationProfile(layer *configLayer, profiles map[string]*confi
 	}
 	if layer.copyFiles || layer.symlinkFiles || layer.postHook {
 		return fmt.Errorf("invalid config: materialization_profile cannot be combined with copy_files, symlink_files, or post_create_hook in the same config layer")
-	}
-	if layer.materializationProfile == "" {
-		return fmt.Errorf("invalid config: materialization_profile must not be empty")
 	}
 	profile, ok := profiles[layer.materializationProfile]
 	if !ok {

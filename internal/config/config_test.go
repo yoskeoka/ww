@@ -633,6 +633,41 @@ materialization_profile = "repo_setup"
 	}
 }
 
+func TestLoadEmptyMaterializationProfileActsAsUnset(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+[materialization_profiles.dev_setup]
+copy_files = [".env"]
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoDir := t.TempDir()
+	localConfig := `
+materialization_profile = "   "
+copy_files = ["local.env"]
+`
+	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.CopyFiles, []string{"local.env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+}
+
 func TestLoadGlobalProjectRejectsInvalidTargetDefinitions(t *testing.T) {
 	tests := []struct {
 		name    string
