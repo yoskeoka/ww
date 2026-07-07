@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/yoskeoka/ww/git"
+	"github.com/yoskeoka/ww/internal/config"
 	"github.com/yoskeoka/ww/workspace"
 	"github.com/yoskeoka/ww/worktree"
 )
@@ -44,15 +45,19 @@ func managerForRepo(base *worktree.Manager, repoName string) (*worktree.Manager,
 		if repo.Name != repoName {
 			continue
 		}
+		cfg, err := loadRepoConfigForSelection(base, repo.Path)
+		if err != nil {
+			return nil, err
+		}
 		return &worktree.Manager{
 			Git: &git.Runner{Dir: repo.Path},
 			Config: worktree.Config{
-				WorktreeDir:    base.Config.WorktreeDir,
-				DefaultBase:    base.Config.DefaultBase,
-				CopyFiles:      base.Config.CopyFiles,
-				SymlinkFiles:   base.Config.SymlinkFiles,
-				PostCreateHook: base.Config.PostCreateHook,
-				Sandbox:        base.Config.Sandbox,
+				WorktreeDir:    cfg.WorktreeDir,
+				DefaultBase:    cfg.DefaultBase,
+				CopyFiles:      cfg.CopyFiles,
+				SymlinkFiles:   cfg.SymlinkFiles,
+				PostCreateHook: cfg.PostCreateHook,
+				Sandbox:        cfg.Sandbox,
 			},
 			RepoDir:   repo.Path,
 			Workspace: base.Workspace,
@@ -60,6 +65,35 @@ func managerForRepo(base *worktree.Manager, repoName string) (*worktree.Manager,
 	}
 
 	return nil, fmt.Errorf("repo %q not found in workspace", repoName)
+}
+
+func loadRepoConfigForSelection(base *worktree.Manager, repoPath string) (*config.Config, error) {
+	sandboxMode := base.Config.Sandbox
+	if !sandboxMode {
+		preCfg, err := config.LoadWithOptions(repoPath, config.LoadOptions{
+			ProjectRoot: repoPath,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("loading config: %w", err)
+		}
+		sandboxMode = preCfg.Sandbox
+	}
+
+	cfg, err := config.LoadWithOptions(repoPath, config.LoadOptions{
+		Sandbox:      sandboxMode,
+		Boundary:     sandboxBoundary(base.Workspace, repoPath),
+		FallbackDirs: sandboxFallbackDirs(sandboxMode, repoPath, base.Workspace.Root),
+		ProjectRoot:  repoPath,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	// Preserve explicit CLI sandbox selection from the already-resolved base manager.
+	if base.Config.Sandbox {
+		cfg.Sandbox = true
+	}
+	return cfg, nil
 }
 
 // parseFlags parses a subcommand flagset, returning errHelp for --help

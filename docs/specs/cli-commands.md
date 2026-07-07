@@ -10,6 +10,7 @@
 - Workspace-sensitive commands use the nearest containing workspace root selected by the workspace discovery algorithm.
 - When sandbox mode is enabled with `--sandbox` or `sandbox = true`, workspace-sensitive commands only use the current-directory workspace root or the current repository. Parent/grandparent containing workspace detection and parent-based sibling scans are skipped.
 - Commands load configuration from the user-owned global config path first, then overlay any repo-local `.ww.toml` discovered for the active repository. Repo-local values replace same-key global values completely, including arrays and hook strings.
+- If a config layer selects `materialization_profile`, `ww` expands that named global profile into resolved `copy_files`, `symlink_files`, and `post_create_hook` values before command execution. Invalid profile references or invalid same-layer profile/direct-field combinations fail config loading before the command runs.
 - Detected workspace repositories are limited to real child repo roots. Immediate child symlinks, linked worktree checkouts, and helper directories with stray `.git` markers are excluded from workspace membership.
 - `ww` may be started from a non-git workspace root. `ww list` and `ww clean` work there without extra flags. `ww create` and `ww remove` require `--repo <name>` from that location; without it they exit with: `repo selection is not supported from a non-git workspace root`.
 - If the current directory is neither a git repository nor a detected workspace root, `ww` exits with: `not a git repository`.
@@ -86,6 +87,8 @@ The built-in help for `ww create` must preserve the create-vs-cd role split:
 6. After worktree creation, copy files listed in `copy_files` config.
 7. Create symlinks for files listed in `symlink_files` config.
 8. Run `post_create_hook` if configured. In text mode, print `Running post_create_hook: <command>` immediately before streaming the hook's own output.
+
+For `--repo <name>` in workspace mode, the config used for steps 6-8 must be resolved against the selected repository's main worktree root, not against the current workspace-root directory.
 
 If no base can be resolved for a new branch, the command must return an actionable error. The error must explain that no explicit `default_base` is configured, `origin/HEAD` could not be used, and heuristic fallback could not find a usable `origin/main` or `origin/master`. It must include both supported remediation paths: set `default_base` in `.ww.toml`, or run `git remote set-head origin --auto` when the remote exposes a default branch.
 

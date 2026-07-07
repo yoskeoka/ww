@@ -52,11 +52,13 @@ func LoadWithOptions(startDir string, opts LoadOptions) (*Config, error) {
 	}
 
 	var cfg Config
+	var profiles map[string]*configLayer
 	if globalPath != "" {
-		globalLayer, projectLayer, err := decodeGlobalConfig(globalPath, opts.ProjectRoot)
+		globalLayer, projectLayer, decodedProfiles, err := decodeGlobalConfig(globalPath, opts.ProjectRoot)
 		if err != nil {
 			return nil, err
 		}
+		profiles = decodedProfiles
 		mergeConfig(&cfg, globalLayer)
 		mergeConfig(&cfg, projectLayer)
 	}
@@ -66,6 +68,9 @@ func LoadWithOptions(startDir string, opts LoadOptions) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := expandMaterializationProfile(localLayer, profiles); err != nil {
+			return nil, err
+		}
 		mergeConfig(&cfg, localLayer)
 	}
 
@@ -73,33 +78,43 @@ func LoadWithOptions(startDir string, opts LoadOptions) (*Config, error) {
 }
 
 type configLayer struct {
-	cfg          Config
-	worktreeDir  bool
-	defaultBase  bool
-	copyFiles    bool
-	symlinkFiles bool
-	postHook     bool
-	sandbox      bool
+	cfg                    Config
+	worktreeDir            bool
+	defaultBase            bool
+	copyFiles              bool
+	symlinkFiles           bool
+	postHook               bool
+	sandbox                bool
+	materializationProfile string
+	hasMaterialization     bool
 }
 
 type configFields struct {
-	WorktreeDir    *string   `toml:"worktree_dir"`
-	DefaultBase    *string   `toml:"default_base"`
-	CopyFiles      *[]string `toml:"copy_files"`
-	SymlinkFiles   *[]string `toml:"symlink_files"`
-	PostCreateHook *string   `toml:"post_create_hook"`
-	Sandbox        *bool     `toml:"sandbox"`
+	WorktreeDir            *string   `toml:"worktree_dir"`
+	DefaultBase            *string   `toml:"default_base"`
+	CopyFiles              *[]string `toml:"copy_files"`
+	SymlinkFiles           *[]string `toml:"symlink_files"`
+	PostCreateHook         *string   `toml:"post_create_hook"`
+	MaterializationProfile *string   `toml:"materialization_profile"`
+	Sandbox                *bool     `toml:"sandbox"`
 }
 
 type globalConfigDocument struct {
 	configFields
-	Projects []projectDocument `toml:"projects"`
+	Projects                []projectDocument                `toml:"projects"`
+	MaterializationProfiles map[string]materializationFields `toml:"materialization_profiles"`
 }
 
 type projectDocument struct {
 	configFields
 	Root       *string `toml:"root"`
 	RootPrefix *string `toml:"root_prefix"`
+}
+
+type materializationFields struct {
+	CopyFiles      *[]string `toml:"copy_files"`
+	SymlinkFiles   *[]string `toml:"symlink_files"`
+	PostCreateHook *string   `toml:"post_create_hook"`
 }
 
 func decodeConfigLayer(path string) (*configLayer, error) {
@@ -110,18 +125,28 @@ func decodeConfigLayer(path string) (*configLayer, error) {
 	return decodeFields(doc), nil
 }
 
-func decodeGlobalConfig(path, projectRoot string) (*configLayer, *configLayer, error) {
+func decodeGlobalConfig(path, projectRoot string) (*configLayer, *configLayer, map[string]*configLayer, error) {
 	var doc globalConfigDocument
 	if _, err := toml.DecodeFile(path, &doc); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	baseLayer := decodeFields(doc.configFields)
+	profiles, err := decodeMaterializationProfiles(doc.MaterializationProfiles)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := expandMaterializationProfile(baseLayer, profiles); err != nil {
+		return nil, nil, nil, err
+	}
 	projectLayer, err := selectProjectLayer(doc.Projects, projectRoot)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return baseLayer, projectLayer, nil
+	if err := expandMaterializationProfile(projectLayer, profiles); err != nil {
+		return nil, nil, nil, err
+	}
+	return baseLayer, projectLayer, profiles, nil
 }
 
 func decodeFields(fields configFields) *configLayer {
@@ -145,6 +170,10 @@ func decodeFields(fields configFields) *configLayer {
 	if fields.PostCreateHook != nil {
 		layer.cfg.PostCreateHook = *fields.PostCreateHook
 		layer.postHook = true
+	}
+	if fields.MaterializationProfile != nil {
+		layer.materializationProfile = strings.TrimSpace(*fields.MaterializationProfile)
+		layer.hasMaterialization = layer.materializationProfile != ""
 	}
 	if fields.Sandbox != nil {
 		layer.cfg.Sandbox = *fields.Sandbox
@@ -184,6 +213,60 @@ func cloneStrings(src []string) []string {
 	dst := make([]string, len(src))
 	copy(dst, src)
 	return dst
+}
+
+func decodeMaterializationProfiles(profiles map[string]materializationFields) (map[string]*configLayer, error) {
+	if len(profiles) == 0 {
+		return nil, nil
+	}
+
+	decoded := make(map[string]*configLayer, len(profiles))
+	for name, profile := range profiles {
+		layer := &configLayer{}
+		if profile.CopyFiles != nil {
+			layer.cfg.CopyFiles = cloneStrings(*profile.CopyFiles)
+			layer.copyFiles = true
+		}
+		if profile.SymlinkFiles != nil {
+			layer.cfg.SymlinkFiles = cloneStrings(*profile.SymlinkFiles)
+			layer.symlinkFiles = true
+		}
+		if profile.PostCreateHook != nil {
+			layer.cfg.PostCreateHook = *profile.PostCreateHook
+			layer.postHook = true
+		}
+		if !layer.copyFiles && !layer.symlinkFiles && !layer.postHook {
+			return nil, fmt.Errorf("invalid materialization_profiles.%s: define at least one of copy_files, symlink_files, or post_create_hook", name)
+		}
+		decoded[name] = layer
+	}
+	return decoded, nil
+}
+
+func expandMaterializationProfile(layer *configLayer, profiles map[string]*configLayer) error {
+	if layer == nil || !layer.hasMaterialization {
+		return nil
+	}
+	if layer.copyFiles || layer.symlinkFiles || layer.postHook {
+		return fmt.Errorf("invalid config: materialization_profile cannot be combined with copy_files, symlink_files, or post_create_hook in the same config layer")
+	}
+	profile, ok := profiles[layer.materializationProfile]
+	if !ok {
+		return fmt.Errorf("unknown materialization_profile %q", layer.materializationProfile)
+	}
+	if profile.copyFiles {
+		layer.cfg.CopyFiles = cloneStrings(profile.cfg.CopyFiles)
+		layer.copyFiles = true
+	}
+	if profile.symlinkFiles {
+		layer.cfg.SymlinkFiles = cloneStrings(profile.cfg.SymlinkFiles)
+		layer.symlinkFiles = true
+	}
+	if profile.postHook {
+		layer.cfg.PostCreateHook = profile.cfg.PostCreateHook
+		layer.postHook = true
+	}
+	return nil
 }
 
 func selectProjectLayer(projects []projectDocument, projectRoot string) (*configLayer, error) {

@@ -408,6 +408,42 @@ default_base = "origin/main"
 	}
 }
 
+func TestLoadMaterializationProfileExpandsInBaseGlobalConfig(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+materialization_profile = "dev_setup"
+
+[materialization_profiles.dev_setup]
+copy_files = [".env"]
+symlink_files = ["node_modules"]
+post_create_hook = "make setup"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.CopyFiles, []string{".env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+	if got, want := cfg.SymlinkFiles, []string{"node_modules"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("SymlinkFiles = %v, want %v", got, want)
+	}
+	if cfg.PostCreateHook != "make setup" {
+		t.Fatalf("PostCreateHook = %q, want make setup", cfg.PostCreateHook)
+	}
+}
+
 func TestLoadGlobalProjectFirstMatchWins(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)
@@ -549,6 +585,89 @@ copy_files = ["local.env"]
 	}
 }
 
+func TestLoadRepoLocalMaterializationProfileOverridesGlobalMaterializationFields(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+materialization_profile = "global_setup"
+
+[materialization_profiles.global_setup]
+copy_files = [".env"]
+post_create_hook = "global-hook"
+
+[materialization_profiles.repo_setup]
+copy_files = ["repo.env"]
+symlink_files = ["node_modules"]
+post_create_hook = "repo-hook"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoDir := t.TempDir()
+	localConfig := `
+materialization_profile = "repo_setup"
+`
+	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.CopyFiles, []string{"repo.env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+	if got, want := cfg.SymlinkFiles, []string{"node_modules"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("SymlinkFiles = %v, want %v", got, want)
+	}
+	if cfg.PostCreateHook != "repo-hook" {
+		t.Fatalf("PostCreateHook = %q, want repo-hook", cfg.PostCreateHook)
+	}
+}
+
+func TestLoadEmptyMaterializationProfileActsAsUnset(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalConfig := `
+[materialization_profiles.dev_setup]
+copy_files = [".env"]
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoDir := t.TempDir()
+	localConfig := `
+materialization_profile = "   "
+copy_files = ["local.env"]
+`
+	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(repoDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cfg.CopyFiles, []string{"local.env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+}
+
 func TestLoadGlobalProjectRejectsInvalidTargetDefinitions(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -599,6 +718,75 @@ root = "workspace/repo-a"
 			_, err := LoadWithOptions(t.TempDir(), LoadOptions{ProjectRoot: "/workspace/repo-a"})
 			if err == nil {
 				t.Fatal("LoadWithOptions error = nil, want invalid project error")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsInvalidMaterializationProfileConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		global string
+		local  string
+		want   string
+	}{
+		{
+			name: "unknown profile reference",
+			global: `
+[materialization_profiles.dev_setup]
+copy_files = [".env"]
+`,
+			local: `materialization_profile = "missing"`,
+			want:  `unknown materialization_profile "missing"`,
+		},
+		{
+			name: "mixed profile and direct fields",
+			global: `
+[materialization_profiles.dev_setup]
+copy_files = [".env"]
+`,
+			local: `
+materialization_profile = "dev_setup"
+copy_files = ["local.env"]
+`,
+			want: "materialization_profile cannot be combined with copy_files, symlink_files, or post_create_hook",
+		},
+		{
+			name: "empty profile definition",
+			global: `
+[materialization_profiles.empty]
+`,
+			want: "define at least one of copy_files, symlink_files, or post_create_hook",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			xdgDir := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", xdgDir)
+			t.Setenv("HOME", t.TempDir())
+
+			globalDir := filepath.Join(xdgDir, "ww")
+			if err := os.MkdirAll(globalDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(tt.global), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			repoDir := t.TempDir()
+			if tt.local != "" {
+				if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(tt.local), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			_, err := Load(repoDir)
+			if err == nil {
+				t.Fatal("Load error = nil, want invalid materialization profile error")
 			}
 			if !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("error = %q, want substring %q", err.Error(), tt.want)
