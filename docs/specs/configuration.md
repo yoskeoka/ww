@@ -135,6 +135,13 @@ Both repo-local `.ww.toml` and user-owned global `config.toml` are treated as **
 5. If not found via upward search, check caller-provided fallback directories (for example, the main worktree's root directory or the detected workspace root).
 6. If no file is found, the repo-local layer is absent.
 
+For explicit target-repository flows such as `ww create --repo <name>` from a
+workspace root or another repo worktree, the repo-local search restarts from
+the selected repository's main worktree root. In that mode, `ww` uses the
+selected repository root for upward search, fallback directories, sandbox
+boundary checks, and global `[[projects]]` matching instead of reusing the
+caller's already-loaded repo-local config context.
+
 ### Layering and Precedence
 
 When both config layers are present:

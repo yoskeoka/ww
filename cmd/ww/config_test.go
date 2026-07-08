@@ -175,3 +175,109 @@ post_create_hook = "make setup"
 		}
 	})
 }
+
+func TestManagerForSelectedRepoReloadsConfigFromSecondaryWorktree(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	workspaceRoot := t.TempDir()
+	repoA := filepath.Join(workspaceRoot, "repo-a")
+	repoB := filepath.Join(workspaceRoot, "repo-b")
+	gitInitForSandboxTest(t, repoA)
+	gitInitForSandboxTest(t, repoB)
+	gitRun(t, repoA, "config", "user.email", "test@example.com")
+	gitRun(t, repoA, "config", "user.name", "Test User")
+	gitRun(t, repoA, "commit", "--allow-empty", "-m", "initial")
+
+	worktreeDir := filepath.Join(t.TempDir(), "repo-a-worktree")
+	gitRun(t, repoA, "worktree", "add", "-b", "feat/secondary", worktreeDir, "main")
+
+	globalConfig := `
+[[projects]]
+root = "` + repoA + `"
+worktree_dir = "from-repo-a"
+
+[[projects]]
+root = "` + repoB + `"
+default_base = "origin/release"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, config.GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoB, ".ww.toml"), []byte(`copy_files = ["repo-b.env"]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	withCwd(t, worktreeDir, func() {
+		mgr, err := managerForSelectedRepo("repo-b", true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mgr.RepoDir != repoB {
+			t.Fatalf("RepoDir = %q, want %q", mgr.RepoDir, repoB)
+		}
+		if mgr.Config.WorktreeDir != "" {
+			t.Fatalf("WorktreeDir = %q, want empty", mgr.Config.WorktreeDir)
+		}
+		if mgr.Config.DefaultBase != "origin/release" {
+			t.Fatalf("DefaultBase = %q, want origin/release", mgr.Config.DefaultBase)
+		}
+		if got, want := mgr.Config.CopyFiles, []string{"repo-b.env"}; len(got) != len(want) || got[0] != want[0] {
+			t.Fatalf("CopyFiles = %v, want %v", got, want)
+		}
+	})
+}
+
+func TestManagerForSelectedRepoKeepsSelectedRepoLocalConfigInSandboxMode(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	workspaceRoot := t.TempDir()
+	repoA := filepath.Join(workspaceRoot, "repo-a")
+	repoB := filepath.Join(workspaceRoot, "repo-b")
+	gitInitForSandboxTest(t, repoA)
+	gitInitForSandboxTest(t, repoB)
+
+	globalConfig := `
+[[projects]]
+root = "` + repoB + `"
+default_base = "origin/release"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, config.GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".ww.toml"), []byte("sandbox = true\ncopy_files = [\"workspace.env\"]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoB, ".ww.toml"), []byte("copy_files = [\"repo-b.env\"]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	withCwd(t, workspaceRoot, func() {
+		mgr, err := managerForSelectedRepo("repo-b", true, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !mgr.Config.Sandbox {
+			t.Fatal("Sandbox = false, want true")
+		}
+		if got, want := mgr.Config.CopyFiles, []string{"repo-b.env"}; len(got) != len(want) || got[0] != want[0] {
+			t.Fatalf("CopyFiles = %v, want %v", got, want)
+		}
+		if mgr.Config.DefaultBase != "origin/release" {
+			t.Fatalf("DefaultBase = %q, want origin/release", mgr.Config.DefaultBase)
+		}
+	})
+}

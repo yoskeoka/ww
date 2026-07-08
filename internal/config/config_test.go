@@ -332,6 +332,111 @@ post_create_hook = "local-hook"
 	}
 }
 
+func TestLoadSelectedRepoLocalConfigWinsOverWorkspaceFallback(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	workspaceRoot := t.TempDir()
+	repoA := filepath.Join(workspaceRoot, "repo-a")
+	repoB := filepath.Join(workspaceRoot, "repo-b")
+	if err := os.MkdirAll(repoA, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(repoB, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	globalConfig := `
+[[projects]]
+root = "` + repoA + `"
+worktree_dir = "from-repo-a"
+
+[[projects]]
+root = "` + repoB + `"
+default_base = "origin/release"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, FileName), []byte(`copy_files = ["workspace.env"]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoB, FileName), []byte(`copy_files = ["repo-b.env"]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(repoB, LoadOptions{
+		FallbackDirs: []string{repoB, workspaceRoot},
+		ProjectRoot:  repoB,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.WorktreeDir != "" {
+		t.Fatalf("WorktreeDir = %q, want empty", cfg.WorktreeDir)
+	}
+	if cfg.DefaultBase != "origin/release" {
+		t.Fatalf("DefaultBase = %q, want origin/release", cfg.DefaultBase)
+	}
+	if got, want := cfg.CopyFiles, []string{"repo-b.env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+}
+
+func TestLoadSelectedRepoLocalConfigWinsInSandboxWorkspacePath(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+	t.Setenv("HOME", t.TempDir())
+
+	globalDir := filepath.Join(xdgDir, "ww")
+	if err := os.MkdirAll(globalDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	workspaceRoot := t.TempDir()
+	repoB := filepath.Join(workspaceRoot, "repo-b")
+	if err := os.MkdirAll(repoB, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	globalConfig := `
+[[projects]]
+root = "` + repoB + `"
+default_base = "origin/release"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, FileName), []byte(`copy_files = ["workspace.env"]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoB, FileName), []byte(`copy_files = ["repo-b.env"]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWithOptions(repoB, LoadOptions{
+		Sandbox:      true,
+		Boundary:     workspaceRoot,
+		FallbackDirs: []string{repoB},
+		ProjectRoot:  repoB,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DefaultBase != "origin/release" {
+		t.Fatalf("DefaultBase = %q, want origin/release", cfg.DefaultBase)
+	}
+	if got, want := cfg.CopyFiles, []string{"repo-b.env"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("CopyFiles = %v, want %v", got, want)
+	}
+}
+
 func TestLoadRepoLocalReplacesArraysHooksAndFalseValues(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)
