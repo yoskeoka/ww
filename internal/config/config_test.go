@@ -332,7 +332,7 @@ post_create_hook = "local-hook"
 	}
 }
 
-func TestLoadSelectedRepoLocalConfigWinsOverWorkspaceFallback(t *testing.T) {
+func TestLoadSelectedRepoLocalConfigUsesProjectRootAndNearestRepoLocalConfig(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 	t.Setenv("HOME", t.TempDir())
@@ -389,7 +389,7 @@ default_base = "origin/release"
 	}
 }
 
-func TestLoadSelectedRepoLocalConfigWinsInSandboxWorkspacePath(t *testing.T) {
+func TestLoadSelectedRepoLocalConfigUsesProjectRootAndNearestSandboxRepoLocalConfig(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 	t.Setenv("HOME", t.TempDir())
