@@ -39,7 +39,10 @@ worktree_dir = ".worktrees"
 default_base = "origin/main"
 copy_files = [".env"]
 symlink_files = ["node_modules"]
+pre_create_hook = "before-create"
 post_create_hook = "npm install"
+pre_remove_hook = "before-remove"
+post_remove_hook = "after-remove"
 sandbox = true
 `
 	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(content), 0644); err != nil {
@@ -59,8 +62,17 @@ sandbox = true
 	if len(cfg.CopyFiles) != 1 || cfg.CopyFiles[0] != ".env" {
 		t.Errorf("CopyFiles = %v, want [.env]", cfg.CopyFiles)
 	}
+	if cfg.PreCreateHook != "before-create" {
+		t.Errorf("PreCreateHook = %q, want 'before-create'", cfg.PreCreateHook)
+	}
 	if cfg.PostCreateHook != "npm install" {
 		t.Errorf("PostCreateHook = %q, want 'npm install'", cfg.PostCreateHook)
+	}
+	if cfg.PreRemoveHook != "before-remove" {
+		t.Errorf("PreRemoveHook = %q, want 'before-remove'", cfg.PreRemoveHook)
+	}
+	if cfg.PostRemoveHook != "after-remove" {
+		t.Errorf("PostRemoveHook = %q, want 'after-remove'", cfg.PostRemoveHook)
 	}
 	if !cfg.Sandbox {
 		t.Errorf("Sandbox = false, want true")
@@ -291,7 +303,10 @@ worktree_dir = "from-global"
 default_base = "origin/main"
 copy_files = [".env", ".tool-versions"]
 symlink_files = ["node_modules"]
+pre_create_hook = "global-pre-create"
 post_create_hook = "global-hook"
+pre_remove_hook = "global-pre-remove"
+post_remove_hook = "global-post-remove"
 sandbox = true
 `
 	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
@@ -302,7 +317,10 @@ sandbox = true
 	localConfig := `
 default_base = "origin/release"
 copy_files = ["local.env"]
+pre_create_hook = "local-pre-create"
 post_create_hook = "local-hook"
+pre_remove_hook = "local-pre-remove"
+post_remove_hook = "local-post-remove"
 `
 	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
 		t.Fatal(err)
@@ -324,8 +342,17 @@ post_create_hook = "local-hook"
 	if got, want := cfg.SymlinkFiles, []string{"node_modules"}; len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("SymlinkFiles = %v, want %v", got, want)
 	}
+	if cfg.PreCreateHook != "local-pre-create" {
+		t.Fatalf("PreCreateHook = %q, want local-pre-create", cfg.PreCreateHook)
+	}
 	if cfg.PostCreateHook != "local-hook" {
 		t.Fatalf("PostCreateHook = %q, want local-hook", cfg.PostCreateHook)
+	}
+	if cfg.PreRemoveHook != "local-pre-remove" {
+		t.Fatalf("PreRemoveHook = %q, want local-pre-remove", cfg.PreRemoveHook)
+	}
+	if cfg.PostRemoveHook != "local-post-remove" {
+		t.Fatalf("PostRemoveHook = %q, want local-post-remove", cfg.PostRemoveHook)
 	}
 	if !cfg.Sandbox {
 		t.Fatal("Sandbox = false, want true from global config")
@@ -448,7 +475,10 @@ func TestLoadRepoLocalReplacesArraysHooksAndFalseValues(t *testing.T) {
 	}
 	globalConfig := `
 copy_files = [".env", ".tool-versions"]
+pre_create_hook = "global-pre-create"
 post_create_hook = "global-hook"
+pre_remove_hook = "global-pre-remove"
+post_remove_hook = "global-post-remove"
 sandbox = true
 `
 	if err := os.WriteFile(filepath.Join(globalDir, GlobalFileName), []byte(globalConfig), 0644); err != nil {
@@ -458,7 +488,10 @@ sandbox = true
 	repoDir := t.TempDir()
 	localConfig := `
 copy_files = []
+pre_create_hook = ""
 post_create_hook = ""
+pre_remove_hook = ""
+post_remove_hook = ""
 sandbox = false
 `
 	if err := os.WriteFile(filepath.Join(repoDir, FileName), []byte(localConfig), 0644); err != nil {
@@ -474,6 +507,15 @@ sandbox = false
 	}
 	if cfg.PostCreateHook != "" {
 		t.Fatalf("PostCreateHook = %q, want empty replacement", cfg.PostCreateHook)
+	}
+	if cfg.PreCreateHook != "" {
+		t.Fatalf("PreCreateHook = %q, want empty replacement", cfg.PreCreateHook)
+	}
+	if cfg.PreRemoveHook != "" {
+		t.Fatalf("PreRemoveHook = %q, want empty replacement", cfg.PreRemoveHook)
+	}
+	if cfg.PostRemoveHook != "" {
+		t.Fatalf("PostRemoveHook = %q, want empty replacement", cfg.PostRemoveHook)
 	}
 	if cfg.Sandbox {
 		t.Fatal("Sandbox = true, want false replacement")

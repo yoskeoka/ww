@@ -319,9 +319,9 @@ func formatCreatePreview(preview CreatePreview) string {
 	lines = append(lines, formatActionList("Copy", preview.CopyFiles))
 	lines = append(lines, formatActionList("Symlink", preview.SymlinkFiles))
 	if preview.Hook != "" {
-		lines = append(lines, fmt.Sprintf("Hook: %s", preview.Hook))
+		lines = append(lines, fmt.Sprintf("Hooks: %s", preview.Hook))
 	} else {
-		lines = append(lines, "Hook: none")
+		lines = append(lines, "Hooks: none")
 	}
 	return strings.Join(lines, "\n")
 }

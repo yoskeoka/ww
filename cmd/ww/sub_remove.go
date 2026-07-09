@@ -42,6 +42,8 @@ func removeCmd() command {
 				Force:      *force,
 				KeepBranch: *keepBranch,
 				DryRun:     glOpts.dryRun,
+				Output:     glOpts.output,
+				TextMode:   !glOpts.json,
 			})
 			if err != nil {
 				return err

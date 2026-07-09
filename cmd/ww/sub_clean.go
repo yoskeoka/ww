@@ -86,8 +86,10 @@ func executeCleanWorktrees(mgr *worktree.Manager, infos []worktree.WorktreeInfo,
 		}
 
 		result, dryLog, err := repoMgr.Remove(info.Branch, worktree.RemoveOpts{
-			Force:  force,
-			DryRun: glOpts.dryRun,
+			Force:    force,
+			DryRun:   glOpts.dryRun,
+			Output:   glOpts.output,
+			TextMode: !glOpts.json,
 		})
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))

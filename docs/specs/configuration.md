@@ -26,7 +26,10 @@ symlink_files = [
     "node_modules",
 ]
 
+pre_create_hook = "npm run pre-create"
 post_create_hook = "npm install"
+pre_remove_hook = "npm run pre-remove"
+post_remove_hook = "npm run post-remove"
 sandbox = false
 ```
 
@@ -59,7 +62,10 @@ default_base = "origin/main"
 | `default_base` | string | `""` | Base ref for new branches. Empty = auto-detect via `origin/HEAD`. When set, this is the authoritative base for both branch creation and status classification. When empty and `origin/HEAD` cannot be detected, `ww list` degrades to `unknown` status instead of failing. |
 | `copy_files` | string[] | `[]` | Files/directories to deep-copy from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
 | `symlink_files` | string[] | `[]` | Files/directories to symlink from main worktree to new worktrees. Missing sources are silently skipped; other errors emit a warning to stderr. |
+| `pre_create_hook` | string | `""` | Shell command to run before a worktree is created. Empty = no hook. |
 | `post_create_hook` | string | `""` | Shell command to run in the new worktree directory after creation. Empty = no hook. |
+| `pre_remove_hook` | string | `""` | Shell command to run before a worktree is removed. Empty = no hook. |
+| `post_remove_hook` | string | `""` | Shell command to run after a worktree has been removed and branch cleanup has been attempted. Empty = no hook. |
 | `materialization_profile` | string | `""` | Select one named global materialization profile and expand it into `copy_files`, `symlink_files`, and `post_create_hook` for this config layer. Empty = no profile selection. |
 | `sandbox` | bool | `false` | Constrain workspace/config discovery and single-repo worktree defaults to the current sandbox boundary. The `--sandbox` CLI flag takes precedence and enables sandbox mode even when this field is absent or false. |
 
@@ -116,7 +122,7 @@ Invalid materialization profile configuration is also rejected during config loa
 
 ## Trust Model
 
-Both repo-local `.ww.toml` and user-owned global `config.toml` are treated as **trusted input**, the same trust model as `.gitconfig`. The `post_create_hook` value is passed directly to `sh -c` without sanitization because it is authored by a trusted config owner. Users should review repository-local config before using an untrusted repository, just as they would review `.gitconfig` aliases.
+Both repo-local `.ww.toml` and user-owned global `config.toml` are treated as **trusted input**, the same trust model as `.gitconfig`. Lifecycle hook values (`pre_create_hook`, `post_create_hook`, `pre_remove_hook`, `post_remove_hook`) are passed directly to `sh -c` without sanitization because they are authored by trusted config owners. Users should review repository-local config before using an untrusted repository, just as they would review `.gitconfig` aliases.
 
 ## Config Search
 

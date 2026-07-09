@@ -89,7 +89,10 @@ func interactiveCmd() command {
 						if err != nil {
 							return err
 						}
-						result, _, err := repoMgr.Remove(item.Branch, worktree.RemoveOpts{})
+						result, _, err := repoMgr.Remove(item.Branch, worktree.RemoveOpts{
+							Output:   prompt,
+							TextMode: true,
+						})
 						if err != nil {
 							return err
 						}
@@ -238,7 +241,7 @@ func buildInteractiveCreatePreview(baseMgr *worktree.Manager, repoName, branch s
 		BranchExists: repoMgr.Git.BranchExists(branch),
 		CopyFiles:    append([]string(nil), repoMgr.Config.CopyFiles...),
 		SymlinkFiles: append([]string(nil), repoMgr.Config.SymlinkFiles...),
-		Hook:         repoMgr.Config.PostCreateHook,
+		Hook:         lifecycleHookSummary(repoMgr.Config),
 	}
 	if !preview.BranchExists {
 		preview.Base = info.Base

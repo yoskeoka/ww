@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -56,7 +57,10 @@ func managerForRepo(base *worktree.Manager, repoName string) (*worktree.Manager,
 				DefaultBase:    cfg.DefaultBase,
 				CopyFiles:      cfg.CopyFiles,
 				SymlinkFiles:   cfg.SymlinkFiles,
+				PreCreateHook:  cfg.PreCreateHook,
 				PostCreateHook: cfg.PostCreateHook,
+				PreRemoveHook:  cfg.PreRemoveHook,
+				PostRemoveHook: cfg.PostRemoveHook,
 				Sandbox:        cfg.Sandbox,
 			},
 			RepoDir:   repo.Path,
@@ -94,6 +98,26 @@ func loadRepoConfigForSelection(base *worktree.Manager, repoPath string) (*confi
 		cfg.Sandbox = true
 	}
 	return cfg, nil
+}
+
+func lifecycleHookSummary(cfg worktree.Config) string {
+	entries := []struct {
+		label   string
+		command string
+	}{
+		{label: "pre-create", command: cfg.PreCreateHook},
+		{label: "post-create", command: cfg.PostCreateHook},
+		{label: "pre-remove", command: cfg.PreRemoveHook},
+		{label: "post-remove", command: cfg.PostRemoveHook},
+	}
+	summary := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.command == "" {
+			continue
+		}
+		summary = append(summary, fmt.Sprintf("%s: %s", entry.label, entry.command))
+	}
+	return strings.Join(summary, "; ")
 }
 
 // parseFlags parses a subcommand flagset, returning errHelp for --help

@@ -1,7 +1,10 @@
 package worktree
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -624,6 +627,86 @@ func TestCreateNewBranchDoesNotTrackBaseRemoteBranch(t *testing.T) {
 	}
 }
 
+func TestCreateAndRemoveRunLifecycleHooksWithContext(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &git.Runner{Dir: repo}
+	logPath := filepath.Join(t.TempDir(), "lifecycle-hooks.log")
+
+	mgr := &Manager{
+		Git: runner,
+		Config: Config{
+			DefaultBase:    "main",
+			PreCreateHook:  hookAppendCommand(logPath, "pre-create", 7),
+			PostCreateHook: hookAppendCommand(logPath, "post-create", 0),
+			PreRemoveHook:  hookAppendCommand(logPath, "pre-remove", 7),
+			PostRemoveHook: hookAppendCommand(logPath, "post-remove", 0),
+		},
+		RepoDir: repo,
+	}
+
+	createStderr := captureStderr(t, func() error {
+		_, _, err := mgr.Create("feat/lifecycle-hooks", CreateOpts{})
+		return err
+	})
+	if !strings.Contains(createStderr, "warning: pre-create hook failed:") {
+		t.Fatalf("Create stderr missing pre-create warning:\n%s", createStderr)
+	}
+
+	info, err := mgr.WorktreePath("feat/lifecycle-hooks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(info); err != nil {
+		t.Fatalf("created worktree missing at %s: %v", info, err)
+	}
+
+	removeStderr := captureStderr(t, func() error {
+		_, _, err := mgr.Remove("feat/lifecycle-hooks", RemoveOpts{})
+		return err
+	})
+	if !strings.Contains(removeStderr, "warning: pre-remove hook failed:") {
+		t.Fatalf("Remove stderr missing pre-remove warning:\n%s", removeStderr)
+	}
+
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(logData)), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("lifecycle log = %q, want 4 lines", string(logData))
+	}
+
+	repoName := filepath.Base(repo)
+	wantPath := map[string]string{
+		"pre-create":  repo,
+		"post-create": info,
+		"pre-remove":  info,
+		"post-remove": repo,
+	}
+	for i, wantPhase := range []string{"pre-create", "post-create", "pre-remove", "post-remove"} {
+		fields := strings.Split(lines[i], "|")
+		if len(fields) != 5 {
+			t.Fatalf("log line %d = %q, want 5 fields", i, lines[i])
+		}
+		if fields[0] != wantPhase {
+			t.Fatalf("log line %d phase = %q, want %q", i, fields[0], wantPhase)
+		}
+		if fields[1] != wantPath[wantPhase] {
+			t.Fatalf("log line %d pwd = %q, want %q", i, fields[1], wantPath[wantPhase])
+		}
+		if fields[2] != "feat/lifecycle-hooks" {
+			t.Fatalf("log line %d branch = %q, want feat/lifecycle-hooks", i, fields[2])
+		}
+		if fields[3] != repoName {
+			t.Fatalf("log line %d repo = %q, want %q", i, fields[3], repoName)
+		}
+		if fields[4] != "2" {
+			t.Fatalf("log line %d index = %q, want 2", i, fields[4])
+		}
+	}
+}
+
 func TestCreateSandboxRelativeEscapeRejected(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(repo, 0755); err != nil {
@@ -1025,4 +1108,39 @@ func setAdminMtime(t *testing.T, adminRoot, wantWorktreePath string, modTime tim
 		return
 	}
 	t.Fatalf("could not find admin dir for %s", wantWorktreePath)
+}
+
+func captureStderr(t *testing.T, fn func() error) string {
+	t.Helper()
+
+	oldStderr := os.Stderr
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = writer
+
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&buf, reader)
+		close(done)
+	}()
+
+	runErr := fn()
+	_ = writer.Close()
+	os.Stderr = oldStderr
+	<-done
+
+	if runErr != nil {
+		t.Fatalf("captured operation failed: %v\nstderr:\n%s", runErr, buf.String())
+	}
+	return buf.String()
+}
+
+func hookAppendCommand(logPath, phase string, exitCode int) string {
+	command := fmt.Sprintf(`printf '%%s|%%s|%%s|%%s|%%s\n' %s "$PWD" "$WW_BRANCH" "$WW_REPO_NAME" "$WW_WORKTREE_INDEX" >> %s; exit %d`,
+		shellQuotePOSIX(phase), shellQuotePOSIX(logPath), exitCode,
+	)
+	return command
 }
