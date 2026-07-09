@@ -174,7 +174,7 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	branchExists := m.Git.BranchExists(branch)
 	guessRemote := opts.GuessRemote && !branchExists
-	worktreeIndex := m.nextCreateWorktreeIndex()
+	worktreeIndex := 0
 
 	var base string
 	if !branchExists && !guessRemote {
@@ -183,6 +183,10 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 			return nil, nil, unresolvedCreateBaseError(err)
 		}
 		base = baseInfo.Ref
+	}
+
+	if !opts.DryRun && (m.Config.PreCreateHook != "" || m.Config.PostCreateHook != "") {
+		worktreeIndex = m.nextCreateWorktreeIndex()
 	}
 
 	if opts.DryRun {
