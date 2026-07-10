@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/yoskeoka/ww/git"
@@ -31,7 +32,10 @@ type Config struct {
 	DefaultBase    string
 	CopyFiles      []string
 	SymlinkFiles   []string
+	PreCreateHook  string
 	PostCreateHook string
+	PreRemoveHook  string
+	PostRemoveHook string
 	Sandbox        bool
 }
 
@@ -56,6 +60,8 @@ type RemoveOpts struct {
 	Force      bool
 	KeepBranch bool
 	DryRun     bool
+	Output     io.Writer // destination for text-mode output (nil defaults to os.Stdout)
+	TextMode   bool      // when true, print human-readable progress (e.g. hook announcement)
 }
 
 // WorktreeInfo holds information about a created/listed worktree.
@@ -168,6 +174,7 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	branchExists := m.Git.BranchExists(branch)
 	guessRemote := opts.GuessRemote && !branchExists
+	worktreeIndex := 0
 
 	var base string
 	if !branchExists && !guessRemote {
@@ -178,9 +185,15 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		base = baseInfo.Ref
 	}
 
-	var dryRunLog []string
+	if !opts.DryRun && (m.Config.PreCreateHook != "" || m.Config.PostCreateHook != "") {
+		worktreeIndex = m.nextCreateWorktreeIndex()
+	}
 
 	if opts.DryRun {
+		var dryRunLog []string
+		if m.Config.PreCreateHook != "" {
+			dryRunLog = append(dryRunLog, fmt.Sprintf("Would run pre_create_hook: %s", m.Config.PreCreateHook))
+		}
 		if branchExists {
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would create worktree at %s (existing branch: %s)", wtPath, branch))
 		} else if guessRemote {
@@ -195,11 +208,16 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would symlink: %s", f))
 		}
 		if m.Config.PostCreateHook != "" {
-			dryRunLog = append(dryRunLog, fmt.Sprintf("Would run hook: %s", m.Config.PostCreateHook))
+			dryRunLog = append(dryRunLog, fmt.Sprintf("Would run post_create_hook: %s", m.Config.PostCreateHook))
 		}
 		info := &WorktreeInfo{Path: wtPath, Branch: branch, Created: true, Base: base}
 		return info, dryRunLog, nil
 	}
+
+	m.runLifecycleHook(lifecycleHookPreCreate, wtPath, branch, worktreeIndex, hookExecOpts{
+		Output:   opts.Output,
+		TextMode: opts.TextMode,
+	})
 
 	if branchExists {
 		if err := m.Git.WorktreeAddExisting(wtPath, branch); err != nil {
@@ -223,7 +241,10 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	m.copyFiles(wtPath)
 	m.symlinkFiles(wtPath)
-	m.runPostCreateHook(wtPath, branch, opts)
+	m.runLifecycleHook(lifecycleHookPostCreate, wtPath, branch, worktreeIndex, hookExecOpts{
+		Output:   opts.Output,
+		TextMode: opts.TextMode,
+	})
 
 	info := &WorktreeInfo{Path: wtPath, Branch: branch, Created: true, Base: base}
 	return info, nil, nil
@@ -595,9 +616,11 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 	}
 
 	var found *git.WorktreeEntry
+	worktreeIndex := 0
 	for i := range entries {
 		if entries[i].Branch == branch {
 			found = &entries[i]
+			worktreeIndex = i + 1
 			break
 		}
 	}
@@ -613,14 +636,25 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 
 	if opts.DryRun {
 		var dryRunLog []string
+		if m.Config.PreRemoveHook != "" {
+			dryRunLog = append(dryRunLog, fmt.Sprintf("Would run pre_remove_hook: %s", m.Config.PreRemoveHook))
+		}
 		dryRunLog = append(dryRunLog, fmt.Sprintf("Would remove worktree at %s", found.Path))
 		if !opts.KeepBranch {
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would delete branch %s", branch))
+		}
+		if m.Config.PostRemoveHook != "" {
+			dryRunLog = append(dryRunLog, fmt.Sprintf("Would run post_remove_hook: %s", m.Config.PostRemoveHook))
 		}
 		result.Removed = true
 		result.BranchDeleted = !opts.KeepBranch
 		return result, dryRunLog, nil
 	}
+
+	m.runLifecycleHook(lifecycleHookPreRemove, found.Path, branch, worktreeIndex, hookExecOpts{
+		Output:   opts.Output,
+		TextMode: opts.TextMode,
+	})
 
 	if err := m.Git.WorktreeRemove(found.Path, opts.Force); err != nil {
 		if git.IsWorktreeRemoveSubmoduleError(err) {
@@ -637,6 +671,11 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 			result.BranchDeleted = true
 		}
 	}
+
+	m.runLifecycleHook(lifecycleHookPostRemove, found.Path, branch, worktreeIndex, hookExecOpts{
+		Output:   opts.Output,
+		TextMode: opts.TextMode,
+	})
 
 	return result, nil, nil
 }
@@ -687,28 +726,83 @@ func (m *Manager) symlinkFiles(wtPath string) {
 	}
 }
 
-func (m *Manager) runPostCreateHook(wtPath, branch string, opts CreateOpts) {
-	if m.Config.PostCreateHook == "" {
+type lifecycleHookPhase string
+
+const (
+	lifecycleHookPreCreate  lifecycleHookPhase = "pre_create_hook"
+	lifecycleHookPostCreate lifecycleHookPhase = "post_create_hook"
+	lifecycleHookPreRemove  lifecycleHookPhase = "pre_remove_hook"
+	lifecycleHookPostRemove lifecycleHookPhase = "post_remove_hook"
+)
+
+type hookExecOpts struct {
+	Output   io.Writer
+	TextMode bool
+}
+
+func (m *Manager) nextCreateWorktreeIndex() int {
+	entries, err := m.Git.WorktreeList()
+	if err != nil {
+		return 0
+	}
+	return len(entries) + 1
+}
+
+func (m *Manager) runLifecycleHook(phase lifecycleHookPhase, wtPath, branch string, worktreeIndex int, opts hookExecOpts) {
+	command := m.lifecycleHookCommand(phase)
+	if command == "" {
 		return
 	}
+
 	var hookOut io.Writer = os.Stderr
 	if opts.TextMode {
 		hookOut = opts.Output
 		if hookOut == nil {
 			hookOut = os.Stdout
 		}
-		fmt.Fprintf(hookOut, "Running post_create_hook: %s\n", m.Config.PostCreateHook)
+		fmt.Fprintf(hookOut, "Running %s: %s\n", phase, command)
 	}
-	cmd := exec.Command("sh", "-c", m.Config.PostCreateHook)
-	cmd.Dir = wtPath
+
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Dir = m.lifecycleHookDir(phase, wtPath)
 	cmd.Env = append(os.Environ(),
 		"WW_BRANCH="+branch,
+		"WW_REPO_NAME="+filepath.Base(m.RepoDir),
 		"WW_WORKTREE_PATH="+wtPath,
+		"WW_WORKTREE_INDEX="+strconv.Itoa(worktreeIndex),
 	)
 	cmd.Stdout = hookOut
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: post-create hook failed: %v\n", err)
+		phaseName := strings.ReplaceAll(string(phase), "_hook", "")
+		phaseName = strings.ReplaceAll(phaseName, "_", "-")
+		fmt.Fprintf(os.Stderr, "warning: %s hook failed: %v\n", phaseName, err)
+	}
+}
+
+func (m *Manager) lifecycleHookCommand(phase lifecycleHookPhase) string {
+	switch phase {
+	case lifecycleHookPreCreate:
+		return m.Config.PreCreateHook
+	case lifecycleHookPostCreate:
+		return m.Config.PostCreateHook
+	case lifecycleHookPreRemove:
+		return m.Config.PreRemoveHook
+	case lifecycleHookPostRemove:
+		return m.Config.PostRemoveHook
+	default:
+		return ""
+	}
+}
+
+func (m *Manager) lifecycleHookDir(phase lifecycleHookPhase, wtPath string) string {
+	switch phase {
+	case lifecycleHookPreCreate, lifecycleHookPostRemove:
+		return m.RepoDir
+	case lifecycleHookPostCreate, lifecycleHookPreRemove:
+		return wtPath
+	default:
+		return wtPath
 	}
 }
 

@@ -66,8 +66,8 @@ Post-Phase 2 (originally tracked as `--no-upward-search`) is complete. The plann
 #### Future
 
 - **FR-16** (`planned`): Alternative isolation via `git clone --reference --dissociate` instead of `git worktree add`. Useful when full independence from the main repo is needed (for example, long-running AI agent tasks). To avoid clone-based workspaces being misdetected as real workspace member repos, `ww`-managed clones should carry an explicit managed marker such as `.ww-metadata`.
-- **FR-17** (`partial`): Lifecycle hooks beyond post-create — `post_create_hook` is shipped, but `pre-create`, `pre-remove`, and `post-remove` are not yet implemented.
-- **FR-18** (`partial`): Inject environment variables into hooks — `WW_BRANCH` and `WW_WORKTREE_PATH` are shipped today; `WW_REPO_NAME` and `WW_WORKTREE_INDEX` are not yet implemented.
+- **FR-17** (`implemented`): Lifecycle hooks beyond post-create — `pre_create_hook`, `post_create_hook`, `pre_remove_hook`, and `post_remove_hook` are shipped with stable lifecycle ordering.
+- **FR-18** (`implemented`): Inject environment variables into hooks — `WW_BRANCH`, `WW_WORKTREE_PATH`, `WW_REPO_NAME`, and `WW_WORKTREE_INDEX` are shipped today.
 - **FR-19** (`planned`): Multi-repo batch worktree operations — `ww create feat/x --repos ai-arena,ww` to create worktrees across multiple repos simultaneously.
 - **FR-20** (`implemented`): `ww cd` — shell navigation between worktrees and workspace root.
 - **FR-21** (`planned`): Child repo `.ww.toml` override — child repos can override workspace-level `copy_files`, `post_create_hook`, and related settings.

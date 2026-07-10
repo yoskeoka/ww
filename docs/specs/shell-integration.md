@@ -51,7 +51,7 @@ Phase 3 shell integration adds explicit path-printing interfaces for shell navig
 - This is the preferred built-in create-and-enter pattern; `ww cd` is for
   reopening an existing worktree later.
 - In quiet mode, human-oriented progress is not printed to `stdout`.
-- If `post_create_hook` runs in quiet mode, its output is routed to `stderr` so `stdout` remains path-only.
+- If create-time hooks run in quiet mode, their output is routed to `stderr` so `stdout` remains path-only.
 - With `--dry-run`, quiet mode prints the path that would be created.
 - With `--json`, JSON output takes precedence over quiet text mode.
 - With `--sandbox` in single-repo mode and no explicit `worktree_dir`, quiet mode prints the repo-local `.worktrees` path, e.g. `/path/to/repo/.worktrees/repo@feat-my-branch`.

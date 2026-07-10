@@ -42,6 +42,7 @@ func TestNewManagerLoadsGlobalConfigAndLocalOverridesPerKey(t *testing.T) {
 worktree_dir = ".global-worktrees"
 default_base = "origin/main"
 copy_files = [".env"]
+pre_create_hook = "global-pre-create"
 sandbox = true
 `
 	if err := os.WriteFile(filepath.Join(globalDir, config.GlobalFileName), []byte(globalConfig), 0644); err != nil {
@@ -71,6 +72,9 @@ copy_files = ["local.env"]
 		}
 		if got, want := mgr.Config.CopyFiles, []string{"local.env"}; len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("CopyFiles = %v, want %v", got, want)
+		}
+		if mgr.Config.PreCreateHook != "global-pre-create" {
+			t.Fatalf("PreCreateHook = %q, want global-pre-create", mgr.Config.PreCreateHook)
 		}
 		if !mgr.Config.Sandbox {
 			t.Fatal("Sandbox = false, want true from global config")
@@ -147,6 +151,7 @@ worktree_dir = "from-repo-a"
 [[projects]]
 root = "` + repoB + `"
 materialization_profile = "repo_b_setup"
+pre_remove_hook = "repo-b-pre-remove"
 
 [materialization_profiles.repo_b_setup]
 copy_files = [".env"]
@@ -172,6 +177,9 @@ post_create_hook = "make setup"
 		}
 		if mgr.Config.PostCreateHook != "make setup" {
 			t.Fatalf("PostCreateHook = %q, want make setup", mgr.Config.PostCreateHook)
+		}
+		if mgr.Config.PreRemoveHook != "repo-b-pre-remove" {
+			t.Fatalf("PreRemoveHook = %q, want repo-b-pre-remove", mgr.Config.PreRemoveHook)
 		}
 	})
 }
@@ -210,7 +218,8 @@ default_base = "origin/release"
 	if err := os.WriteFile(filepath.Join(globalDir, config.GlobalFileName), []byte(globalConfig), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repoB, ".ww.toml"), []byte(`copy_files = ["repo-b.env"]`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoB, ".ww.toml"), []byte(`copy_files = ["repo-b.env"]
+post_remove_hook = "repo-b-post-remove"`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -230,6 +239,9 @@ default_base = "origin/release"
 		}
 		if got, want := mgr.Config.CopyFiles, []string{"repo-b.env"}; len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("CopyFiles = %v, want %v", got, want)
+		}
+		if mgr.Config.PostRemoveHook != "repo-b-post-remove" {
+			t.Fatalf("PostRemoveHook = %q, want repo-b-post-remove", mgr.Config.PostRemoveHook)
 		}
 	})
 }

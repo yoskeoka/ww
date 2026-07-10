@@ -86,7 +86,13 @@ The built-in help for `ww create` must preserve the create-vs-cd role split:
    - example: if `ww create feat/x` creates `feat/x` from `origin/main`, the new local `feat/x` branch must end up with no upstream instead of tracking `origin/main`
 6. After worktree creation, copy files listed in `copy_files` config.
 7. Create symlinks for files listed in `symlink_files` config.
-8. Run `post_create_hook` if configured. In text mode, print `Running post_create_hook: <command>` immediately before streaming the hook's own output.
+8. Run lifecycle hooks in this order:
+   - run `pre_create_hook` before any worktree mutation
+   - run `post_create_hook` after materialization
+   - `pre_create_hook` runs from the repository root; `post_create_hook` runs from the new worktree directory
+   - hook failures print a warning to `stderr` and do not stop creation
+   - hook environments include `WW_BRANCH`, `WW_REPO_NAME`, `WW_WORKTREE_PATH`, and `WW_WORKTREE_INDEX`
+   - in text mode, print `Running pre_create_hook: <command>` and `Running post_create_hook: <command>` immediately before streaming each hook's own output
 
 For `--repo <name>` in workspace mode, the config used for steps 6-8 must be resolved against the selected repository's main worktree root, not against the current workspace-root directory.
 
@@ -126,7 +132,7 @@ Created worktree at /path/to/repo@branch (branch: feat/my-feature)
 Would create worktree at /path/to/repo@branch (branch: feat/my-feature, base: origin/main)
 Would copy: .env, .vscode/settings.json
 Would symlink: node_modules
-Would run hook: npm install
+Would run post_create_hook: npm install
 ```
 
 **Dry-run output (quiet text):**
@@ -243,7 +249,7 @@ non-interactive `ww` command equivalent.
    - in single-repo mode, skip repo selection
    - show a pre-execution preview containing repo context when relevant,
      branch, target path, branch/base behavior, copy actions, symlink actions,
-     and configured hook information
+     and configured lifecycle hook information
    - require explicit confirmation before execution
    - on success, print the same human-readable success line as default
      `ww create` to `stderr`
@@ -396,10 +402,14 @@ Remove the worktree for the given branch and optionally delete the branch.
    - If `--repo` names no detected repository, return an error: `repo "<name>" not found in workspace`.
 2. Look up the branch in `git worktree list` output. If no worktree entry exists for the branch, return an error: `no worktree found for branch "<branch>"`.
 3. If the matching entry is the main worktree (`Main == true`), reject with error: `cannot remove the main worktree`.
-4. Remove the git worktree using the path from the worktree list entry.
-5. Attempt to delete the branch unless `--keep-branch` is set. By default this uses a safe delete (`git branch -d`). When `--force` is set, it uses a force delete (`git branch -D`) to match the forced worktree removal behavior.
-6. If safe branch deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
-7. If `git worktree remove` fails because the target worktree contains submodules, exit non-zero with an actionable diagnostic. The diagnostic must include the target worktree path, state that Git cannot remove worktrees containing submodules, warn that manual directory removal permanently deletes uncommitted work, and show manual remediation commands equivalent to `rm -rf <worktree-path>` followed by `git worktree prune`.
+4. Run `pre_remove_hook` before removing the worktree. After the worktree is removed and branch cleanup has been attempted, run `post_remove_hook`.
+   - `pre_remove_hook` runs from the worktree directory; `post_remove_hook` runs from the repository root
+   - hook failures print a warning to `stderr` and do not stop removal
+   - hook environments include `WW_BRANCH`, `WW_REPO_NAME`, `WW_WORKTREE_PATH`, and `WW_WORKTREE_INDEX`
+5. Remove the git worktree using the path from the worktree list entry.
+6. Attempt to delete the branch unless `--keep-branch` is set. By default this uses a safe delete (`git branch -d`). When `--force` is set, it uses a force delete (`git branch -D`) to match the forced worktree removal behavior.
+7. If safe branch deletion fails (for example, because the branch is not fully merged or is the current branch of the main worktree), print a warning and continue; in this case, the branch is not deleted.
+8. If `git worktree remove` fails because the target worktree contains submodules, exit non-zero with an actionable diagnostic. The diagnostic must include the target worktree path, state that Git cannot remove worktrees containing submodules, warn that manual directory removal permanently deletes uncommitted work, and show manual remediation commands equivalent to `rm -rf <worktree-path>` followed by `git worktree prune`.
 
 **Flags:**
 | Flag | Type | Default | Description |

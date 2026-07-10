@@ -18,7 +18,10 @@ type Config struct {
 	DefaultBase    string   `toml:"default_base"`
 	CopyFiles      []string `toml:"copy_files"`
 	SymlinkFiles   []string `toml:"symlink_files"`
+	PreCreateHook  string   `toml:"pre_create_hook"`
 	PostCreateHook string   `toml:"post_create_hook"`
+	PreRemoveHook  string   `toml:"pre_remove_hook"`
+	PostRemoveHook string   `toml:"post_remove_hook"`
 	Sandbox        bool     `toml:"sandbox"`
 }
 
@@ -83,7 +86,10 @@ type configLayer struct {
 	defaultBase            bool
 	copyFiles              bool
 	symlinkFiles           bool
+	preCreateHook          bool
 	postHook               bool
+	preRemoveHook          bool
+	postRemoveHook         bool
 	sandbox                bool
 	materializationProfile string
 	hasMaterialization     bool
@@ -94,7 +100,10 @@ type configFields struct {
 	DefaultBase            *string   `toml:"default_base"`
 	CopyFiles              *[]string `toml:"copy_files"`
 	SymlinkFiles           *[]string `toml:"symlink_files"`
+	PreCreateHook          *string   `toml:"pre_create_hook"`
 	PostCreateHook         *string   `toml:"post_create_hook"`
+	PreRemoveHook          *string   `toml:"pre_remove_hook"`
+	PostRemoveHook         *string   `toml:"post_remove_hook"`
 	MaterializationProfile *string   `toml:"materialization_profile"`
 	Sandbox                *bool     `toml:"sandbox"`
 }
@@ -167,9 +176,21 @@ func decodeFields(fields configFields) *configLayer {
 		layer.cfg.SymlinkFiles = cloneStrings(*fields.SymlinkFiles)
 		layer.symlinkFiles = true
 	}
+	if fields.PreCreateHook != nil {
+		layer.cfg.PreCreateHook = *fields.PreCreateHook
+		layer.preCreateHook = true
+	}
 	if fields.PostCreateHook != nil {
 		layer.cfg.PostCreateHook = *fields.PostCreateHook
 		layer.postHook = true
+	}
+	if fields.PreRemoveHook != nil {
+		layer.cfg.PreRemoveHook = *fields.PreRemoveHook
+		layer.preRemoveHook = true
+	}
+	if fields.PostRemoveHook != nil {
+		layer.cfg.PostRemoveHook = *fields.PostRemoveHook
+		layer.postRemoveHook = true
 	}
 	if fields.MaterializationProfile != nil {
 		layer.materializationProfile = strings.TrimSpace(*fields.MaterializationProfile)
@@ -198,8 +219,17 @@ func mergeConfig(dst *Config, layer *configLayer) {
 	if layer.symlinkFiles {
 		dst.SymlinkFiles = cloneStrings(layer.cfg.SymlinkFiles)
 	}
+	if layer.preCreateHook {
+		dst.PreCreateHook = layer.cfg.PreCreateHook
+	}
 	if layer.postHook {
 		dst.PostCreateHook = layer.cfg.PostCreateHook
+	}
+	if layer.preRemoveHook {
+		dst.PreRemoveHook = layer.cfg.PreRemoveHook
+	}
+	if layer.postRemoveHook {
+		dst.PostRemoveHook = layer.cfg.PostRemoveHook
 	}
 	if layer.sandbox {
 		dst.Sandbox = layer.cfg.Sandbox
