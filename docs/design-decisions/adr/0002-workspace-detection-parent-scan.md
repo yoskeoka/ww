@@ -20,7 +20,7 @@ Parent-scan strategy with a 7-step algorithm:
 3. Check parent directory for `.git`
 4. Check parent's children for `.git` siblings
 5. (Reserved for future config override)
-6. Fall back to CWD as workspace root if step 0 found children
+6. Fall back to CWD as workspace root if the initial CWD child scan found children
 7. None → single-repo mode
 
 ## Consequences
