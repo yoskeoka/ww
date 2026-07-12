@@ -10,7 +10,7 @@ compact index at `docs/design-decisions/README.md` and immutable, numbered
 Michael Nygard records under `docs/design-decisions/adr/`.
 
 Complete when every accepted historical decision has one numbered record, the
-supersession relationships remain visible, the index has an ID/status/tag/outcome
+supersession relationships remain visible, the index has an ID/status/tags/outcome
 row for every record, and the former monolithic file and its template stub are
 gone. This is documentation organization only; it must not change `ww` CLI,
 configuration, or runtime behavior.
@@ -54,7 +54,8 @@ the behavioral specifications under `docs/specs/` remain unchanged.
    consequences without altering the historical technical outcome. Add a
    `Status` section to each record. Assign the IDs chronologically from the
    2026-03-18 config-layering decision through the 2026-07-07 materialization
-   profiles decision.
+   profiles decision; preserve the existing `adr.md` order as the tie-breaker
+   for decisions accepted on the same date.
 3. Mark the 2026-03-19 testcontainers decision as superseded by the 2026-04-20
    host-native harness decision, and mark the earlier parent-scan workspace
    detection decision as superseded by the 2026-03-31 bounded nearest-workspace
