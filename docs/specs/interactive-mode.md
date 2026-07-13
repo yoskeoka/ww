@@ -129,6 +129,22 @@ On success:
 If the user declines confirmation, the session returns to the top-level menu
 without mutating git state or the filesystem.
 
+## Post-create Materialization Recovery
+
+Interactive mode does not add a separate replay flow. If sandbox restrictions
+prevented copy, symlink, or post-create hook actions during creation, the user
+can inspect and explicitly rerun the standard command:
+
+```text
+ww hook replay --dry-run
+ww hook replay
+```
+
+The replay command is human-triggered and stateless. It resolves the current
+effective repository configuration at invocation time and never reruns
+pre-create or remove hooks. This keeps interactive mode as thin orchestration
+over the standard CLI command surface.
+
 ## List Flow Contract
 
 Selecting `list` enters a worktree browser built from the same underlying

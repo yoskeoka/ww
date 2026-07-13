@@ -46,6 +46,7 @@ func cliMain() int {
 		createCmd(),
 		cleanCmd(),
 		interactiveCmd(),
+		hookCmd(),
 		listCmd(),
 		removeCmd(),
 		versionCmd(),
@@ -119,7 +120,9 @@ func runSubcmd(parentCmd string, subCommands []command, args []string, glOpts *g
 			continue
 		}
 		if len(cmd.subcommands) > 0 && len(args) > 1 {
-			return runSubcmd(cmd.name, cmd.subcommands, args[1:], glOpts)
+			if args[1] != "--help" && args[1] != "-h" {
+				return runSubcmd(cmd.name, cmd.subcommands, args[1:], glOpts)
+			}
 		}
 		return cmd.fn(args[1:], glOpts)
 	}

@@ -92,6 +92,22 @@ type RemoveResult struct {
 	BranchError   string `json:"branch_error,omitempty"`
 }
 
+// ReplayOpts configures post-create materialization replay.
+type ReplayOpts struct {
+	DryRun   bool
+	Output   io.Writer
+	TextMode bool
+}
+
+// ReplayResult describes post-create materialization replay for an existing
+// worktree.
+type ReplayResult struct {
+	Path    string   `json:"path"`
+	Branch  string   `json:"branch"`
+	Actions []string `json:"actions"`
+	DryRun  bool     `json:"dry_run"`
+}
+
 // SanitizeBranch converts a branch name into a safe directory name component.
 func SanitizeBranch(branch string) string {
 	return strings.ReplaceAll(branch, "/", "-")
@@ -239,15 +255,80 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		}
 	}
 
-	m.copyFiles(wtPath)
-	m.symlinkFiles(wtPath)
-	m.runLifecycleHook(lifecycleHookPostCreate, wtPath, branch, worktreeIndex, hookExecOpts{
+	m.materialize(wtPath, branch, worktreeIndex, hookExecOpts{
 		Output:   opts.Output,
 		TextMode: opts.TextMode,
 	})
 
 	info := &WorktreeInfo{Path: wtPath, Branch: branch, Created: true, Base: base}
 	return info, nil, nil
+}
+
+// Replay re-runs only the post-create materialization actions for a registered
+// existing worktree. It never creates, removes, or checks out a worktree.
+func (m *Manager) Replay(wtPath, branch string, opts ReplayOpts) (*ReplayResult, error) {
+	wtPath, err := filepath.Abs(wtPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolving replay worktree path: %w", err)
+	}
+	entries, err := m.Git.WorktreeList()
+	if err != nil {
+		return nil, fmt.Errorf("listing worktrees for replay: %w", err)
+	}
+	var target *git.WorktreeEntry
+	worktreeIndex := 0
+	for i := range entries {
+		entry := &entries[i]
+		entryPath, pathErr := filepath.Abs(entry.Path)
+		if pathErr == nil && filepath.Clean(entryPath) == filepath.Clean(wtPath) {
+			target = entry
+			worktreeIndex = i + 1
+			break
+		}
+	}
+	if target == nil {
+		return nil, fmt.Errorf("replay target is not a registered worktree: %s; run from inside the target worktree or a descendant, or pass an existing branch", wtPath)
+	}
+	if target.Main {
+		return nil, fmt.Errorf("cannot replay materialization for the main worktree: %s; run from a secondary worktree or pass a secondary worktree branch", wtPath)
+	}
+	if branch == "" {
+		branch = target.Branch
+	}
+	if branch == "" {
+		return nil, fmt.Errorf("replay target has no branch: %s", wtPath)
+	}
+
+	result := &ReplayResult{Path: wtPath, Branch: branch, DryRun: opts.DryRun}
+	result.Actions = m.materializationActions()
+	if opts.DryRun {
+		return result, nil
+	}
+	m.materialize(wtPath, branch, worktreeIndex, hookExecOpts{
+		Output:   opts.Output,
+		TextMode: opts.TextMode,
+	})
+	return result, nil
+}
+
+func (m *Manager) materializationActions() []string {
+	actions := make([]string, 0, len(m.Config.CopyFiles)+len(m.Config.SymlinkFiles)+1)
+	for _, pattern := range m.Config.CopyFiles {
+		actions = append(actions, fmt.Sprintf("copy: %s", pattern))
+	}
+	for _, pattern := range m.Config.SymlinkFiles {
+		actions = append(actions, fmt.Sprintf("symlink: %s", pattern))
+	}
+	if m.Config.PostCreateHook != "" {
+		actions = append(actions, fmt.Sprintf("run post_create_hook: %s", m.Config.PostCreateHook))
+	}
+	return actions
+}
+
+func (m *Manager) materialize(wtPath, branch string, worktreeIndex int, opts hookExecOpts) {
+	m.copyFiles(wtPath)
+	m.symlinkFiles(wtPath)
+	m.runLifecycleHook(lifecycleHookPostCreate, wtPath, branch, worktreeIndex, opts)
 }
 
 func guessRemoteCreateError(err error, wtPath, branch string) error {

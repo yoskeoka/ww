@@ -142,6 +142,67 @@ Would run post_create_hook: npm install
 
 **Exit codes:** 0 on success, 1 on error.
 
+### `ww hook replay [--repo <name>] [--dry-run] [<branch>]`
+
+Replay post-create materialization for an existing worktree. This is an
+explicit, human-triggered recovery command for setup that could not complete
+when the worktree was created in a restricted sandbox. It never creates,
+removes, checks out, or changes branches.
+
+**Target resolution:**
+
+1. With no branch argument and no `--repo`, use the current directory's
+   registered worktree. The command may be run from the worktree itself or a
+   descendant directory. The main worktree is not a valid replay target.
+2. With a branch argument, resolve the existing worktree for that branch in
+   the current repository. The worktree must already be registered with Git.
+3. With `--repo <name>`, require workspace mode and resolve the branch in the
+   selected repository using that repository's effective config. From a
+   workspace root, the branch argument is required because there is no current
+   worktree target.
+4. If the target does not exist, is the main worktree, or is not registered,
+   return an actionable error and do not run any materialization action.
+
+At replay time, reload the selected repository's effective configuration,
+including repo-local overrides and materialization profiles. Only
+`copy_files`, `symlink_files`, and `post_create_hook` are replayed;
+`pre_create_hook`, `pre_remove_hook`, and `post_remove_hook` are never run.
+Actions use the same source roots, hook working directory, and hook environment
+as `ww create`. Copy and symlink failures remain warnings; post-create hook
+failures remain warnings and do not make the command fail.
+
+With `--dry-run`, print the planned copy, symlink, and post-create hook actions
+without touching the filesystem or running the hook. Without it, execute the
+same actions against the existing worktree. Re-running is intentionally
+stateless: the current effective configuration is used and no replay manifest
+is written.
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--repo` | string | empty | Target a detected workspace repository by name |
+| `--dry-run` | bool | false | Show replay actions without executing them |
+| `--json` | bool | false | Output one JSON result object |
+
+**Output (text):**
+```text
+Would copy: .env
+Would symlink: node_modules
+Would run post_create_hook: make setup
+```
+
+After execution, the command prints:
+```text
+Replayed post-create materialization at /path/to/repo@branch (branch: feat/my-feature)
+```
+
+The command is intentionally available as a standard non-interactive command;
+`ww i` does not add a separate replay flow. Interactive users can confirm the
+same target and actions by running `ww hook replay --dry-run`, then execute the
+command explicitly. This preserves the interactive-mode rule that guided flows
+remain thin orchestration over standard commands.
+
 ### `ww cd [branch]`
 
 Print the absolute path of a worktree for shell navigation.
