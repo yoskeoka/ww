@@ -63,18 +63,18 @@ Add an explicit post-create replay surface so a human can re-run worktree materi
 
 ## Sub-tasks
 
-- [ ] Define the explicit replay command surface and argument model for post-create recovery
-- [ ] Extract reusable post-create materialization logic that can:
+- [x] Define the explicit replay command surface and argument model for post-create recovery
+- [x] Extract reusable post-create materialization logic that can:
   - preview copy/symlink/hook steps
   - execute them against an existing worktree
   - reuse the target repo's effective config from `0033`
   - reuse lifecycle hook execution from `0034`
-- [ ] Add command-level tests covering:
+- [x] Add command-level tests covering:
   - running from inside the current worktree
   - explicit repo/branch targeting when supported
   - preview-only output for copy, symlink, and hook steps
-- [ ] If interactive support is included, surface the same replay actions and confirmation data through `ww i` without introducing unique behavior
-- [ ] Update CLI and interactive specs so sandbox recovery is documented as an explicit human-triggered flow
+- [x] If interactive support is included, surface the same replay actions and confirmation data through `ww i` without introducing unique behavior (not included; standard command parity is documented)
+- [x] Update CLI and interactive specs so sandbox recovery is documented as an explicit human-triggered flow
 
 ## Design Decisions
 

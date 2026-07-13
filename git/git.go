@@ -119,6 +119,15 @@ func (r *Runner) WorktreeList() ([]WorktreeEntry, error) {
 	return parseWorktreeList(out), nil
 }
 
+// WorktreeRoot returns the root of the current worktree.
+func (r *Runner) WorktreeRoot() (string, error) {
+	out, err := r.Run("rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(strings.TrimSpace(out))
+}
+
 // MergedBranches returns local branches merged into base.
 func (r *Runner) MergedBranches(base string) ([]string, error) {
 	out, err := r.Run("branch", "--merged", base)

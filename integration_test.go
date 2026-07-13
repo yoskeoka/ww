@@ -1468,6 +1468,49 @@ func TestPostCreateHookAnnouncesCommand(t *testing.T) {
 	}
 }
 
+func TestHookReplayReplaysMaterializationForExistingWorktree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	repo := setupRepo(t)
+	if err := globalEnv.WriteFile(path.Join(repo, ".env"), "SECRET=test123"); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, repo, "default_base = \"main\"\ncopy_files = [\".env\"]\npost_create_hook = \"echo replayed > replay-marker.txt\"\n")
+
+	if _, err := runWW(t, repo, "create", "feat/replay-test"); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := worktreePath(repo, "feat/replay-test")
+	if err := os.Remove(path.Join(wtPath, ".env")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path.Join(wtPath, "replay-marker.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runWW(t, wtPath, "hook", "replay", "--dry-run")
+	if err != nil {
+		t.Fatalf("ww hook replay --dry-run: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Would copy: .env") || !strings.Contains(out, "Would run post_create_hook") {
+		t.Fatalf("replay dry-run should show materialization actions: %s", out)
+	}
+	if globalEnv.PathExists(path.Join(wtPath, ".env")) || globalEnv.PathExists(path.Join(wtPath, "replay-marker.txt")) {
+		t.Fatal("replay dry-run must not mutate the worktree")
+	}
+
+	out, err = runWW(t, repo, "hook", "replay", "feat/replay-test")
+	if err != nil {
+		t.Fatalf("ww hook replay: %v\n%s", err, out)
+	}
+	if !globalEnv.PathExists(path.Join(wtPath, ".env")) || !globalEnv.PathExists(path.Join(wtPath, "replay-marker.txt")) {
+		t.Fatal("replay should restore copy and run the post-create hook")
+	}
+}
+
 func TestRemoveMainWorktreeRejected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")
