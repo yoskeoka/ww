@@ -29,11 +29,11 @@ This issue is not resolved by an isolated speedup. It is resolved only when all 
 
 ## Resolution evidence
 
-The adopted `6 repositories × 5 secondary worktrees` fixture was measured three times on the implementation host with `-benchtime=1x`:
+The adopted `6 repositories × 5 secondary worktrees` fixture was measured three times on the implementation host and then on the GitHub-hosted Ubuntu runner with `-benchtime=1x`:
 
-| Benchmark | Observed range | Initial advisory budget |
+| Benchmark | GitHub-hosted samples | Median | Initial advisory budget |
 | --- | ---: | ---: |
-| `ww list` | 1.59–1.67 s | 2.50 s |
-| `ww clean --dry-run` | 1.61–1.63 s | 2.60 s |
+| `ww list` | 257.9, 258.1, 259.0 ms | 258.1 ms | 400 ms |
+| `ww clean --dry-run` | 267.6, 269.6, 270.3 ms | 269.6 ms | 420 ms |
 
-`make perf-check` repeats the versioned command three times and compares each benchmark's median against its individual budget. The resulting pull-request job records its duration and remains advisory. The local baseline completed within the one-minute policy; the implementation PR's GitHub-hosted job is the final confirmation point for whether a separate daily-measurement issue is needed.
+The local baseline was 1.59–1.67 s for `ww list` and 1.61–1.63 s for `ww clean --dry-run`, demonstrating that the CI limits are runner-specific rather than portable wall-clock promises. `make perf-check` repeats the versioned command three times and compares each benchmark's median against its individual budget. The resulting pull-request job recorded a 12-second measurement step and remains advisory, so no daily-measurement follow-up is needed.

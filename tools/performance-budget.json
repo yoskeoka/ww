@@ -19,10 +19,10 @@
   "repetitions": 3,
   "benchmarks": {
     "BenchmarkWorkspaceList": {
-      "max_ns_per_op": 2500000000
+      "max_ns_per_op": 400000000
     },
     "BenchmarkWorkspaceCleanDryRun": {
-      "max_ns_per_op": 2600000000
+      "max_ns_per_op": 420000000
     }
   }
 }
