@@ -25,4 +25,15 @@ This issue is not resolved by an isolated speedup. It is resolved only when all 
 
 ## Follow-up direction
 
-`docs/exec-plan/todo/0037-ww-performance-budget.md` plans the benchmark, budget evaluator, and PR advisory CI. A concrete optimization must be split into a separate execution plan only after profiling identifies a hot path.
+`docs/exec-plan/done/0037-ww-performance-budget.md` established the benchmark, budget evaluator, and PR advisory CI. A concrete optimization must be split into a separate execution plan only after profiling identifies a hot path.
+
+## Resolution evidence
+
+The adopted `6 repositories × 5 secondary worktrees` fixture was measured three times on the implementation host and then on the GitHub-hosted Ubuntu runner with `-benchtime=1x`:
+
+| Benchmark | GitHub-hosted samples | Median | Initial advisory budget |
+| --- | ---: | ---: |
+| `ww list` | 257.9, 258.1, 259.0 ms | 258.1 ms | 400 ms |
+| `ww clean --dry-run` | 267.6, 269.6, 270.3 ms | 269.6 ms | 420 ms |
+
+The local baseline was 1.59–1.67 s for `ww list` and 1.61–1.63 s for `ww clean --dry-run`, demonstrating that the CI limits are runner-specific rather than portable wall-clock promises. `make perf-check` repeats the versioned command three times and compares each benchmark's median against its individual budget. The resulting pull-request job recorded a 12-second measurement step and remains advisory, so no daily-measurement follow-up is needed.
