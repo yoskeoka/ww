@@ -35,7 +35,7 @@ Addresses: N/A - performance follow-up to the completed measurement issue
 
 ## Existing Implementation References
 
-- `workspace/workspace.go`, lines 335-358: normalized, deterministic repository
+- `workspace/workspace.go`, lines 371-400: normalized, deterministic repository
   ordering supplied to the manager.
 - `worktree/worktree.go`
   - `Manager.List`, lines 354-360: single/workspace dispatch.
