@@ -30,17 +30,25 @@ jobs:
         run: |
           started=$(date +%s)
           set +e
-          make perf-check
+          output=$(make perf-check 2>&1)
           status=$?
           elapsed=$(( $(date +%s) - started ))
+          printf '%s\n' "$output"
           {
             echo "## Performance budget"
             echo
             echo "Duration: ${elapsed}s"
+            echo
+            echo "### Benchmark results"
+            echo '```text'
+            printf '%s\n' "$output"
+            echo '```'
             if [ "$status" -eq 0 ]; then
-              echo "Result: passed"
+              echo "Result: within the configured budgets"
+            elif [[ "$output" == *"budget exceeded:"* ]]; then
+              echo "Result: budget exceeded (advisory; investigate before merge)"
             else
-              echo "Result: exceeded or evaluator failure (advisory; investigate before merge)"
+              echo "Result: evaluator failed (advisory; investigate before merge)"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"

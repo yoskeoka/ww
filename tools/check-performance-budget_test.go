@@ -21,11 +21,11 @@ func TestCheckBudgetWithinLimit(t *testing.T) {
 }
 
 func TestCheckBudgetReportsExceededBenchmark(t *testing.T) {
-	path := writeBudget(t, 100)
+	path := writeBudget(t, 1)
 	err := checkBudget(context.Background(), path, func(context.Context, []string) (string, error) {
-		return benchmarkOutput(101, 80), nil
+		return benchmarkOutput(1_000_001, 80), nil
 	})
-	if err == nil || !strings.Contains(err.Error(), "BenchmarkWorkspaceList observed 101 ns/op") {
+	if err == nil || !strings.Contains(err.Error(), "BenchmarkWorkspaceList observed 1.0 ms/op") {
 		t.Fatalf("error = %v, want named budget exceedance", err)
 	}
 }
@@ -66,8 +66,8 @@ func writeBudget(t *testing.T, limit int) string {
   "benchmark_command": ["go", "test"],
   "repetitions": 1,
   "benchmarks": {
-    "BenchmarkWorkspaceList": {"max_ns_per_op": %d},
-    "BenchmarkWorkspaceCleanDryRun": {"max_ns_per_op": %d}
+    "BenchmarkWorkspaceList": {"max_ms_per_op": %d},
+    "BenchmarkWorkspaceCleanDryRun": {"max_ms_per_op": %d}
   }
 
 }`, limit, limit)

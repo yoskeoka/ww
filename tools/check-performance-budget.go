@@ -16,6 +16,8 @@ import (
 	"strings"
 )
 
+const nanosecondsPerMillisecond = 1_000_000
+
 type budgetFile struct {
 	FixtureProfile   fixtureProfile             `json:"fixture_profile"`
 	BenchmarkCommand []string                   `json:"benchmark_command"`
@@ -29,7 +31,7 @@ type fixtureProfile struct {
 }
 
 type benchmarkBudget struct {
-	MaxNSPerOp int64 `json:"max_ns_per_op"`
+	MaxMSPerOp float64 `json:"max_ms_per_op"`
 }
 
 var benchmarkLine = regexp.MustCompile(`(?m)^(Benchmark[[:alnum:]_/]+)(?:-[0-9]+)?\s+\d+\s+([0-9]+)\s+ns/op`)
@@ -79,8 +81,8 @@ func checkBudget(ctx context.Context, budgetPath string, runner commandRunner) e
 	var exceeded []string
 	for name, limit := range budget.Benchmarks {
 		observed := median(samples[name])
-		if observed > limit.MaxNSPerOp {
-			exceeded = append(exceeded, fmt.Sprintf("%s observed %d ns/op (median of %v), budget %d ns/op; reproduce: %s", name, observed, samples[name], limit.MaxNSPerOp, commandString(budget.BenchmarkCommand)))
+		if observed > limit.maxNSPerOp() {
+			exceeded = append(exceeded, fmt.Sprintf("%s observed %s/op (median of %s; budget %s/op; reproduce: %s", name, formatMS(observed), formatSamplesMS(samples[name]), formatMS(limit.maxNSPerOp()), commandString(budget.BenchmarkCommand)))
 		}
 	}
 	if len(exceeded) > 0 {
@@ -93,7 +95,8 @@ func checkBudget(ctx context.Context, budgetPath string, runner commandRunner) e
 	}
 	sort.Strings(benchmarkNames)
 	for _, name := range benchmarkNames {
-		fmt.Printf("%s: median %d ns/op (samples %v; budget %d ns/op)\n", name, median(samples[name]), samples[name], budget.Benchmarks[name].MaxNSPerOp)
+		limit := budget.Benchmarks[name]
+		fmt.Printf("%s: median %s/op (samples %s; budget %s/op)\n", name, formatMS(median(samples[name])), formatSamplesMS(samples[name]), formatMS(limit.maxNSPerOp()))
 	}
 	fmt.Printf("performance budgets passed after %d runs (fixture: %d repos, %d worktrees/repo)\n", budget.Repetitions, budget.FixtureProfile.Repos, budget.FixtureProfile.WorktreesPerRepo)
 	return nil
@@ -113,11 +116,27 @@ func validateBudget(budget budgetFile) error {
 		return errors.New("at least one benchmark budget is required")
 	}
 	for name, value := range budget.Benchmarks {
-		if value.MaxNSPerOp < 1 {
-			return fmt.Errorf("%s max_ns_per_op must be positive", name)
+		if value.MaxMSPerOp <= 0 {
+			return fmt.Errorf("%s max_ms_per_op must be positive", name)
 		}
 	}
 	return nil
+}
+
+func (b benchmarkBudget) maxNSPerOp() int64 {
+	return int64(b.MaxMSPerOp * nanosecondsPerMillisecond)
+}
+
+func formatMS(ns int64) string {
+	return fmt.Sprintf("%.1f ms", float64(ns)/nanosecondsPerMillisecond)
+}
+
+func formatSamplesMS(samples []int64) string {
+	formatted := make([]string, len(samples))
+	for i, sample := range samples {
+		formatted[i] = formatMS(sample)
+	}
+	return "[" + strings.Join(formatted, ", ") + "]"
 }
 
 func parseBenchmarkOutput(out string, expected map[string]benchmarkBudget) (map[string]int64, error) {
