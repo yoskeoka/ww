@@ -1,0 +1,28 @@
+{
+  "fixture_profile": {
+    "repos": 6,
+    "worktrees_per_repo": 5
+  },
+  "benchmark_command": [
+    "env",
+    "WW_PERF_REPOS=6",
+    "WW_PERF_WORKTREES_PER_REPO=5",
+    "go",
+    "test",
+    "-run",
+    "^$",
+    "-bench",
+    "^BenchmarkWorkspace(List|CleanDryRun)$",
+    "-benchtime=1x",
+    "./cmd/ww"
+  ],
+  "repetitions": 3,
+  "benchmarks": {
+    "BenchmarkWorkspaceList": {
+      "max_ns_per_op": 2500000000
+    },
+    "BenchmarkWorkspaceCleanDryRun": {
+      "max_ns_per_op": 2600000000
+    }
+  }
+}

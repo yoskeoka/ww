@@ -25,4 +25,15 @@ This issue is not resolved by an isolated speedup. It is resolved only when all 
 
 ## Follow-up direction
 
-`docs/exec-plan/todo/0037-ww-performance-budget.md` plans the benchmark, budget evaluator, and PR advisory CI. A concrete optimization must be split into a separate execution plan only after profiling identifies a hot path.
+`docs/exec-plan/done/0037-ww-performance-budget.md` established the benchmark, budget evaluator, and PR advisory CI. A concrete optimization must be split into a separate execution plan only after profiling identifies a hot path.
+
+## Resolution evidence
+
+The adopted `6 repositories × 5 secondary worktrees` fixture was measured three times on the implementation host with `-benchtime=1x`:
+
+| Benchmark | Observed range | Initial advisory budget |
+| --- | ---: | ---: |
+| `ww list` | 1.59–1.67 s | 2.50 s |
+| `ww clean --dry-run` | 1.61–1.63 s | 2.60 s |
+
+`make perf-check` repeats the versioned command three times and compares each benchmark's median against its individual budget. The resulting pull-request job records its duration and remains advisory. The local baseline completed within the one-minute policy; the implementation PR's GitHub-hosted job is the final confirmation point for whether a separate daily-measurement issue is needed.
