@@ -87,6 +87,14 @@ func checkBudget(ctx context.Context, budgetPath string, runner commandRunner) e
 		sort.Strings(exceeded)
 		return errors.New("budget exceeded:\n" + strings.Join(exceeded, "\n"))
 	}
+	benchmarkNames := make([]string, 0, len(budget.Benchmarks))
+	for name := range budget.Benchmarks {
+		benchmarkNames = append(benchmarkNames, name)
+	}
+	sort.Strings(benchmarkNames)
+	for _, name := range benchmarkNames {
+		fmt.Printf("%s: median %d ns/op (samples %v; budget %d ns/op)\n", name, median(samples[name]), samples[name], budget.Benchmarks[name].MaxNSPerOp)
+	}
 	fmt.Printf("performance budgets passed after %d runs (fixture: %d repos, %d worktrees/repo)\n", budget.Repetitions, budget.FixtureProfile.Repos, budget.FixtureProfile.WorktreesPerRepo)
 	return nil
 }
