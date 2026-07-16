@@ -65,7 +65,7 @@ func checkBudget(ctx context.Context, budgetPath string, runner commandRunner) e
 			if strings.Contains(out, "performance fixture:") {
 				return fmt.Errorf("fixture failed on run %d: %w\n%s", run, err, out)
 			}
-			return fmt.Errorf("benchmark evaluator failed on run %d: %w\n%s", run, err, out)
+			return fmt.Errorf("benchmark command failed on run %d: %w\n%s", run, err, out)
 		}
 		observed, err := parseBenchmarkOutput(out, budget.Benchmarks)
 		if err != nil {
@@ -147,7 +147,20 @@ func median(values []int64) int64 {
 }
 
 func commandString(command []string) string {
-	return strings.Join(command, " ")
+	quoted := make([]string, len(command))
+	for i, arg := range command {
+		quoted[i] = shellQuote(arg)
+	}
+	return strings.Join(quoted, " ")
+}
+
+func shellQuote(arg string) string {
+	if arg != "" && strings.IndexFunc(arg, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_@%+=:,./-", r))
+	}) == -1 {
+		return arg
+	}
+	return "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
 }
 
 func runCommand(ctx context.Context, command []string) (string, error) {

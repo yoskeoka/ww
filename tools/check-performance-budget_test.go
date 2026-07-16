@@ -50,6 +50,14 @@ func TestCheckBudgetClassifiesFixtureFailure(t *testing.T) {
 	}
 }
 
+func TestCommandStringQuotesShellMetacharacters(t *testing.T) {
+	got := commandString([]string{"go", "test", "^BenchmarkWorkspace(List|CleanDryRun)$", "contains space", "plain"})
+	want := "go test '^BenchmarkWorkspace(List|CleanDryRun)$' 'contains space' plain"
+	if got != want {
+		t.Fatalf("commandString() = %q, want %q", got, want)
+	}
+}
+
 func writeBudget(t *testing.T, limit int) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "budget.json")
