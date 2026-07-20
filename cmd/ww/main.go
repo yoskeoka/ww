@@ -200,8 +200,11 @@ func loadManagerContext(dir string, requireRepo bool, sandboxMode bool) (*manage
 		return nil, err
 	}
 
-	runner := &git.Runner{Dir: dir}
-	mainDir, err := runner.MainWorktreeDir()
+	mainDir := ws.MainRoot
+	if mainDir == "" {
+		runner := &git.Runner{Dir: dir}
+		mainDir, err = runner.MainWorktreeDir()
+	}
 	if err != nil {
 		if ws.Mode == workspace.ModeWorkspace && ws.Root == dir && !requireRepo {
 			mainDir = ws.Root

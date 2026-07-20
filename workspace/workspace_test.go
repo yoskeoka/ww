@@ -265,6 +265,106 @@ func TestScanImmediateReposIgnoresRegularFilesAndChildSymlinks(t *testing.T) {
 	}
 }
 
+func TestDiscoveryContextScansCandidateOnceAndReturnsDefensiveCopies(t *testing.T) {
+	root := evalTempDir(t)
+	gitInit(t, filepath.Join(root, "repo-a"))
+	gitInit(t, filepath.Join(root, "repo-b"))
+
+	originalReadDir := immediateChildReadDir
+	t.Cleanup(func() { immediateChildReadDir = originalReadDir })
+	var scans int
+	immediateChildReadDir = func(dir string) ([]os.DirEntry, error) {
+		if dir == root {
+			scans++
+		}
+		return originalReadDir(dir)
+	}
+
+	discovery := newDiscoveryContext()
+	first, err := discovery.scanImmediateRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first = append(first, Repo{Name: "mutated", Path: filepath.Join(root, "mutated")})
+	second, err := discovery.scanImmediateRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scans != 1 {
+		t.Fatalf("root scans = %d, want 1", scans)
+	}
+	if got := repoNames(second); !reflect.DeepEqual(got, []string{"repo-a", "repo-b"}) {
+		t.Fatalf("Repos = %v, want [repo-a repo-b]", got)
+	}
+}
+
+func TestDetectScansWorkspaceRootOncePerInvocation(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	gitInit(t, root)
+	gitInit(t, childA)
+	gitInit(t, filepath.Join(root, "child-b"))
+
+	originalReadDir := immediateChildReadDir
+	t.Cleanup(func() { immediateChildReadDir = originalReadDir })
+	var scans int
+	immediateChildReadDir = func(dir string) ([]os.DirEntry, error) {
+		if dir == childA {
+			scans++
+		}
+		return originalReadDir(dir)
+	}
+
+	if _, err := Detect(childA); err != nil {
+		t.Fatal(err)
+	}
+	if scans != 1 {
+		t.Fatalf("child scans = %d, want 1", scans)
+	}
+}
+
+func TestDetectCarriesCurrentMainRoot(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	gitInit(t, childA)
+	gitInit(t, filepath.Join(root, "child-b"))
+
+	ws, err := Detect(childA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.MainRoot != childA {
+		t.Fatalf("MainRoot = %q, want %q", ws.MainRoot, childA)
+	}
+}
+
+func TestScanImmediateReposRejectsDirectoryWithoutGitMarkerBeforeValidation(t *testing.T) {
+	root := evalTempDir(t)
+	plain := filepath.Join(root, "plain")
+	if err := os.MkdirAll(plain, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	originalStandaloneRepoRoot := standaloneRepoRoot
+	t.Cleanup(func() { standaloneRepoRoot = originalStandaloneRepoRoot })
+	called := false
+	standaloneRepoRoot = func(string) (bool, error) {
+		called = true
+		return false, nil
+	}
+
+	repos, err := scanImmediateRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("standalone repository validation ran without a .git marker")
+	}
+	if len(repos) != 0 {
+		t.Fatalf("Repos = %v, want none", repos)
+	}
+}
+
 func TestScanImmediateReposSkipsUnreadableUnknownTypeEntry(t *testing.T) {
 	root := evalTempDir(t)
 	repo := filepath.Join(root, "repo")
