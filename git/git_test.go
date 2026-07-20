@@ -2,8 +2,10 @@ package git
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -457,6 +459,81 @@ func TestBranchTrackingConfig(t *testing.T) {
 	}
 	if tracking["dev"].MergeRef != "refs/heads/main" {
 		t.Fatalf("tracking[dev].MergeRef = %q, want %q", tracking["dev"].MergeRef, "refs/heads/main")
+	}
+}
+
+func TestBranchRemotesUsesOneNULDelimitedConfigQuery(t *testing.T) {
+	callsPath := filepath.Join(t.TempDir(), "git-calls")
+	gitBin := filepath.Join(t.TempDir(), "fake-git.sh")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >> %q
+if [ "$1" = "config" ] && [ "$2" = "--null" ] && [ "$3" = "--get-regexp" ]; then
+  printf 'branch.feat/one.remote\norigin\000branch.release/two.remote\nbackup\000branch.unrequested.remote\norigin\000'
+  exit 0
+fi
+exit 1
+`, callsPath)
+	if err := os.WriteFile(gitBin, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &Runner{GitBin: gitBin}
+	remotes, err := runner.BranchRemotes([]string{
+		"feat/one",
+		"release/two",
+		"local-only",
+		"configured-without-merge",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"feat/one": "origin", "release/two": "backup"}
+	if len(remotes) != len(want) {
+		t.Fatalf("BranchRemotes() = %#v, want %#v", remotes, want)
+	}
+	for branch, remote := range want {
+		if remotes[branch] != remote {
+			t.Fatalf("BranchRemotes()[%q] = %q, want %q", branch, remotes[branch], remote)
+		}
+	}
+
+	calls, err := os.ReadFile(callsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(calls)); got != "config --null --get-regexp ^branch\\..*\\.remote$" {
+		t.Fatalf("git invocation = %q, want one NUL-delimited remote query", got)
+	}
+}
+
+func TestBranchRemotesParsesRealGitConfigOutput(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	runner := &Runner{Dir: repo}
+	if _, err := runner.Run("branch", "feat/one"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("branch", "release/two"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("config", "branch.feat/one.remote", "origin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("config", "branch.release/two.remote", "backup"); err != nil {
+		t.Fatal(err)
+	}
+
+	remotes, err := runner.BranchRemotes([]string{"feat/one", "release/two", "local-only"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"feat/one": "origin", "release/two": "backup"}
+	if len(remotes) != len(want) {
+		t.Fatalf("BranchRemotes() = %#v, want %#v", remotes, want)
+	}
+	for branch, remote := range want {
+		if remotes[branch] != remote {
+			t.Fatalf("BranchRemotes()[%q] = %q, want %q", branch, remotes[branch], remote)
+		}
 	}
 }
 

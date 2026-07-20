@@ -497,21 +497,25 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		mergedSet[branch] = struct{}{}
 	}
 
-	// Precompute branch→remote and batch ls-remote calls (one per unique remote).
-	branchRemote := make(map[string]string)
-	remoteBranches := make(map[string]map[string]struct{})
+	// Read branch→remote metadata once, then batch ls-remote calls once per
+	// configured remote.
+	trackingCandidates := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.Main || e.Branch == "" {
 			continue
 		}
-		if _, ok := mergedSet[e.Branch]; ok {
-			continue
+		if _, ok := mergedSet[e.Branch]; !ok {
+			trackingCandidates = append(trackingCandidates, e.Branch)
 		}
-		remote, err := runner.BranchRemote(e.Branch)
-		if err != nil {
-			return nil, fmt.Errorf("getting remote for %s: %w", e.Branch, err)
-		}
-		branchRemote[e.Branch] = remote
+	}
+	branchRemote, err := runner.BranchRemotes(trackingCandidates)
+	if err != nil {
+		return nil, fmt.Errorf("getting branch tracking metadata for %s: %w", repoName, err)
+	}
+
+	remoteBranches := make(map[string]map[string]struct{})
+	for _, branch := range trackingCandidates {
+		remote := branchRemote[branch]
 		if remote != "" {
 			if _, cached := remoteBranches[remote]; !cached {
 				branches, err := runner.ListRemoteBranches(remote)

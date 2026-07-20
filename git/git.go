@@ -263,6 +263,39 @@ func (r *Runner) BranchRemote(branch string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// BranchRemotes returns configured remotes for the requested local branches.
+// It reads branch remote configuration once for the repository. Branches with
+// no configured remote are omitted from the result.
+func (r *Runner) BranchRemotes(branches []string) (map[string]string, error) {
+	wanted := make(map[string]struct{}, len(branches))
+	for _, branch := range branches {
+		wanted[branch] = struct{}{}
+	}
+	remotes := make(map[string]string, len(wanted))
+	if len(wanted) == 0 {
+		return remotes, nil
+	}
+
+	out, err := r.run([]string{"config", "--null", "--get-regexp", `^branch\..*\.remote$`}, true)
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range strings.Split(out, "\x00") {
+		key, remote, ok := strings.Cut(record, "\n")
+		if !ok {
+			continue
+		}
+		branch, ok := branchNameFromConfigKey(key, ".remote")
+		if !ok {
+			continue
+		}
+		if _, ok := wanted[branch]; ok && remote != "" {
+			remotes[branch] = remote
+		}
+	}
+	return remotes, nil
+}
+
 // BranchMergeRef returns the merge ref configured for branch, or empty string if
 // the branch has no configured upstream merge target.
 func (r *Runner) BranchMergeRef(branch string) (string, error) {

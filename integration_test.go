@@ -454,6 +454,36 @@ func TestListStatusesAndCleanable(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	backupRemote, err := globalEnv.MkdirTemp("ww-backup-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git("", "init", "--bare", backupRemote); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "remote", "add", "backup", backupRemote); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runWW(t, repo, "create", "feat/delta"); err != nil {
+		t.Fatalf("ww create feat/delta: %v", err)
+	}
+	backupWT := worktreePath(repo, "feat/delta")
+	if err := globalEnv.WriteFile(path.Join(backupWT, "backup.txt"), "backup\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(backupWT, "add", "."); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(backupWT, "commit", "-m", "feat: backup"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "config", "branch.feat/delta.remote", "backup"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "push", "backup", "feat/delta"); err != nil {
+		t.Fatal(err)
+	}
+
 	out, err := runWW(t, repo, "list")
 	if err != nil {
 		t.Fatalf("ww list: %v\n%s", err, out)
@@ -470,12 +500,15 @@ func TestListStatusesAndCleanable(t *testing.T) {
 	if !strings.Contains(out, "feat/gamma") || !strings.Contains(out, "active") {
 		t.Fatalf("list output should include active status: %s", out)
 	}
+	if !strings.Contains(out, "feat/delta") || !strings.Contains(out, "active") {
+		t.Fatalf("list output should include the active backup-tracked branch: %s", out)
+	}
 
 	out, err = runWW(t, repo, "list", "--cleanable")
 	if err != nil {
 		t.Fatalf("ww list --cleanable: %v\n%s", err, out)
 	}
-	if strings.Contains(out, "feat/gamma") {
+	if strings.Contains(out, "feat/gamma") || strings.Contains(out, "feat/delta") {
 		t.Fatalf("cleanable output should exclude active worktrees: %s", out)
 	}
 	if !strings.Contains(out, "feat/alpha") || !strings.Contains(out, "feat/beta") {
