@@ -28,9 +28,10 @@ type Repo struct {
 
 // Workspace describes the detected workspace layout.
 type Workspace struct {
-	Root  string
-	Repos []Repo
-	Mode  Mode
+	Root     string
+	Repos    []Repo
+	Mode     Mode
+	MainRoot string
 }
 
 // DetectOptions controls workspace discovery behavior.
@@ -54,7 +55,8 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 		return nil, err
 	}
 
-	childRepos, err := scanImmediateRepos(absStart)
+	discovery := newDiscoveryContext()
+	childRepos, err := discovery.scanImmediateRepos(absStart)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +91,8 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 
 	if opts.Sandbox {
 		return &Workspace{
-			Root: mainRoot,
+			Root:     mainRoot,
+			MainRoot: mainRoot,
 			Repos: []Repo{{
 				Name: filepath.Base(mainRoot),
 				Path: mainRoot,
@@ -98,14 +101,14 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 		}, nil
 	}
 
-	if wsRoot, ok, err := detectContainingWorkspace(absStart, mainRoot); err != nil {
+	if wsRoot, ok, err := detectContainingWorkspace(discovery, absStart, mainRoot); err != nil {
 		return nil, err
 	} else if ok {
-		repos, err := reposAtWorkspaceRoot(wsRoot)
+		repos, err := reposAtWorkspaceRoot(discovery, wsRoot)
 		if err != nil {
 			return nil, err
 		}
-		return &Workspace{Root: wsRoot, Repos: repos, Mode: ModeWorkspace}, nil
+		return &Workspace{Root: wsRoot, Repos: repos, Mode: ModeWorkspace, MainRoot: mainRoot}, nil
 	}
 
 	if len(childRepos) > 0 && !isRepoMarker(filepath.Dir(absStart)) {
@@ -119,7 +122,8 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 	}
 
 	return &Workspace{
-		Root: mainRoot,
+		Root:     mainRoot,
+		MainRoot: mainRoot,
 		Repos: []Repo{{
 			Name: filepath.Base(mainRoot),
 			Path: mainRoot,
@@ -128,9 +132,9 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 	}, nil
 }
 
-func detectContainingWorkspace(startDir, mainRoot string) (string, bool, error) {
+func detectContainingWorkspace(discovery *discoveryContext, startDir, mainRoot string) (string, bool, error) {
 	for _, candidate := range candidateDirs(startDir, mainRoot) {
-		ok, err := isContainingWorkspaceRoot(candidate, mainRoot)
+		ok, err := isContainingWorkspaceRoot(discovery, candidate, mainRoot)
 		if err != nil {
 			return "", false, err
 		}
@@ -170,12 +174,12 @@ func candidateDirs(startDir, mainRoot string) []string {
 	return dirs
 }
 
-func isContainingWorkspaceRoot(candidate, mainRoot string) (bool, error) {
+func isContainingWorkspaceRoot(discovery *discoveryContext, candidate, mainRoot string) (bool, error) {
 	if !containsPath(candidate, mainRoot) {
 		return false, nil
 	}
 
-	repos, err := scanImmediateRepos(candidate)
+	repos, err := discovery.scanImmediateRepos(candidate)
 	if err != nil {
 		return false, err
 	}
@@ -204,8 +208,8 @@ func containsPath(parent, child string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func reposAtWorkspaceRoot(root string) ([]Repo, error) {
-	repos, err := scanImmediateRepos(root)
+func reposAtWorkspaceRoot(discovery *discoveryContext, root string) ([]Repo, error) {
+	repos, err := discovery.scanImmediateRepos(root)
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +239,42 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 	return repos, nil
 }
 
+type discoveryContext struct {
+	scans map[string]scanResult
+}
+
+type scanResult struct {
+	repos []Repo
+	err   error
+}
+
+func newDiscoveryContext() *discoveryContext {
+	return &discoveryContext{scans: make(map[string]scanResult)}
+}
+
+func (d *discoveryContext) scanImmediateRepos(dir string) ([]Repo, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	if cached, ok := d.scans[absDir]; ok {
+		return cloneRepos(cached.repos), cached.err
+	}
+
+	repos, err := scanImmediateRepos(absDir)
+	if err == nil {
+		repos = normalizeRepos(repos)
+	}
+	d.scans[absDir] = scanResult{repos: cloneRepos(repos), err: err}
+	return cloneRepos(repos), err
+}
+
+func cloneRepos(repos []Repo) []Repo {
+	cloned := make([]Repo, len(repos))
+	copy(cloned, repos)
+	return cloned
+}
+
 func isImmediateChildRepo(entry os.DirEntry, dir string) (bool, error) {
 	kind, err := classifyImmediateChild(entry, dir)
 	if err != nil {
@@ -246,7 +286,10 @@ func isImmediateChildRepo(entry os.DirEntry, dir string) (bool, error) {
 	if kind.isSymlink || !kind.isDir {
 		return false, nil
 	}
-	return isStandaloneRepoRoot(dir)
+	if !isEligibleRepoMarker(dir) {
+		return false, nil
+	}
+	return standaloneRepoRoot(dir)
 }
 
 type immediateChildKind struct {
@@ -256,6 +299,7 @@ type immediateChildKind struct {
 
 var immediateChildReadDir = os.ReadDir
 var immediateChildLstat = os.Lstat
+var standaloneRepoRoot = isStandaloneRepoRoot
 
 func classifyImmediateChild(entry os.DirEntry, path string) (immediateChildKind, error) {
 	if entry.IsDir() {
@@ -351,6 +395,18 @@ func isRepoMarker(dir string) bool {
 		return true
 	}
 	return info.Mode().IsRegular()
+}
+
+func isEligibleRepoMarker(dir string) bool {
+	gitPath := filepath.Join(dir, ".git")
+	info, err := immediateChildLstat(gitPath)
+	if err != nil {
+		return false
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	return info.IsDir() || info.Mode().IsRegular()
 }
 
 func isGitBinaryMissing(err error) bool {
