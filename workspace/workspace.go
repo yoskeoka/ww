@@ -399,7 +399,7 @@ func isRepoMarker(dir string) bool {
 
 func isEligibleRepoMarker(dir string) bool {
 	gitPath := filepath.Join(dir, ".git")
-	info, err := os.Lstat(gitPath)
+	info, err := immediateChildLstat(gitPath)
 	if err != nil {
 		return false
 	}

@@ -365,6 +365,39 @@ func TestScanImmediateReposRejectsDirectoryWithoutGitMarkerBeforeValidation(t *t
 	}
 }
 
+func TestScanImmediateReposSkipsGitMarkerPermissionErrorBeforeValidation(t *testing.T) {
+	root := evalTempDir(t)
+	child := filepath.Join(root, "child")
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	originalLstat := immediateChildLstat
+	originalStandaloneRepoRoot := standaloneRepoRoot
+	t.Cleanup(func() {
+		immediateChildLstat = originalLstat
+		standaloneRepoRoot = originalStandaloneRepoRoot
+	})
+	immediateChildLstat = func(path string) (os.FileInfo, error) {
+		if path == filepath.Join(child, ".git") {
+			return nil, &os.PathError{Op: "lstat", Path: path, Err: os.ErrPermission}
+		}
+		return originalLstat(path)
+	}
+	standaloneRepoRoot = func(string) (bool, error) {
+		t.Fatal("standalone repository validation ran after marker permission error")
+		return false, nil
+	}
+
+	repos, err := scanImmediateRepos(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 0 {
+		t.Fatalf("Repos = %v, want none", repos)
+	}
+}
+
 func TestScanImmediateReposSkipsUnreadableUnknownTypeEntry(t *testing.T) {
 	root := evalTempDir(t)
 	repo := filepath.Join(root, "repo")
