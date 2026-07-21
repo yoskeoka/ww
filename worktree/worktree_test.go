@@ -883,6 +883,9 @@ func TestPreviewRemoveMatchesDryRunRemoveFromListSnapshot(t *testing.T) {
 
 func TestPreviewRemoveRejectsInvalidSnapshot(t *testing.T) {
 	mgr := &Manager{}
+	if _, _, err := mgr.PreviewRemove(WorktreeInfo{Path: "/repo", Branch: "feat/valid", WorktreeIndex: 1}, RemoveOpts{}); err == nil {
+		t.Fatal("PreviewRemove() without dry-run error = nil, want rejection")
+	}
 	for _, info := range []WorktreeInfo{
 		{Path: "/repo", Branch: "main", Main: true, WorktreeIndex: 1},
 		{Path: "/repo", WorktreeIndex: 1},

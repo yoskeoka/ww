@@ -814,6 +814,9 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 // It intentionally performs no Git lookup and must only be used for previews;
 // Remove retains a fresh lookup before every real mutation.
 func (m *Manager) PreviewRemove(info WorktreeInfo, opts RemoveOpts) (*RemoveResult, []string, error) {
+	if !opts.DryRun {
+		return nil, nil, errors.New("snapshot preview requires dry-run mode")
+	}
 	if info.Main {
 		return nil, nil, fmt.Errorf("cannot remove the main worktree")
 	}
