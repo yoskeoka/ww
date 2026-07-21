@@ -135,10 +135,15 @@ git rev-parse --verify refs/heads/<branch>
 
 **Read branch remote tracking:**
 ```
-git config --get branch.<branch>.remote
+git config --null --get-regexp '^branch\..*\.remote$'
 ```
 
-Returns the configured remote name for a local branch. If no remote is configured, ww treats the branch as having no tracking remote.
+For status evaluation, `ww` reads configured branch-to-remote values once per
+repository, then projects that metadata onto the local branches being listed.
+The NUL-terminated, key/value output is parsed without whitespace-based field
+splitting. A local branch without a configured remote is treated as having no
+tracking remote. The configured remote name is independent of whether a merge
+ref is configured.
 
 **Check remote branch existence:**
 ```
