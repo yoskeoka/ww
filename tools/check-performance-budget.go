@@ -26,8 +26,9 @@ type budgetFile struct {
 }
 
 type fixtureProfile struct {
-	Repos            int `json:"repos"`
-	WorktreesPerRepo int `json:"worktrees_per_repo"`
+	Repos                     int `json:"repos"`
+	WorktreesPerRepo          int `json:"worktrees_per_repo"`
+	CleanableWorktreesPerRepo int `json:"cleanable_worktrees_per_repo"`
 }
 
 type benchmarkBudget struct {
@@ -98,13 +99,16 @@ func checkBudget(ctx context.Context, budgetPath string, runner commandRunner) e
 		limit := budget.Benchmarks[name]
 		fmt.Printf("%s: median %s/op (samples %s; budget %s/op)\n", name, formatMS(median(samples[name])), formatSamplesMS(samples[name]), formatMS(limit.maxNSPerOp()))
 	}
-	fmt.Printf("performance budgets passed after %d runs (fixture: %d repos, %d worktrees/repo)\n", budget.Repetitions, budget.FixtureProfile.Repos, budget.FixtureProfile.WorktreesPerRepo)
+	fmt.Printf("performance budgets passed after %d runs (fixture: %d repos, %d worktrees/repo, %d cleanable worktrees/repo)\n", budget.Repetitions, budget.FixtureProfile.Repos, budget.FixtureProfile.WorktreesPerRepo, budget.FixtureProfile.CleanableWorktreesPerRepo)
 	return nil
 }
 
 func validateBudget(budget budgetFile) error {
 	if budget.FixtureProfile.Repos < 1 || budget.FixtureProfile.WorktreesPerRepo < 2 {
 		return errors.New("fixture_profile requires at least 1 repository and 2 worktrees per repository")
+	}
+	if budget.FixtureProfile.CleanableWorktreesPerRepo < 1 || budget.FixtureProfile.CleanableWorktreesPerRepo >= budget.FixtureProfile.WorktreesPerRepo {
+		return fmt.Errorf("fixture_profile cleanable_worktrees_per_repo must be between 1 and %d", budget.FixtureProfile.WorktreesPerRepo-1)
 	}
 	if len(budget.BenchmarkCommand) == 0 {
 		return errors.New("benchmark_command is required")

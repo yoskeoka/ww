@@ -834,6 +834,67 @@ func TestCreateAndRemoveRunLifecycleHooksWithContext(t *testing.T) {
 	}
 }
 
+func TestPreviewRemoveMatchesDryRunRemoveFromListSnapshot(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &git.Runner{Dir: repo}
+	mgr := &Manager{
+		Git: runner,
+		Config: Config{
+			DefaultBase:    "main",
+			PreRemoveHook:  "before-remove",
+			PostRemoveHook: "after-remove",
+		},
+		RepoDir: repo,
+	}
+	if _, _, err := mgr.Create("feat/preview", CreateOpts{}); err != nil {
+		t.Fatal(err)
+	}
+
+	infos, err := mgr.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot WorktreeInfo
+	for _, info := range infos {
+		if info.Branch == "feat/preview" {
+			snapshot = info
+			break
+		}
+	}
+	if snapshot.WorktreeIndex < 1 {
+		t.Fatalf("List snapshot missing worktree index: %#v", snapshot)
+	}
+
+	wantResult, wantLog, err := mgr.Remove("feat/preview", RemoveOpts{DryRun: true, KeepBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotResult, gotLog, err := mgr.PreviewRemove(snapshot, RemoveOpts{DryRun: true, KeepBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *gotResult != *wantResult {
+		t.Fatalf("PreviewRemove result = %#v, want %#v", gotResult, wantResult)
+	}
+	if strings.Join(gotLog, "\n") != strings.Join(wantLog, "\n") {
+		t.Fatalf("PreviewRemove log = %q, want %q", gotLog, wantLog)
+	}
+}
+
+func TestPreviewRemoveRejectsInvalidSnapshot(t *testing.T) {
+	mgr := &Manager{}
+	for _, info := range []WorktreeInfo{
+		{Path: "/repo", Branch: "main", Main: true, WorktreeIndex: 1},
+		{Path: "/repo", WorktreeIndex: 1},
+		{Path: "/repo", Branch: "bad branch", WorktreeIndex: 1},
+		{Path: "/repo", Branch: "feat/valid"},
+	} {
+		if _, _, err := mgr.PreviewRemove(info, RemoveOpts{DryRun: true}); err == nil {
+			t.Fatalf("PreviewRemove(%#v) error = nil, want rejection", info)
+		}
+	}
+}
+
 func TestCreateSandboxRelativeEscapeRejected(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(repo, 0755); err != nil {

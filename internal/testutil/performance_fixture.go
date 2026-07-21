@@ -11,16 +11,18 @@ import (
 // command-boundary performance benchmarks. Increasing either value makes a
 // regression visible without changing the benchmark implementation.
 type PerformanceFixtureOptions struct {
-	Repos            int
-	WorktreesPerRepo int
-	PatchHeavy       bool
+	Repos                     int
+	WorktreesPerRepo          int
+	CleanableWorktreesPerRepo int
+	PatchHeavy                bool
 }
 
 // DefaultPerformanceFixtureOptions is deliberately large enough to exercise
 // workspace discovery, per-repository status calculation, and remote checks.
 var DefaultPerformanceFixtureOptions = PerformanceFixtureOptions{
-	Repos:            6,
-	WorktreesPerRepo: 5,
+	Repos:                     6,
+	WorktreesPerRepo:          5,
+	CleanableWorktreesPerRepo: 1,
 }
 
 // PerformanceFixtureOptionsFromEnv applies optional benchmark-only scale
@@ -34,6 +36,7 @@ func PerformanceFixtureOptionsFromEnv() (PerformanceFixtureOptions, error) {
 	}{
 		{"WW_PERF_REPOS", func(value int) { opts.Repos = value }},
 		{"WW_PERF_WORKTREES_PER_REPO", func(value int) { opts.WorktreesPerRepo = value }},
+		{"WW_PERF_CLEANABLE_WORKTREES_PER_REPO", func(value int) { opts.CleanableWorktreesPerRepo = value }},
 	} {
 		value := os.Getenv(setting.name)
 		if value == "" {
@@ -54,6 +57,9 @@ func PerformanceFixtureOptionsFromEnv() (PerformanceFixtureOptions, error) {
 	}
 	if opts.WorktreesPerRepo < 2 {
 		return PerformanceFixtureOptions{}, fmt.Errorf("WW_PERF_WORKTREES_PER_REPO must be at least 2 to include merged and upstream-tracking branches")
+	}
+	if opts.CleanableWorktreesPerRepo < 1 || opts.CleanableWorktreesPerRepo >= opts.WorktreesPerRepo {
+		return PerformanceFixtureOptions{}, fmt.Errorf("WW_PERF_CLEANABLE_WORKTREES_PER_REPO must be between 1 and %d to retain an upstream-tracking branch", opts.WorktreesPerRepo-1)
 	}
 	return opts, nil
 }
@@ -79,8 +85,8 @@ func (f *PerformanceFixture) Cleanup() error {
 // least one pushed, upstream-tracking active worktree. The optional PatchHeavy
 // profile makes those secondary branches squash-equivalent to main.
 func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*PerformanceFixture, error) {
-	if opts.Repos < 1 || opts.WorktreesPerRepo < 2 {
-		return nil, fmt.Errorf("invalid performance fixture scale: repos=%d worktrees_per_repo=%d", opts.Repos, opts.WorktreesPerRepo)
+	if opts.Repos < 1 || opts.WorktreesPerRepo < 2 || opts.CleanableWorktreesPerRepo < 1 || opts.CleanableWorktreesPerRepo >= opts.WorktreesPerRepo {
+		return nil, fmt.Errorf("invalid performance fixture scale: repos=%d worktrees_per_repo=%d cleanable_worktrees_per_repo=%d", opts.Repos, opts.WorktreesPerRepo, opts.CleanableWorktreesPerRepo)
 	}
 
 	base, err := env.MkdirTemp("ww-performance")
@@ -131,8 +137,8 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 		secondaryBranches := make([]string, 0, opts.WorktreesPerRepo-1)
 		for worktreeIndex := 0; worktreeIndex < opts.WorktreesPerRepo; worktreeIndex++ {
 			branch := fmt.Sprintf("feat/active-%d", worktreeIndex)
-			if worktreeIndex == 0 {
-				branch = "feat/merged"
+			if worktreeIndex < opts.CleanableWorktreesPerRepo {
+				branch = fmt.Sprintf("feat/merged-%d", worktreeIndex)
 			}
 			worktreePath := filepath.Join(base, "worktrees", fmt.Sprintf("%s-%d", repoName, worktreeIndex))
 			if err := env.MkdirAll(filepath.Dir(worktreePath)); err != nil {
@@ -157,7 +163,7 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 			} else if _, err := env.Git(worktreePath, "commit", "--allow-empty", "-m", "fixture "+branch); err != nil {
 				return failure(fmt.Errorf("commit %s/%s: %w", repoName, branch, err))
 			}
-			if worktreeIndex == 0 {
+			if worktreeIndex < opts.CleanableWorktreesPerRepo {
 				if _, err := env.Git(repoPath, "merge", "--no-ff", branch, "-m", "merge fixture branch"); err != nil {
 					return failure(fmt.Errorf("merge %s/%s: %w", repoName, branch, err))
 				}
@@ -199,5 +205,5 @@ func expectedCleanable(opts PerformanceFixtureOptions) int {
 	if opts.PatchHeavy {
 		return opts.Repos * opts.WorktreesPerRepo
 	}
-	return opts.Repos
+	return opts.Repos * opts.CleanableWorktreesPerRepo
 }

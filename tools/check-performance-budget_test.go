@@ -62,7 +62,7 @@ func writeBudget(t *testing.T, limit int) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "budget.json")
 	content := fmt.Sprintf(`{
-  "fixture_profile": {"repos": 2, "worktrees_per_repo": 2},
+  "fixture_profile": {"repos": 2, "worktrees_per_repo": 2, "cleanable_worktrees_per_repo": 1},
   "benchmark_command": ["go", "test"],
   "repetitions": 1,
   "benchmarks": {
@@ -75,6 +75,13 @@ func writeBudget(t *testing.T, limit int) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestValidateBudgetRejectsInvalidCleanableDensity(t *testing.T) {
+	err := validateBudget(budgetFile{FixtureProfile: fixtureProfile{Repos: 1, WorktreesPerRepo: 2, CleanableWorktreesPerRepo: 2}})
+	if err == nil || !strings.Contains(err.Error(), "cleanable_worktrees_per_repo") {
+		t.Fatalf("validateBudget() error = %v, want cleanable density validation", err)
+	}
 }
 
 func benchmarkOutput(list, clean int) string {

@@ -81,6 +81,9 @@ type WorktreeInfo struct {
 	Main         bool   `json:"main,omitempty"`
 	Created      bool   `json:"created,omitempty"`
 	Base         string `json:"base,omitempty"`
+	// WorktreeIndex is the one-based position from git worktree list. It is
+	// retained for dry-run lifecycle-hook previews and is not CLI output.
+	WorktreeIndex int `json:"-"`
 }
 
 type baseRefInfo struct {
@@ -580,17 +583,18 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 	}
 
 	infos := make([]WorktreeInfo, 0, len(entries))
-	for _, e := range entries {
+	for entryIndex, e := range entries {
 		status := resolveStatus(e, mergedSet, branchRemote, remoteBranches)
 		infos = append(infos, WorktreeInfo{
-			Path:         e.Path,
-			Branch:       e.Branch,
-			Repo:         repoName,
-			Status:       status,
-			StatusDetail: baseInfo.StatusDetail,
-			Head:         e.Head,
-			Bare:         e.Bare,
-			Main:         e.Main,
+			Path:          e.Path,
+			Branch:        e.Branch,
+			Repo:          repoName,
+			Status:        status,
+			StatusDetail:  baseInfo.StatusDetail,
+			Head:          e.Head,
+			Bare:          e.Bare,
+			Main:          e.Main,
+			WorktreeIndex: entryIndex + 1,
 		})
 	}
 	return infos, nil
@@ -607,14 +611,15 @@ func (m *Manager) listRepoFast(repoName, repoPath string) ([]WorktreeInfo, error
 		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
 	}
 	infos := make([]WorktreeInfo, 0, len(entries))
-	for _, e := range entries {
+	for entryIndex, e := range entries {
 		infos = append(infos, WorktreeInfo{
-			Path:   e.Path,
-			Branch: e.Branch,
-			Repo:   repoName,
-			Head:   e.Head,
-			Bare:   e.Bare,
-			Main:   e.Main,
+			Path:          e.Path,
+			Branch:        e.Branch,
+			Repo:          repoName,
+			Head:          e.Head,
+			Bare:          e.Bare,
+			Main:          e.Main,
+			WorktreeIndex: entryIndex + 1,
 		})
 	}
 	return infos, nil
@@ -675,7 +680,7 @@ func unresolvedCreateBaseError(err error) error {
 // with the supplied detail string.
 func listRepoUnknown(entries []git.WorktreeEntry, repoName, detail string) []WorktreeInfo {
 	infos := make([]WorktreeInfo, 0, len(entries))
-	for _, e := range entries {
+	for entryIndex, e := range entries {
 		status := StatusUnknown
 		statusDetail := detail
 		if e.Main || e.Branch == "" {
@@ -683,14 +688,15 @@ func listRepoUnknown(entries []git.WorktreeEntry, repoName, detail string) []Wor
 			statusDetail = ""
 		}
 		infos = append(infos, WorktreeInfo{
-			Path:         e.Path,
-			Branch:       e.Branch,
-			Repo:         repoName,
-			Status:       status,
-			StatusDetail: statusDetail,
-			Head:         e.Head,
-			Bare:         e.Bare,
-			Main:         e.Main,
+			Path:          e.Path,
+			Branch:        e.Branch,
+			Repo:          repoName,
+			Status:        status,
+			StatusDetail:  statusDetail,
+			Head:          e.Head,
+			Bare:          e.Bare,
+			Main:          e.Main,
+			WorktreeIndex: entryIndex + 1,
 		})
 	}
 	return infos
@@ -769,24 +775,11 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 		return nil, nil, fmt.Errorf("cannot remove the main worktree")
 	}
 
-	result := &RemoveResult{Path: found.Path, Branch: branch}
-
 	if opts.DryRun {
-		var dryRunLog []string
-		if m.Config.PreRemoveHook != "" {
-			dryRunLog = append(dryRunLog, fmt.Sprintf("Would run pre_remove_hook: %s", m.Config.PreRemoveHook))
-		}
-		dryRunLog = append(dryRunLog, fmt.Sprintf("Would remove worktree at %s", found.Path))
-		if !opts.KeepBranch {
-			dryRunLog = append(dryRunLog, fmt.Sprintf("Would delete branch %s", branch))
-		}
-		if m.Config.PostRemoveHook != "" {
-			dryRunLog = append(dryRunLog, fmt.Sprintf("Would run post_remove_hook: %s", m.Config.PostRemoveHook))
-		}
-		result.Removed = true
-		result.BranchDeleted = !opts.KeepBranch
-		return result, dryRunLog, nil
+		return m.PreviewRemove(WorktreeInfo{Path: found.Path, Branch: branch, WorktreeIndex: worktreeIndex}, opts)
 	}
+
+	result := &RemoveResult{Path: found.Path, Branch: branch}
 
 	m.runLifecycleHook(lifecycleHookPreRemove, found.Path, branch, worktreeIndex, hookExecOpts{
 		Output:   opts.Output,
@@ -815,6 +808,38 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 	})
 
 	return result, nil, nil
+}
+
+// PreviewRemove renders a dry-run removal from an authoritative List snapshot.
+// It intentionally performs no Git lookup and must only be used for previews;
+// Remove retains a fresh lookup before every real mutation.
+func (m *Manager) PreviewRemove(info WorktreeInfo, opts RemoveOpts) (*RemoveResult, []string, error) {
+	if info.Main {
+		return nil, nil, fmt.Errorf("cannot remove the main worktree")
+	}
+	if info.Branch == "" {
+		return nil, nil, fmt.Errorf("cannot remove worktree without a branch")
+	}
+	if err := validate.BranchName(info.Branch); err != nil {
+		return nil, nil, err
+	}
+	if info.Path == "" || info.WorktreeIndex < 1 {
+		return nil, nil, fmt.Errorf("invalid worktree snapshot for branch %q", info.Branch)
+	}
+
+	result := &RemoveResult{Path: info.Path, Branch: info.Branch, Removed: true, BranchDeleted: !opts.KeepBranch}
+	dryRunLog := make([]string, 0, 4)
+	if m.Config.PreRemoveHook != "" {
+		dryRunLog = append(dryRunLog, fmt.Sprintf("Would run pre_remove_hook: %s", m.Config.PreRemoveHook))
+	}
+	dryRunLog = append(dryRunLog, fmt.Sprintf("Would remove worktree at %s", info.Path))
+	if !opts.KeepBranch {
+		dryRunLog = append(dryRunLog, fmt.Sprintf("Would delete branch %s", info.Branch))
+	}
+	if m.Config.PostRemoveHook != "" {
+		dryRunLog = append(dryRunLog, fmt.Sprintf("Would run post_remove_hook: %s", m.Config.PostRemoveHook))
+	}
+	return result, dryRunLog, nil
 }
 
 func submoduleWorktreeRemoveError(worktreePath, repoDir string, err error) error {
