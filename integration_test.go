@@ -371,6 +371,27 @@ func TestListWorkspaceMode(t *testing.T) {
 	if !strings.Contains(out, "STATUS") {
 		t.Fatalf("workspace list should include STATUS column: %s", out)
 	}
+	if strings.Index(out, "repo1") > strings.Index(out, "repo2") {
+		t.Fatalf("workspace text output should retain repository order: %s", out)
+	}
+
+	jsonOut, err := runWW(t, ws.RootDir, "list", "--json")
+	if err != nil {
+		t.Fatalf("ww list --json from workspace root: %v\n%s", err, jsonOut)
+	}
+	previousRepo := ""
+	for _, line := range strings.Split(strings.TrimSpace(jsonOut), "\n") {
+		var entry struct {
+			Repo string `json:"repo"`
+		}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("invalid workspace list JSON %q: %v", line, err)
+		}
+		if previousRepo == "repo2" && entry.Repo == "repo1" {
+			t.Fatalf("workspace JSON output should retain repository order: %s", jsonOut)
+		}
+		previousRepo = entry.Repo
+	}
 }
 
 func TestListWorkspaceModeIgnoresHelperDirsAndChildSymlinks(t *testing.T) {
@@ -712,7 +733,35 @@ func TestCleanWorkspaceModeFromRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := runWW(t, ws.RootDir, "clean")
+	out, err := runWW(t, ws.RootDir, "clean", "--dry-run")
+	if err != nil {
+		t.Fatalf("ww clean --dry-run from workspace root: %v\n%s", err, out)
+	}
+	first := "Would remove worktree at " + path.Join(ws.RootDir, ".worktrees", "repo1@feat-root1-clean")
+	second := "Would remove worktree at " + path.Join(ws.RootDir, ".worktrees", "repo2@feat-root2-clean")
+	if !strings.Contains(out, first) || !strings.Contains(out, second) || strings.Index(out, first) > strings.Index(out, second) {
+		t.Fatalf("workspace clean text output should retain every target in repository order: %s", out)
+	}
+
+	jsonOut, err := runWW(t, ws.RootDir, "clean", "--dry-run", "--json")
+	if err != nil {
+		t.Fatalf("ww clean --dry-run --json from workspace root: %v\n%s", err, jsonOut)
+	}
+	var repos []string
+	for _, line := range strings.Split(strings.TrimSpace(jsonOut), "\n") {
+		var entry struct {
+			Repo string `json:"repo"`
+		}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("invalid workspace clean JSON %q: %v", line, err)
+		}
+		repos = append(repos, entry.Repo)
+	}
+	if got, want := strings.Join(repos, ","), "repo1,repo2"; got != want {
+		t.Fatalf("workspace clean JSON repositories = %q, want %q", got, want)
+	}
+
+	out, err = runWW(t, ws.RootDir, "clean")
 	if err != nil {
 		t.Fatalf("ww clean from workspace root: %v\n%s", err, out)
 	}

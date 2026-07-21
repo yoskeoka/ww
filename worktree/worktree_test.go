@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -76,6 +77,132 @@ func TestWorktreePathSandboxSingleRepoDefault(t *testing.T) {
 	want := filepath.Join("/tmp/project", ".worktrees", "project@feat-my-feature")
 	if got != want {
 		t.Fatalf("WorktreePath = %q, want %q", got, want)
+	}
+}
+
+func TestListWorkspaceReposBoundsConcurrencyAndPreservesOrder(t *testing.T) {
+	repos := make([]workspace.Repo, 6)
+	for i := range repos {
+		repos[i] = workspace.Repo{Name: fmt.Sprintf("repo%d", i), Path: fmt.Sprintf("/tmp/repo%d", i)}
+	}
+
+	var active atomic.Int32
+	var maximum atomic.Int32
+	started := make(chan string, workspaceListWorkers)
+	release := make(chan struct{})
+	type result struct {
+		infos []WorktreeInfo
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		infos, err := listWorkspaceRepos(repos, func(name, _ string) ([]WorktreeInfo, error) {
+			running := active.Add(1)
+			for {
+				previous := maximum.Load()
+				if running <= previous || maximum.CompareAndSwap(previous, running) {
+					break
+				}
+			}
+			started <- name
+			<-release
+			active.Add(-1)
+			return []WorktreeInfo{{Repo: name}}, nil
+		})
+		done <- result{infos: infos, err: err}
+	}()
+
+	for range workspaceListWorkers {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("workspace repository enumeration did not start four workers")
+		}
+	}
+	if got := maximum.Load(); got != workspaceListWorkers {
+		t.Fatalf("maximum concurrent repository enumerations = %d, want %d", got, workspaceListWorkers)
+	}
+
+	close(release)
+	got := <-done
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if len(got.infos) != len(repos) {
+		t.Fatalf("listed %d worktrees, want %d", len(got.infos), len(repos))
+	}
+	for i, info := range got.infos {
+		if want := repos[i].Name; info.Repo != want {
+			t.Fatalf("result %d repo = %q, want %q", i, info.Repo, want)
+		}
+	}
+}
+
+func TestListWorkspaceReposReturnsEarliestErrorWithoutPartialResults(t *testing.T) {
+	first := errors.New("first repository failed")
+	later := errors.New("later repository failed")
+	repos := []workspace.Repo{
+		{Name: "repo0", Path: "/tmp/repo0"},
+		{Name: "repo1", Path: "/tmp/repo1"},
+		{Name: "repo2", Path: "/tmp/repo2"},
+		{Name: "repo3", Path: "/tmp/repo3"},
+	}
+
+	infos, err := listWorkspaceRepos(repos, func(name, _ string) ([]WorktreeInfo, error) {
+		switch name {
+		case "repo1":
+			return nil, first
+		case "repo3":
+			return nil, later
+		default:
+			return []WorktreeInfo{{Repo: name}}, nil
+		}
+	})
+	if !errors.Is(err, first) {
+		t.Fatalf("listWorkspaceRepos() error = %v, want earliest error %v", err, first)
+	}
+	if infos != nil {
+		t.Fatalf("listWorkspaceRepos() infos = %#v, want no partial results", infos)
+	}
+}
+
+func TestListWorkspaceReposEmpty(t *testing.T) {
+	called := false
+	infos, err := listWorkspaceRepos(nil, func(string, string) ([]WorktreeInfo, error) {
+		called = true
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("empty workspace should not enumerate repositories")
+	}
+	if infos != nil {
+		t.Fatalf("empty workspace infos = %#v, want nil", infos)
+	}
+}
+
+func TestListSingleRepoDoesNotUseWorkspaceScheduler(t *testing.T) {
+	var calls int
+	mgr := &Manager{
+		RepoDir:   "/tmp/single",
+		Workspace: &workspace.Workspace{Mode: workspace.ModeSingleRepo},
+		listRepoFn: func(name, repoPath string) ([]WorktreeInfo, error) {
+			calls++
+			if name != "single" || repoPath != "/tmp/single" {
+				t.Fatalf("single-repo list target = (%q, %q)", name, repoPath)
+			}
+			return []WorktreeInfo{{Repo: name}}, nil
+		},
+	}
+
+	infos, err := mgr.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || len(infos) != 1 || infos[0].Repo != "single" {
+		t.Fatalf("single-repo List() = %#v after %d calls, want one direct repository result", infos, calls)
 	}
 }
 
