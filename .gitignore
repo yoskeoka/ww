@@ -6,5 +6,8 @@
 # Build output
 /dist/
 
+# Local workflow state
+/.local/
+
 # OS files
 .DS_Store

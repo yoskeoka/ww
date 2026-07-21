@@ -1,12 +1,14 @@
 {
   "fixture_profile": {
     "repos": 6,
-    "worktrees_per_repo": 5
+    "worktrees_per_repo": 5,
+    "cleanable_worktrees_per_repo": 1
   },
   "benchmark_command": [
     "env",
     "WW_PERF_REPOS=6",
     "WW_PERF_WORKTREES_PER_REPO=5",
+    "WW_PERF_CLEANABLE_WORKTREES_PER_REPO=1",
     "go",
     "test",
     "-run",

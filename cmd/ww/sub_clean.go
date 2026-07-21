@@ -65,32 +65,51 @@ func listCleanableWorktrees(mgr *worktree.Manager) ([]worktree.WorktreeInfo, err
 
 func executeCleanWorktrees(mgr *worktree.Manager, infos []worktree.WorktreeInfo, glOpts *globalOpts, force bool) error {
 	var failures []string
+	managers := make(map[string]*worktree.Manager)
 	for _, info := range infos {
-		repoMgr, err := managerForRepo(mgr, info.Repo)
-		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
-			if glOpts.json {
-				if outErr := outputJSON(glOpts.output, cleanResult{
-					Repo:   info.Repo,
-					Path:   info.Path,
-					Branch: info.Branch,
-					Status: info.Status,
-					Error:  err.Error(),
-				}); outErr != nil {
-					return outErr
-				}
-			} else {
-				fmt.Fprintf(glOpts.output, "Failed to clean %s at %s: %v\n", info.Branch, info.Path, err)
+		repoMgr, ok := managers[info.Repo]
+		if !ok {
+			var err error
+			repoMgr, err = managerForRepo(mgr, info.Repo)
+			if err == nil {
+				managers[info.Repo] = repoMgr
 			}
-			continue
+			if err != nil {
+				failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
+				if glOpts.json {
+					if outErr := outputJSON(glOpts.output, cleanResult{
+						Repo:   info.Repo,
+						Path:   info.Path,
+						Branch: info.Branch,
+						Status: info.Status,
+						Error:  err.Error(),
+					}); outErr != nil {
+						return outErr
+					}
+				} else {
+					fmt.Fprintf(glOpts.output, "Failed to clean %s at %s: %v\n", info.Branch, info.Path, err)
+				}
+				continue
+			}
 		}
 
-		result, dryLog, err := repoMgr.Remove(info.Branch, worktree.RemoveOpts{
-			Force:    force,
-			DryRun:   glOpts.dryRun,
-			Output:   glOpts.output,
-			TextMode: !glOpts.json,
-		})
+		var result *worktree.RemoveResult
+		var dryLog []string
+		var err error
+		if glOpts.dryRun {
+			result, dryLog, err = repoMgr.PreviewRemove(info, worktree.RemoveOpts{
+				Force:    force,
+				DryRun:   true,
+				Output:   glOpts.output,
+				TextMode: !glOpts.json,
+			})
+		} else {
+			result, dryLog, err = repoMgr.Remove(info.Branch, worktree.RemoveOpts{
+				Force:    force,
+				Output:   glOpts.output,
+				TextMode: !glOpts.json,
+			})
+		}
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
 			if glOpts.json {
