@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/yoskeoka/ww/git"
 	"github.com/yoskeoka/ww/validate"
@@ -45,6 +46,10 @@ type Manager struct {
 	Config    Config
 	RepoDir   string // absolute path to the main repository
 	Workspace *workspace.Workspace
+
+	// listRepoFn is an internal seam for testing workspace scheduling without
+	// creating repositories or Git subprocesses.
+	listRepoFn func(repoName, repoPath string) ([]WorktreeInfo, error)
 }
 
 // CreateOpts configures worktree creation.
@@ -355,7 +360,7 @@ func (m *Manager) List() ([]WorktreeInfo, error) {
 	if m.isWorkspaceMode() {
 		return m.listWorkspace()
 	}
-	return m.listRepo(filepath.Base(m.RepoDir), m.RepoDir)
+	return m.listRepoFor(filepath.Base(m.RepoDir), m.RepoDir)
 }
 
 // FindByName returns the worktree whose branch matches name.
@@ -442,15 +447,62 @@ func (m *Manager) MostRecent(withStatus bool) (*WorktreeInfo, error) {
 }
 
 func (m *Manager) listWorkspace() ([]WorktreeInfo, error) {
+	return listWorkspaceRepos(m.Workspace.Repos, m.listRepoFor)
+}
+
+const workspaceListWorkers = 4
+
+type repoListResult struct {
+	infos []WorktreeInfo
+	err   error
+}
+
+func listWorkspaceRepos(repos []workspace.Repo, listRepo func(string, string) ([]WorktreeInfo, error)) ([]WorktreeInfo, error) {
+	if len(repos) == 0 {
+		return nil, nil
+	}
+
+	results := make([]repoListResult, len(repos))
+	jobs := make(chan int)
+	workers := workspaceListWorkers
+	if len(repos) < workers {
+		workers = len(repos)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				repo := repos[index]
+				infos, err := listRepo(repo.Name, repo.Path)
+				results[index] = repoListResult{infos: infos, err: err}
+			}
+		}()
+	}
+
+	for index := range repos {
+		jobs <- index
+	}
+	close(jobs)
+	wg.Wait()
+
 	var infos []WorktreeInfo
-	for _, repo := range m.Workspace.Repos {
-		repoInfos, err := m.listRepo(repo.Name, repo.Path)
-		if err != nil {
-			return nil, err
+	for _, result := range results {
+		if result.err != nil {
+			return nil, result.err
 		}
-		infos = append(infos, repoInfos...)
+		infos = append(infos, result.infos...)
 	}
 	return infos, nil
+}
+
+func (m *Manager) listRepoFor(repoName, repoPath string) ([]WorktreeInfo, error) {
+	if m.listRepoFn != nil {
+		return m.listRepoFn(repoName, repoPath)
+	}
+	return m.listRepo(repoName, repoPath)
 }
 
 func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
