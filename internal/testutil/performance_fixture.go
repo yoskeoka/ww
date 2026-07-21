@@ -13,6 +13,7 @@ import (
 type PerformanceFixtureOptions struct {
 	Repos            int
 	WorktreesPerRepo int
+	PatchHeavy       bool
 }
 
 // DefaultPerformanceFixtureOptions is deliberately large enough to exercise
@@ -44,6 +45,13 @@ func PerformanceFixtureOptionsFromEnv() (PerformanceFixtureOptions, error) {
 		}
 		setting.set(n)
 	}
+	if value := os.Getenv("WW_PERF_PATCH_HEAVY"); value != "" {
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
+			return PerformanceFixtureOptions{}, fmt.Errorf("WW_PERF_PATCH_HEAVY must be a boolean, got %q", value)
+		}
+		opts.PatchHeavy = enabled
+	}
 	if opts.WorktreesPerRepo < 2 {
 		return PerformanceFixtureOptions{}, fmt.Errorf("WW_PERF_WORKTREES_PER_REPO must be at least 2 to include merged and upstream-tracking branches")
 	}
@@ -68,7 +76,8 @@ func (f *PerformanceFixture) Cleanup() error {
 
 // NewPerformanceFixture creates the named benchmark profile using HostEnv's
 // isolated Git configuration. Every repository has one merged worktree and at
-// least one pushed, upstream-tracking active worktree.
+// least one pushed, upstream-tracking active worktree. The optional PatchHeavy
+// profile makes those secondary branches squash-equivalent to main.
 func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*PerformanceFixture, error) {
 	if opts.Repos < 1 || opts.WorktreesPerRepo < 2 {
 		return nil, fmt.Errorf("invalid performance fixture scale: repos=%d worktrees_per_repo=%d", opts.Repos, opts.WorktreesPerRepo)
@@ -119,6 +128,7 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 			return failure(fmt.Errorf("set origin HEAD for %s: %w", repoName, err))
 		}
 
+		secondaryBranches := make([]string, 0, opts.WorktreesPerRepo-1)
 		for worktreeIndex := 0; worktreeIndex < opts.WorktreesPerRepo; worktreeIndex++ {
 			branch := fmt.Sprintf("feat/active-%d", worktreeIndex)
 			if worktreeIndex == 0 {
@@ -131,7 +141,20 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 			if _, err := env.Git(repoPath, "worktree", "add", "-b", branch, worktreePath, "main"); err != nil {
 				return failure(fmt.Errorf("add worktree %s/%s: %w", repoName, branch, err))
 			}
-			if _, err := env.Git(worktreePath, "commit", "--allow-empty", "-m", "fixture "+branch); err != nil {
+			if opts.PatchHeavy && worktreeIndex > 0 {
+				for commitIndex := 1; commitIndex <= 2; commitIndex++ {
+					fileName := fmt.Sprintf("%s-%d.txt", branch[5:], commitIndex)
+					if err := env.WriteFile(filepath.Join(worktreePath, fileName), fmt.Sprintf("%s change %d\\n", branch, commitIndex)); err != nil {
+						return failure(fmt.Errorf("write %s/%s change %d: %w", repoName, branch, commitIndex, err))
+					}
+					if _, err := env.Git(worktreePath, "add", fileName); err != nil {
+						return failure(fmt.Errorf("add %s/%s change %d: %w", repoName, branch, commitIndex, err))
+					}
+					if _, err := env.Git(worktreePath, "commit", "-m", fmt.Sprintf("fixture %s change %d", branch, commitIndex)); err != nil {
+						return failure(fmt.Errorf("commit %s/%s change %d: %w", repoName, branch, commitIndex, err))
+					}
+				}
+			} else if _, err := env.Git(worktreePath, "commit", "--allow-empty", "-m", "fixture "+branch); err != nil {
 				return failure(fmt.Errorf("commit %s/%s: %w", repoName, branch, err))
 			}
 			if worktreeIndex == 0 {
@@ -146,6 +169,20 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 			if _, err := env.Git(worktreePath, "push", "-u", "origin", branch); err != nil {
 				return failure(fmt.Errorf("push active branch %s/%s: %w", repoName, branch, err))
 			}
+			secondaryBranches = append(secondaryBranches, branch)
+		}
+		if opts.PatchHeavy {
+			for _, branch := range secondaryBranches {
+				if _, err := env.Git(repoPath, "merge", "--squash", branch); err != nil {
+					return failure(fmt.Errorf("squash merge %s/%s: %w", repoName, branch, err))
+				}
+				if _, err := env.Git(repoPath, "commit", "-m", "squash fixture "+branch); err != nil {
+					return failure(fmt.Errorf("commit squash merge %s/%s: %w", repoName, branch, err))
+				}
+			}
+			if _, err := env.Git(repoPath, "push", "origin", "main"); err != nil {
+				return failure(fmt.Errorf("push patch-heavy main for %s: %w", repoName, err))
+			}
 		}
 	}
 
@@ -153,7 +190,14 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 		Root:              workspaceRoot,
 		StartDir:          filepath.Join(workspaceRoot, "repo1"),
 		ExpectedEntries:   opts.Repos * (opts.WorktreesPerRepo + 1),
-		ExpectedCleanable: opts.Repos,
+		ExpectedCleanable: expectedCleanable(opts),
 		cleanupRoot:       base,
 	}, nil
+}
+
+func expectedCleanable(opts PerformanceFixtureOptions) int {
+	if opts.PatchHeavy {
+		return opts.Repos * opts.WorktreesPerRepo
+	}
+	return opts.Repos
 }

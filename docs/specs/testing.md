@@ -17,6 +17,10 @@ The named fixture profile, benchmark command, repetition count, and separate per
 
 Pull requests run the performance budget as a dedicated advisory job. A budget exceedance makes that job red and prints the observed value, configured budget, and reproduction command; it prompts investigation of the candidate change or a cumulative regression, but is not a required branch-protection check. The job summary includes the benchmark comparison and identifies whether the configured budget was met, exceeded, or could not be evaluated. The normal `test` job remains independent. If the initial PR measurement is consistently slower than one minute, a separate issue must consider daily measurement and automatic issue creation rather than changing this contract silently.
 
+### Patch-equivalence investigation profile
+
+Set `WW_PERF_PATCH_HEAVY=1` with the normal scale overrides to create a supplementary, non-budgeted fixture. In this profile, secondary worktree branches each contain two non-empty commits whose combined changes are squash-integrated into the base after the branches are created. This deliberately bypasses the commit-level `git cherry` fast path and exercises aggregate patch comparison across branches sharing a merge-base. It is for same-host before/after evidence only: it does not alter the default fixture, benchmark names, repetition count, or CI budgets.
+
 ## Host-Based Integration Harness
 
 Integration tests execute `ww` and supporting shell commands directly on the host machine. Each test gets its own temporary directory via `os.MkdirTemp` for filesystem isolation.

@@ -245,6 +245,78 @@ func TestPatchEquivalentBranches(t *testing.T) {
 	}
 }
 
+func TestPatchEquivalentBranchesCachesBasePatchIDsByMergeBase(t *testing.T) {
+	repo := setupGitRepo(t)
+	runner := &Runner{Dir: repo}
+
+	commitBranch := func(branch string) {
+		t.Helper()
+		if _, err := runner.Run("checkout", "-b", branch); err != nil {
+			t.Fatal(err)
+		}
+		for i := 1; i <= 2; i++ {
+			file := fmt.Sprintf("%s-%d.txt", branch[5:], i)
+			writeGitFile(t, repo, file, fmt.Sprintf("%s change %d\\n", branch, i))
+			if _, err := runner.Run("add", file); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := runner.Run("commit", "-m", fmt.Sprintf("%s change %d", branch, i)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	squashMerge := func(branch string) {
+		t.Helper()
+		if _, err := runner.Run("checkout", "main"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runner.Run("-c", "merge.ff=true", "merge", "--squash", branch); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := runner.Run("commit", "-m", "squash "+branch); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The first two branches share a merge-base; the third starts after their
+	// squash merges and therefore requires its own cache entry.
+	commitBranch("feat/squash-one")
+	if _, err := runner.Run("checkout", "main"); err != nil {
+		t.Fatal(err)
+	}
+	commitBranch("feat/squash-two")
+	squashMerge("feat/squash-one")
+	squashMerge("feat/squash-two")
+	commitBranch("feat/squash-three")
+	squashMerge("feat/squash-three")
+
+	logPath := filepath.Join(t.TempDir(), "git-commands.log")
+	gitBin := filepath.Join(t.TempDir(), "recording-git")
+	escapedLogPath := strings.ReplaceAll(logPath, "'", "'\\''")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + escapedLogPath + "'\nexec git \"$@\"\n"
+	if err := os.WriteFile(gitBin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner.GitBin = gitBin
+	branches, err := runner.PatchEquivalentBranches("main", []string{"feat/squash-one", "feat/squash-two", "feat/squash-three"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(branches) != 3 {
+		t.Fatalf("PatchEquivalentBranches = %v, want all squash branches", branches)
+	}
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(log), "rev-list "); got != 2 {
+		t.Fatalf("rev-list calls = %d, want 2 for two merge-bases\\n%s", got, log)
+	}
+	if got := strings.Count(string(log), "show --format= --patch "); got != 4 {
+		t.Fatalf("base commit patch-id calls = %d, want 4 cached base commits\\n%s", got, log)
+	}
+}
+
 func TestBranchRemote(t *testing.T) {
 	repo, remote := setupGitRepoWithRemote(t)
 	runner := &Runner{Dir: repo}

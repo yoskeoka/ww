@@ -155,9 +155,10 @@ func (r *Runner) MergedBranches(base string) ([]string, error) {
 // direct ancestor of base (for example after rebase/cherry-pick, or after a
 // typical squash merge that lands as a single commit on base).
 func (r *Runner) PatchEquivalentBranches(base string, branches []string) ([]string, error) {
+	state := patchEquivalenceState{basePatchIDs: make(map[string]map[string]struct{})}
 	integrated := make([]string, 0, len(branches))
 	for _, branch := range branches {
-		ok, err := r.branchPatchEquivalent(base, branch)
+		ok, err := r.branchPatchEquivalent(base, branch, &state)
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +169,14 @@ func (r *Runner) PatchEquivalentBranches(base string, branches []string) ([]stri
 	return integrated, nil
 }
 
-func (r *Runner) branchPatchEquivalent(base, branch string) (bool, error) {
+// patchEquivalenceState contains only data valid for one PatchEquivalentBranches
+// invocation. Repository refs can change between listings, so it must not outlive
+// the current command.
+type patchEquivalenceState struct {
+	basePatchIDs map[string]map[string]struct{}
+}
+
+func (r *Runner) branchPatchEquivalent(base, branch string, state *patchEquivalenceState) (bool, error) {
 	out, err := r.Run("cherry", base, branch)
 	if err != nil {
 		return false, fmt.Errorf("git cherry %s %s: %w", base, branch, err)
@@ -176,7 +184,7 @@ func (r *Runner) branchPatchEquivalent(base, branch string) (bool, error) {
 	if cherryOutputFullyIntegrated(out) {
 		return true, nil
 	}
-	return r.branchSquashEquivalent(base, branch)
+	return r.branchSquashEquivalent(base, branch, state)
 }
 
 func cherryOutputFullyIntegrated(output string) bool {
@@ -199,7 +207,7 @@ func cherryOutputFullyIntegrated(output string) bool {
 	return sawCommit
 }
 
-func (r *Runner) branchSquashEquivalent(base, branch string) (bool, error) {
+func (r *Runner) branchSquashEquivalent(base, branch string, state *patchEquivalenceState) (bool, error) {
 	mergeBase, err := r.Run("merge-base", base, branch)
 	if err != nil {
 		return false, fmt.Errorf("git merge-base %s %s: %w", base, branch, err)
@@ -213,10 +221,24 @@ func (r *Runner) branchSquashEquivalent(base, branch string) (bool, error) {
 		return false, nil
 	}
 
+	basePatchIDs, err := r.basePatchIDs(base, mergeBase, state)
+	if err != nil {
+		return false, fmt.Errorf("base patch-ids for %s while checking %s: %w", base, branch, err)
+	}
+	_, ok := basePatchIDs[branchPatchID]
+	return ok, nil
+}
+
+func (r *Runner) basePatchIDs(base, mergeBase string, state *patchEquivalenceState) (map[string]struct{}, error) {
+	if patchIDs, ok := state.basePatchIDs[mergeBase]; ok {
+		return patchIDs, nil
+	}
+
 	commits, err := r.Run("rev-list", mergeBase+".."+base)
 	if err != nil {
-		return false, fmt.Errorf("git rev-list %s..%s: %w", mergeBase, base, err)
+		return nil, fmt.Errorf("git rev-list %s..%s: %w", mergeBase, base, err)
 	}
+	patchIDs := make(map[string]struct{})
 	for _, commit := range strings.Split(commits, "\n") {
 		commit = strings.TrimSpace(commit)
 		if commit == "" {
@@ -224,13 +246,14 @@ func (r *Runner) branchSquashEquivalent(base, branch string) (bool, error) {
 		}
 		commitPatchID, err := r.diffPatchID("show", "--format=", "--patch", commit)
 		if err != nil {
-			return false, fmt.Errorf("base commit patch-id for %s on %s: %w", commit, base, err)
+			return nil, fmt.Errorf("base commit patch-id for %s on %s: %w", commit, base, err)
 		}
-		if commitPatchID != "" && commitPatchID == branchPatchID {
-			return true, nil
+		if commitPatchID != "" {
+			patchIDs[commitPatchID] = struct{}{}
 		}
 	}
-	return false, nil
+	state.basePatchIDs[mergeBase] = patchIDs
+	return patchIDs, nil
 }
 
 func (r *Runner) diffPatchID(args ...string) (string, error) {
