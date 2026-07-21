@@ -292,7 +292,9 @@ func TestPatchEquivalentBranchesCachesBasePatchIDsByMergeBase(t *testing.T) {
 
 	logPath := filepath.Join(t.TempDir(), "git-commands.log")
 	gitBin := filepath.Join(t.TempDir(), "recording-git")
-	if err := os.WriteFile(gitBin, []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> "+logPath+"\nexec git \"$@\"\n"), 0o755); err != nil {
+	escapedLogPath := strings.ReplaceAll(logPath, "'", "'\\''")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + escapedLogPath + "'\nexec git \"$@\"\n"
+	if err := os.WriteFile(gitBin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	runner.GitBin = gitBin
