@@ -1,13 +1,14 @@
-# Historical workflow artifact retention
+# Completed plan and local Markdown issue history retention
 
 > **Execution**: Use `/execute-task` to implement this plan. After implementation is complete, use `/review-task` to prepare and create the PR.
 
 ## Objective
 
-Remove completed plan and local-issue bodies from the checked-out repository to
-make normal code/task discovery active-only. Preserve auditability through the
-plan PR, implementation PR, and Git history rather than `done/` directories or
-long commit messages.
+Remove completed plan and local Markdown issue bodies from the checked-out
+repository to make normal code/task discovery active-only. Specifically remove
+`docs/exec-plan/done/` and `docs/issues/done/`, while preserving auditability
+through the plan PR, implementation PR, and Git history rather than long commit
+messages.
 
 ## Change map
 
