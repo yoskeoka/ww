@@ -136,7 +136,7 @@ func NewTopology(startDir string, sandbox bool, root, mainRoot, mode string, rep
 
 // ValidFor reports whether the hint still describes the current bounded tree.
 func (topology Topology) ValidFor(startDir string, sandbox bool) bool {
-	if topology.SchemaVersion != SchemaVersion || topology.Sandbox != sandbox || topology.Mode == "" {
+	if topology.SchemaVersion != SchemaVersion || topology.Sandbox != sandbox || (topology.Mode != "single-repo" && topology.Mode != "workspace") {
 		return false
 	}
 	startPath, ok := canonicalPath(startDir)

@@ -58,7 +58,9 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 	}
 	if opts.Cache != nil {
 		if topology, ok := opts.Cache.Load(absStart, opts.Sandbox); ok {
-			return workspaceFromTopology(topology)
+			if ws, err := workspaceFromTopology(topology); err == nil {
+				return ws, nil
+			}
 		}
 	}
 

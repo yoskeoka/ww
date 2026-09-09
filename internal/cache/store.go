@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -59,6 +60,10 @@ func (s *Store) Load(startDir string, sandbox bool) (Topology, bool) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&topology); err != nil {
+		return Topology{}, false
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
 		return Topology{}, false
 	}
 	if !topology.ValidFor(startPath, sandbox) {

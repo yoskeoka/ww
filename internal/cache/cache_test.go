@@ -70,6 +70,18 @@ func TestStoreTreatsCorruptUnknownAndChangedEntriesAsMisses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(path, append(data, []byte("JUNK")...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Load(root, false); ok {
+		t.Fatal("entry with trailing data unexpectedly loaded")
+	}
+
+	store.Save(topology)
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var tampered Topology
 	if err := json.Unmarshal(data, &tampered); err != nil {
 		t.Fatal(err)
@@ -84,6 +96,26 @@ func TestStoreTreatsCorruptUnknownAndChangedEntriesAsMisses(t *testing.T) {
 	}
 	if _, ok := store.Load(root, false); ok {
 		t.Fatal("unknown schema unexpectedly loaded")
+	}
+
+	store.Save(topology)
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &tampered); err != nil {
+		t.Fatal(err)
+	}
+	tampered.Mode = "unknown"
+	data, err = json.Marshal(tampered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Load(root, false); ok {
+		t.Fatal("unknown mode unexpectedly loaded")
 	}
 
 	store.Save(topology)
