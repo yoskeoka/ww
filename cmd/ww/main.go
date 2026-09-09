@@ -147,8 +147,10 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 		return nil, err
 	}
 	var discoveryCache cache.DiscoveryCache
+	var remoteCache worktree.RemoteBranchCache
 	if store := cache.New(); store != nil {
 		discoveryCache = store
+		remoteCache = store
 	}
 
 	sandboxMode := sandboxFlag
@@ -198,6 +200,7 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 			PreRemoveHook:  ctx.cfg.PreRemoveHook,
 			PostRemoveHook: ctx.cfg.PostRemoveHook,
 			Sandbox:        sandboxMode,
+			RemoteCache:    remoteCache,
 		},
 		RepoDir:   ctx.mainDir,
 		Workspace: ctx.ws,

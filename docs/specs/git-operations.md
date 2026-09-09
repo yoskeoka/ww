@@ -150,7 +150,20 @@ ref is configured.
 git ls-remote --heads <remote> <branch>
 ```
 
-Returns whether a remote branch exists by checking for matching `refs/heads/<branch>` output.
+The uncached status path may batch this operation as:
+
+```
+git ls-remote --heads <remote>
+```
+
+and checks matching `refs/heads/<branch>` output for each candidate. A
+successful complete response may be reused for up to 30 seconds when a
+credential-safe identity matches the repository common directory, remote name,
+and effective configured remote URL values, and every currently requested
+candidate is present in the cached positive set. A missing candidate always
+requires a fresh complete query; absence and final status decisions are never
+cached. Expired evidence is not used after a live-query failure, so the
+existing error is preserved.
 
 **Detect default branch:**
 ```

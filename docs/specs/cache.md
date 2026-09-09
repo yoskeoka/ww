@@ -64,3 +64,37 @@ main worktree, workspace root, and unchanged immediate-child repository set;
 The cache is shared across short-lived `ww` invocations. Tests redirect the
 user-cache environment to test-owned temporary state and do not read or write
 the operator's real cache.
+
+## Positive remote-branch evidence
+
+The same `filepath.Join(os.UserCacheDir(), "ww")` store may contain a second
+versioned entry type for remote branch evidence used by `ww list` and
+`ww clean`. It is an optional optimization layered on top of the existing
+live Git status contract.
+
+Each remote entry contains only:
+
+- a schema version
+- a credential-safe identity hash derived from the canonical repository common
+  directory, remote name, and all effective configured remote URL values
+- the time at which a complete `git ls-remote --heads <remote>` response was
+  observed
+- a sorted set of branch names reported by that successful response
+
+The entry must not contain raw remote URLs, credentials, command output,
+remote-branch absence, worktree status, or cleanable decisions. Entries use a
+fixed 30-second TTL; there is no configuration or CLI flag for changing it.
+
+For a status evaluation, a recent entry is usable only when every currently
+requested candidate branch for that remote is present in the positive set. A
+single missing candidate causes a complete live remote query, and a successful
+response replaces the entry. Expired or invalid entries are misses. A live
+query failure is returned through the existing error path; expired or
+otherwise stale positive data is never used as a fallback after that failure.
+
+Because only positive presence is cached, a remote deletion can conservatively
+delay `stale` classification for no more than the TTL. It can never create a
+false `stale` or `cleanable` result. Cache resolution, validation, read, write,
+and permission failures remain silent fail-open misses, just like topology
+cache failures. Entries are written atomically with private permissions and
+may be replaced by concurrent processes without a lock protocol.

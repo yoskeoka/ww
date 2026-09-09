@@ -338,6 +338,26 @@ func (r *Runner) HasRemote(remote string) (bool, error) {
 	return strings.TrimSpace(out) != "", nil
 }
 
+// RemoteURLs returns all effective fetch URL values configured for remote.
+// The values are intended for in-memory identity hashing and are not included
+// in cache entries or user-facing errors.
+func (r *Runner) RemoteURLs(remote string) ([]string, error) {
+	out, err := r.Run("remote", "get-url", "--all", remote)
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	urls := make([]string, 0, strings.Count(out, "\n")+1)
+	for _, value := range strings.Split(out, "\n") {
+		if value != "" {
+			urls = append(urls, value)
+		}
+	}
+	return urls, nil
+}
+
 // RemoteBranchExists reports whether remote/branch exists on the remote.
 func (r *Runner) RemoteBranchExists(remote, branch string) (bool, error) {
 	out, err := r.Run("ls-remote", "--heads", remote, branch)

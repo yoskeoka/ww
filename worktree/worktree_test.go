@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yoskeoka/ww/git"
+	"github.com/yoskeoka/ww/internal/cache"
 	"github.com/yoskeoka/ww/workspace"
 )
 
@@ -419,6 +420,51 @@ func TestResolveStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListRepoUsesPositiveRemoteCacheUntilExpiry(t *testing.T) {
+	repo, _, branch, runner := setupTrackedWorktreeRepo(t)
+	current := time.Unix(500, 0).UTC()
+	store := cache.NewAtWithClock(filepath.Join(t.TempDir(), "ww"), func() time.Time {
+		return current
+	})
+	mgr := &Manager{
+		Git:     runner,
+		Config:  Config{DefaultBase: "main", RemoteCache: store},
+		RepoDir: repo,
+	}
+
+	status := func() string {
+		t.Helper()
+		infos, err := mgr.List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, info := range infos {
+			if info.Branch == branch {
+				return info.Status
+			}
+		}
+		t.Fatalf("branch %q not found in %#v", branch, infos)
+		return ""
+	}
+
+	if got := status(); got != StatusActive {
+		t.Fatalf("initial cached branch status = %q, want %q", got, StatusActive)
+	}
+	if _, err := runner.Run("push", "origin", ":"+branch); err != nil {
+		t.Fatal(err)
+	}
+	current = current.Add(time.Second)
+	if got := status(); got != StatusActive {
+		t.Fatalf("deleted branch status within positive TTL = %q, want %q", got, StatusActive)
+	}
+
+	current = time.Unix(500, 0).Add(cache.RemotePositiveTTL).UTC()
+	if got := status(); got != StatusStale {
+		t.Fatalf("deleted branch status at positive TTL = %q, want %q", got, StatusStale)
+	}
+
 }
 
 func TestBaseBranchNames(t *testing.T) {
@@ -1230,6 +1276,21 @@ func setupStatusRepo(t *testing.T) (string, *git.Runner) {
 	mustGit(t, runner, "checkout", "main")
 
 	return repo, runner
+}
+
+func setupTrackedWorktreeRepo(t *testing.T) (string, string, string, *git.Runner) {
+	t.Helper()
+	repo, remote := setupGitRepoWithRemote(t)
+	runner := &git.Runner{Dir: repo}
+	branch := "feat/remote-cache"
+	worktree := filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@remote-cache")
+	mustGit(t, runner, "worktree", "add", "-b", branch, worktree, "main")
+	worktreeRunner := &git.Runner{Dir: worktree}
+	writeStatusFile(t, worktree, "remote-cache.txt", "remote cache\n")
+	mustGit(t, worktreeRunner, "add", ".")
+	mustGit(t, worktreeRunner, "commit", "-m", "feat: remote cache")
+	mustGit(t, worktreeRunner, "push", "-u", "origin", branch)
+	return repo, remote, branch, runner
 }
 
 func mustGit(t *testing.T, runner *git.Runner, args ...string) {
