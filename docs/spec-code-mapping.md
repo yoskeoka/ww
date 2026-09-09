@@ -10,3 +10,4 @@
 | docs/specs/shell-integration.md | cmd/ww/, worktree/ | ./integration_test.go |
 | docs/specs/interactive-mode.md | internal/interactive/, cmd/ww/ | ./internal/interactive/interactive_test.go, ./integration_test.go |
 | docs/specs/testing.md | internal/testutil/ | ./integration_test.go |
+| docs/specs/workflow-linter.md | tools/, .github/workflows/ | ./tools/test-workflow-lint.sh |

@@ -16,7 +16,8 @@ the current live-query/error path. A stale positive may conservatively delay
 branch cleanable.
 
 Addresses: N/A - performance follow-up to the completed measurement issue
-`docs/issues/done/0037-list-clean-performance-budget.md`.
+The completed measurement issue is retrievable with
+`git log --all -- docs/issues/done/0037-list-clean-performance-budget.md`.
 
 ## Design Decision
 
