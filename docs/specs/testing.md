@@ -36,6 +36,31 @@ outside the timed region, and verify the same list entries or cleanable count.
 Warm measurements are same-host evidence for material improvement, not a new
 CI budget or a portable latency promise.
 
+### Positive remote-cache coverage
+
+Remote-cache tests use a test-owned user-cache directory and a deterministic
+clock. Unit coverage must include a complete positive hit, one requested branch
+missing from the set, the exact 30-second TTL boundary, expiry, changed remote
+name/URL/common-directory identity, corrupt or tampered entries, credential
+non-persistence, and concurrent atomic writers. Git tests cover multiple
+configured remote URL values and live-query failures without exposing URL
+contents in cache data or diagnostics.
+
+Worktree status tests must prove that a cached positive keeps a present branch
+`active`, that remote deletion is detected as `stale` after a miss or expiry,
+that cache failures preserve the live error path, and that no cached state can
+produce a false `merged`, `stale`, or `cleanable` result. Separate-process
+integration tests cover hit, candidate miss, expiry, deletion delay followed by
+live stale detection, URL changes, remote errors, and unavailable/read-only
+cache fallback.
+
+The performance fixture keeps the existing cold budget profiles unchanged. It
+also provides non-budgeted warm profiles that prime positive remote evidence
+outside the timer, plus an opt-in deterministic delayed-remote profile via
+`WW_PERF_REMOTE_DELAY_MS`. Warm and delayed profiles must record remote probe
+counts and elapsed timings at the same PR #280 fixture scale; they are
+same-host evidence and do not replace the cold regression gate.
+
 ## Host-Based Integration Harness
 
 Integration tests execute `ww` and supporting shell commands directly on the host machine. Each test gets its own temporary directory via `os.MkdirTemp` for filesystem isolation.

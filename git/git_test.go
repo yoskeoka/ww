@@ -363,6 +363,52 @@ func TestBranchRemote(t *testing.T) {
 	}
 }
 
+func TestRemoteURLsReturnsAllConfiguredFetchValues(t *testing.T) {
+	repo, remote := setupGitRepoWithRemote(t)
+	runner := &Runner{Dir: repo}
+	second := filepath.Join(t.TempDir(), "mirror.git")
+	if _, err := runner.Run("remote", "set-url", "--add", "origin", second); err != nil {
+		t.Fatal(err)
+	}
+
+	urls, err := runner.RemoteURLs("origin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{remote, second}
+	if len(urls) != len(want) {
+		t.Fatalf("RemoteURLs(origin) = %v, want %v", urls, want)
+	}
+	for i := range want {
+		if urls[i] != want[i] {
+			t.Fatalf("RemoteURLs(origin)[%d] = %q, want %q", i, urls[i], want[i])
+		}
+	}
+}
+
+func TestListRemoteBranchesPreservesBranchNamesAndReportsFailures(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	runner := &Runner{Dir: repo}
+	branch := "release/v1.2.3_with-dots"
+	if _, err := runner.Run("branch", branch); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runner.Run("push", "origin", branch); err != nil {
+		t.Fatal(err)
+	}
+
+	branches, err := runner.ListRemoteBranches("origin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := branches[branch]; !ok {
+		t.Fatalf("ListRemoteBranches(origin) omitted %q: %v", branch, branches)
+	}
+	if _, err := runner.ListRemoteBranches("missing"); err == nil {
+		t.Fatal("ListRemoteBranches(missing) error = nil, want live query failure")
+	}
+}
+
 func TestBranchRemoteMissingTracking(t *testing.T) {
 	repo := setupGitRepo(t)
 	runner := &Runner{Dir: repo}

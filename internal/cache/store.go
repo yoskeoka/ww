@@ -8,11 +8,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
-// Store persists topology hints below one application cache directory.
+// Store persists optional workspace-discovery and remote-evidence hints below
+// one application cache directory.
 type Store struct {
 	root string
+	now  func() time.Time
 }
 
 // New resolves the platform user-cache directory. It returns nil when the
@@ -27,7 +30,7 @@ func New() *Store {
 
 // NewAt creates a store at root. The directory is created lazily on Save.
 func NewAt(root string) *Store {
-	return &Store{root: filepath.Clean(root)}
+	return &Store{root: filepath.Clean(root), now: time.Now}
 }
 
 // Root returns the configured cache directory for diagnostics and tests.

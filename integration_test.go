@@ -2240,6 +2240,196 @@ func TestPersistentDiscoveryCacheIsOptionalWhenCacheRootIsReadOnly(t *testing.T)
 	}
 }
 
+func TestPositiveRemoteCacheAcrossProcessesPreservesSafetyAndFallsBack(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+
+	repo, worktree, branch, remote := setupPositiveRemoteRepo(t)
+	writeConfig(t, repo, `default_base = "main"`)
+	before := remoteCacheFiles(t)
+
+	cold, err := runWW(t, repo, "list", "--json")
+	if err != nil {
+		t.Fatalf("cold remote-cache list: %v\n%s", err, cold)
+	}
+	if got := statusFromJSON(t, cold, branch); got != "active" {
+		t.Fatalf("cold branch status = %q, want active", got)
+	}
+	remoteEntry := newRemoteCacheFile(t, before)
+
+	if _, err := globalEnv.Git(repo, "push", "origin", ":"+branch); err != nil {
+		t.Fatal(err)
+	}
+	warm, err := runWW(t, repo, "list", "--json")
+	if err != nil {
+		t.Fatalf("warm remote-cache list: %v\n%s", err, warm)
+	}
+	if got := statusFromJSON(t, warm, branch); got != "active" {
+		t.Fatalf("deleted branch within positive TTL = %q, want active", got)
+	}
+
+	expireRemoteCacheEntry(t, remoteEntry)
+	expired, err := runWW(t, repo, "list", "--json")
+	if err != nil {
+		t.Fatalf("expired remote-cache list: %v\n%s", err, expired)
+	}
+	if got := statusFromJSON(t, expired, branch); got != "stale" {
+		t.Fatalf("deleted branch after positive TTL = %q, want stale", got)
+	}
+
+	if _, err := globalEnv.Git(worktree, "push", "origin", branch); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := runWW(t, repo, "list", "--json"); err != nil {
+		t.Fatalf("list after remote branch restoration: %v\n%s", err, got)
+	} else if status := statusFromJSON(t, got, branch); status != "active" {
+		t.Fatalf("restored branch after cached absence = %q, want active", status)
+	}
+
+	alternate, err := globalEnv.MkdirTemp("ww-alternate-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git("", "init", "--bare", alternate); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(repo, "remote", "set-url", "origin", alternate); err != nil {
+		t.Fatal(err)
+	}
+	changedURL, err := runWW(t, repo, "list", "--json")
+	if err != nil {
+		t.Fatalf("URL-changed remote-cache list: %v\n%s", err, changedURL)
+	}
+	if got := statusFromJSON(t, changedURL, branch); got != "stale" {
+		t.Fatalf("branch after remote URL change = %q, want stale", got)
+	}
+
+	missingRemote := filepath.Join(t.TempDir(), "missing-remote.git")
+	if _, err := globalEnv.Git(repo, "remote", "set-url", "origin", missingRemote); err != nil {
+		t.Fatal(err)
+	}
+	errorOutput, err := runWW(t, repo, "list", "--json")
+	if err == nil {
+		t.Fatalf("missing remote unexpectedly succeeded: %s", errorOutput)
+	}
+	if !strings.Contains(errorOutput, "listing remote branches for") {
+		t.Fatalf("missing remote error lost live-query context: %s", errorOutput)
+	}
+
+	if _, err := globalEnv.Git(repo, "remote", "set-url", "origin", remote); err != nil {
+		t.Fatal(err)
+	}
+	cacheParent := filepath.Join(t.TempDir(), "cache-parent")
+	if err := os.WriteFile(cacheParent, []byte("not a directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	uncached, err := runWWWithEnv(t, repo, []string{"XDG_CACHE_HOME=" + cacheParent}, "list", "--json")
+	if err != nil {
+		t.Fatalf("unavailable remote cache changed list behavior: %v\n%s", err, uncached)
+	}
+	if got := statusFromJSON(t, uncached, branch); got != "active" {
+		t.Fatalf("unavailable remote cache branch status = %q, want active", got)
+	}
+}
+
+func setupPositiveRemoteRepo(t *testing.T) (string, string, string, string) {
+	t.Helper()
+	git := func(dir string, args ...string) {
+		t.Helper()
+		out, err := globalEnv.Git(dir, args...)
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	repo := setupRepo(t)
+	remote, err := globalEnv.MkdirTemp("ww-positive-remote")
+	if err != nil {
+		t.Fatal(err)
+	}
+	git("", "init", "--bare", remote)
+	git(repo, "remote", "set-url", "origin", remote)
+	git(repo, "push", "-u", "origin", "main")
+
+	branch := "feat/remote-cache-e2e"
+	worktree := filepath.Join(filepath.Dir(repo), filepath.Base(repo)+"@remote-cache-e2e")
+	git(repo, "worktree", "add", "-b", branch, worktree, "main")
+	if err := globalEnv.WriteFile(filepath.Join(worktree, "remote-cache.txt"), "remote cache\n"); err != nil {
+		t.Fatal(err)
+	}
+	git(worktree, "add", ".")
+	git(worktree, "commit", "-m", "feat: remote cache e2e")
+	git(worktree, "push", "-u", "origin", branch)
+	return repo, worktree, branch, remote
+}
+
+func statusFromJSON(t *testing.T, output, branch string) string {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		var entry struct {
+			Branch string `json:"branch"`
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("invalid list JSON: %v\n%s", err, output)
+		}
+		if entry.Branch == branch {
+			return entry.Status
+		}
+	}
+	t.Fatalf("branch %q not found in list JSON:\n%s", branch, output)
+	return ""
+}
+
+func remoteCacheFiles(t *testing.T) map[string]struct{} {
+	t.Helper()
+	files := make(map[string]struct{})
+	entries, err := os.ReadDir(filepath.Join(globalEnv.CacheDir(), "ww"))
+	if os.IsNotExist(err) {
+		return files
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".remote.json") {
+			files[filepath.Join(globalEnv.CacheDir(), "ww", entry.Name())] = struct{}{}
+		}
+	}
+	return files
+}
+
+func newRemoteCacheFile(t *testing.T, before map[string]struct{}) string {
+	t.Helper()
+	for file := range remoteCacheFiles(t) {
+		if _, existed := before[file]; !existed {
+			return file
+		}
+	}
+	t.Fatal("cold list did not create a positive remote cache entry")
+	return ""
+}
+
+func expireRemoteCacheEntry(t *testing.T, file string) {
+	t.Helper()
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entry map[string]any
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatal(err)
+	}
+	entry["observed_at"] = time.Now().Add(-31 * time.Second).UTC().Format(time.RFC3339Nano)
+	data, err = json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestListUsesNearestContainingWorkspaceRoot(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")

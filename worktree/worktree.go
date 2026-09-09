@@ -38,6 +38,14 @@ type Config struct {
 	PreRemoveHook  string
 	PostRemoveHook string
 	Sandbox        bool
+	RemoteCache    RemoteBranchCache
+}
+
+// RemoteBranchCache supplies optional positive remote-branch evidence for
+// status evaluation. Implementations must treat cache failures as misses.
+type RemoteBranchCache interface {
+	LoadRemote(commonDir, remote string, urls, candidates []string) (map[string]struct{}, bool)
+	SaveRemote(commonDir, remote string, urls []string, branches map[string]struct{})
 }
 
 // Manager coordinates worktree operations.
@@ -552,8 +560,9 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		mergedSet[branch] = struct{}{}
 	}
 
-	// Read branch→remote metadata once, then batch ls-remote calls once per
-	// configured remote.
+	// Read branch→remote metadata once, then batch remote checks once per
+	// configured remote. A positive cache can skip a complete ls-remote query
+	// only when it covers every requested candidate branch.
 	trackingCandidates := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.Main || e.Branch == "" {
@@ -568,17 +577,48 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		return nil, fmt.Errorf("getting branch tracking metadata for %s: %w", repoName, err)
 	}
 
-	remoteBranches := make(map[string]map[string]struct{})
+	remoteCandidates := make(map[string][]string)
+	remoteNames := make([]string, 0)
 	for _, branch := range trackingCandidates {
 		remote := branchRemote[branch]
-		if remote != "" {
-			if _, cached := remoteBranches[remote]; !cached {
-				branches, err := runner.ListRemoteBranches(remote)
-				if err != nil {
-					return nil, fmt.Errorf("listing remote branches for %s: %w", remote, err)
+		if remote == "" {
+			continue
+		}
+		if _, seen := remoteCandidates[remote]; !seen {
+			remoteNames = append(remoteNames, remote)
+		}
+		remoteCandidates[remote] = append(remoteCandidates[remote], branch)
+	}
+	var commonDir string
+	var commonDirErr error
+	if m.Config.RemoteCache != nil && len(remoteNames) > 0 {
+		commonDir, commonDirErr = runner.GitCommonDir()
+	}
+
+	remoteBranches := make(map[string]map[string]struct{})
+	for _, remote := range remoteNames {
+		candidates := remoteCandidates[remote]
+		var urls []string
+		cacheReady := false
+		if m.Config.RemoteCache != nil && commonDirErr == nil {
+			var urlsErr error
+			urls, urlsErr = runner.RemoteURLs(remote)
+			if urlsErr == nil {
+				if branches, ok := m.Config.RemoteCache.LoadRemote(commonDir, remote, urls, candidates); ok {
+					remoteBranches[remote] = branches
+					continue
 				}
-				remoteBranches[remote] = branches
+				cacheReady = true
 			}
+		}
+
+		branches, err := runner.ListRemoteBranches(remote)
+		if err != nil {
+			return nil, fmt.Errorf("listing remote branches for %s: %w", remote, err)
+		}
+		remoteBranches[remote] = branches
+		if cacheReady {
+			m.Config.RemoteCache.SaveRemote(commonDir, remote, urls, branches)
 		}
 	}
 

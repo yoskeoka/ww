@@ -3,8 +3,10 @@ package testutil
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // PerformanceFixtureOptions controls the amount of Git state exercised by the
@@ -15,6 +17,7 @@ type PerformanceFixtureOptions struct {
 	WorktreesPerRepo          int
 	CleanableWorktreesPerRepo int
 	PatchHeavy                bool
+	RemoteDelayMS             int
 }
 
 // DefaultPerformanceFixtureOptions is deliberately large enough to exercise
@@ -55,6 +58,13 @@ func PerformanceFixtureOptionsFromEnv() (PerformanceFixtureOptions, error) {
 		}
 		opts.PatchHeavy = enabled
 	}
+	if value := os.Getenv("WW_PERF_REMOTE_DELAY_MS"); value != "" {
+		delay, err := strconv.Atoi(value)
+		if err != nil || delay < 0 {
+			return PerformanceFixtureOptions{}, fmt.Errorf("WW_PERF_REMOTE_DELAY_MS must be a non-negative integer, got %q", value)
+		}
+		opts.RemoteDelayMS = delay
+	}
 	if opts.WorktreesPerRepo < 2 {
 		return PerformanceFixtureOptions{}, fmt.Errorf("WW_PERF_WORKTREES_PER_REPO must be at least 2 to include merged and upstream-tracking branches")
 	}
@@ -73,11 +83,39 @@ type PerformanceFixture struct {
 	ExpectedEntries   int
 	ExpectedCleanable int
 	cleanupRoot       string
+	commandEnv        []string
+	remoteProbeLog    string
 }
 
 // Cleanup removes the fixture and all linked worktrees.
 func (f *PerformanceFixture) Cleanup() error {
 	return os.RemoveAll(f.cleanupRoot)
+}
+
+// CommandEnv returns environment overrides for the optional delayed-remote
+// profile. The default profile returns nil and uses the host environment.
+func (f *PerformanceFixture) CommandEnv() []string {
+	return append([]string(nil), f.commandEnv...)
+}
+
+// ResetRemoteProbeLog clears the opt-in delayed-profile probe log.
+func (f *PerformanceFixture) ResetRemoteProbeLog() error {
+	if f.remoteProbeLog == "" {
+		return nil
+	}
+	return os.WriteFile(f.remoteProbeLog, nil, 0600)
+}
+
+// RemoteProbeCount reports delayed-profile ls-remote calls.
+func (f *PerformanceFixture) RemoteProbeCount() (int, error) {
+	if f.remoteProbeLog == "" {
+		return 0, nil
+	}
+	data, err := os.ReadFile(f.remoteProbeLog)
+	if err != nil {
+		return 0, err
+	}
+	return strings.Count(string(data), "ls-remote\n"), nil
 }
 
 // NewPerformanceFixture creates the named benchmark profile using HostEnv's
@@ -100,6 +138,10 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 	workspaceRoot := filepath.Join(base, "workspace")
 	if err := env.MkdirAll(workspaceRoot); err != nil {
 		return failure(fmt.Errorf("create workspace: %w", err))
+	}
+	commandEnv, remoteProbeLog, err := configureRemoteDelay(base, opts.RemoteDelayMS)
+	if err != nil {
+		return failure(err)
 	}
 
 	for repoIndex := 1; repoIndex <= opts.Repos; repoIndex++ {
@@ -198,7 +240,31 @@ func NewPerformanceFixture(env *HostEnv, opts PerformanceFixtureOptions) (*Perfo
 		ExpectedEntries:   opts.Repos * (opts.WorktreesPerRepo + 1),
 		ExpectedCleanable: expectedCleanable(opts),
 		cleanupRoot:       base,
+		commandEnv:        commandEnv,
+		remoteProbeLog:    remoteProbeLog,
 	}, nil
+}
+
+func configureRemoteDelay(base string, delayMS int) ([]string, string, error) {
+	if delayMS == 0 {
+		return nil, "", nil
+	}
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		return nil, "", fmt.Errorf("locate git for delayed remote profile: %w", err)
+	}
+	logPath := filepath.Join(base, "remote-probes.log")
+	delaySeconds := float64(delayMS) / 1000
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = \"ls-remote\" ]; then\n  printf 'ls-remote\\n' >> %s\n  sleep %.3f\nfi\nexec %s \"$@\"\n", shellQuote(logPath), delaySeconds, shellQuote(realGit))
+	wrapperPath := filepath.Join(base, "git")
+	if err := os.WriteFile(wrapperPath, []byte(script), 0755); err != nil {
+		return nil, "", fmt.Errorf("write delayed git wrapper: %w", err)
+	}
+	return []string{"PATH=" + base + string(os.PathListSeparator) + os.Getenv("PATH")}, logPath, nil
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func expectedCleanable(opts PerformanceFixtureOptions) int {
