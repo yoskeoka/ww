@@ -14,3 +14,4 @@ Detailed specifications for `ww` CLI behavior.
 | [release-versioning.md](release-versioning.md) | SemVer tagging, build metadata, and release automation |
 | [github-actions-pinning.md](github-actions-pinning.md) | Contract for managing ordinary workflow YAML `uses:` references with `pinact` |
 | [testing.md](testing.md) | Testing strategy and test utilities |
+| [workflow-linter.md](workflow-linter.md) | Workflow-linter lifecycle and completion metadata |

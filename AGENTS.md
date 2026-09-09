@@ -6,6 +6,7 @@
 make build    # Build binary with version info
 make test     # Run only unit tests
 make test-all # Run all tests (unit + integration)
+tools/test-workflow-lint.sh # Run workflow-lifecycle fixture tests
 make fmt      # Run formatter, use this instread of "go fmt"
 make lint     # Run all linters
 make clean    # Remove built binary
@@ -22,7 +23,7 @@ worktree/         # Public: business logic (create/list/remove)
 validate/         # Public: branch name and path validation
 internal/config/  # Internal: .ww.toml loader
 docs/specs/       # Behavioral specs (no implementation details)
-docs/exec-plan/   # Execution plans (todo/ and done/)
+docs/exec-plan/   # Active execution plans
 docs/issues/      # Known issues
 ```
 

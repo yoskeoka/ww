@@ -36,12 +36,13 @@ Do not reintroduce agentic PR review workflows until the repository makes an exp
 
 If the repository decides to reintroduce CI-side agentic review, revisit the older `gh aw` issue history at the same time instead of treating the removal as the only missing step.
 
-- [docs/issues/done/gh-aw-custom-safe-output-not-emitted.md](done/gh-aw-custom-safe-output-not-emitted.md)
-- [docs/issues/done/plan-review-upsert-pr-comment-permission.md](done/plan-review-upsert-pr-comment-permission.md)
+- Historical details for `gh-aw-custom-safe-output-not-emitted.md` and
+  `plan-review-upsert-pr-comment-permission.md` remain available through Git
+  history (`git log --all -- docs/issues/done/<name>.md`).
 
 Those issues capture concrete runtime and permission failures in the removed workflow line. Any restart decision should either confirm they no longer apply under the new backend/credential model or replace them with an explicitly different design.
 
 ## References
 
-- `docs/exec-plan/done/remove-gh-agentic-workflow.md`
+- Git history for `docs/exec-plan/done/remove-gh-agentic-workflow.md`
 - GitHub issue `#231`
