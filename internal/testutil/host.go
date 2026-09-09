@@ -19,6 +19,8 @@ import (
 type HostEnv struct {
 	wwBinaryPath  string
 	gitConfigPath string
+	cacheDir      string
+	homeDir       string
 	ctx           context.Context
 }
 
@@ -40,10 +42,23 @@ func NewHostEnv(ctx context.Context) (*HostEnv, error) {
 		_ = os.Remove(gitConfigPath)
 		return nil, fmt.Errorf("close temp gitconfig: %w", err)
 	}
+	cacheDir, err := os.MkdirTemp("", "ww-test-cache-*")
+	if err != nil {
+		_ = os.Remove(gitConfigPath)
+		return nil, fmt.Errorf("create temp cache: %w", err)
+	}
+	homeDir, err := os.MkdirTemp("", "ww-test-home-*")
+	if err != nil {
+		_ = os.Remove(gitConfigPath)
+		_ = os.RemoveAll(cacheDir)
+		return nil, fmt.Errorf("create temp home: %w", err)
+	}
 
 	env := &HostEnv{
 		wwBinaryPath:  binPath,
 		gitConfigPath: gitConfigPath,
+		cacheDir:      cacheDir,
+		homeDir:       homeDir,
 		ctx:           ctx,
 	}
 
@@ -64,6 +79,21 @@ func NewHostEnv(ctx context.Context) (*HostEnv, error) {
 func (e *HostEnv) Terminate() {
 	os.Remove(e.wwBinaryPath)
 	os.Remove(e.gitConfigPath)
+	os.RemoveAll(e.cacheDir)
+	os.RemoveAll(e.homeDir)
+}
+
+// CacheDir returns the test-owned persistent cache root.
+func (e *HostEnv) CacheDir() string {
+	return e.cacheDir
+}
+
+// ResetCache clears the test-owned persistent cache between profiles.
+func (e *HostEnv) ResetCache() error {
+	if err := os.RemoveAll(e.cacheDir); err != nil {
+		return err
+	}
+	return os.MkdirAll(e.cacheDir, 0700)
 }
 
 // MkdirTemp creates a uniquely named temporary directory and returns its
@@ -190,7 +220,7 @@ func (e *HostEnv) ExecSplitWithEnv(dir string, extraEnv []string, cmd string, ar
 }
 
 func (e *HostEnv) env(extra ...string) []string {
-	overrides := map[string]struct{}{"GIT_CONFIG_GLOBAL": {}}
+	overrides := map[string]struct{}{"GIT_CONFIG_GLOBAL": {}, "XDG_CACHE_HOME": {}, "HOME": {}}
 	for _, v := range extra {
 		overrides[envKey(v)] = struct{}{}
 	}
@@ -204,6 +234,8 @@ func (e *HostEnv) env(extra ...string) []string {
 		env = append(env, v)
 	}
 	env = append(env, "GIT_CONFIG_GLOBAL="+e.gitConfigPath)
+	env = append(env, "XDG_CACHE_HOME="+e.cacheDir)
+	env = append(env, "HOME="+e.homeDir)
 	env = append(env, extra...)
 	return env
 }

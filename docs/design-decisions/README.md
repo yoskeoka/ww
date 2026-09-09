@@ -21,3 +21,4 @@ using the Michael Nygard form: title, Status, Context, Decision, Consequences.
 | [0014](adr/0014-global-config-path-and-overrides.md) | Accepted | config, global | Global config has an explicit XDG path and per-key local replacement. |
 | [0015](adr/0015-global-project-matching.md) | Accepted | config, global | Ordered project path rules match against the main worktree root. |
 | [0016](adr/0016-materialization-profiles.md) | Accepted | config, materialization | Each config layer expands at most one named materialization profile. |
+| [0017](adr/0017-persistent-cache-location-and-trust.md) | Accepted | cache, workspace, sandbox | Persistent discovery hints use the user cache directory, fail open, and never broaden discovery. |

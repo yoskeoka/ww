@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/yoskeoka/ww/git"
+	"github.com/yoskeoka/ww/internal/cache"
 )
 
 // Mode identifies how ww should treat the detected directory tree.
@@ -37,6 +38,7 @@ type Workspace struct {
 // DetectOptions controls workspace discovery behavior.
 type DetectOptions struct {
 	Sandbox bool
+	Cache   cache.DiscoveryCache
 }
 
 // ErrNotGitRepository is returned when detection finds no git repository and
@@ -54,8 +56,31 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 	if err != nil {
 		return nil, err
 	}
+	if opts.Cache != nil {
+		if topology, ok := opts.Cache.Load(absStart, opts.Sandbox); ok {
+			if ws, err := workspaceFromTopology(topology); err == nil {
+				return ws, nil
+			}
+		}
+	}
 
 	discovery := newDiscoveryContext()
+	complete := func(ws *Workspace) (*Workspace, error) {
+		if opts.Cache != nil {
+			repos := make([]cache.Repo, 0, len(ws.Repos))
+			for _, repo := range ws.Repos {
+				repos = append(repos, cache.Repo{Name: repo.Name, Path: repo.Path})
+			}
+			candidatePaths := discovery.scannedDirs()
+			if opts.Sandbox {
+				candidatePaths = append(candidatePaths, ws.Root, ws.MainRoot)
+			}
+			if topology, ok := cache.NewTopology(absStart, opts.Sandbox, ws.Root, ws.MainRoot, string(ws.Mode), repos, candidatePaths); ok {
+				opts.Cache.Save(topology)
+			}
+		}
+		return ws, nil
+	}
 	childRepos, err := discovery.scanImmediateRepos(absStart)
 	if err != nil {
 		return nil, err
@@ -68,7 +93,7 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 		} else if ok {
 			repos = append(repos, Repo{Name: filepath.Base(absStart), Path: absStart})
 		}
-		return &Workspace{Root: absStart, Repos: normalizeRepos(repos), Mode: ModeWorkspace}, nil
+		return complete(&Workspace{Root: absStart, Repos: normalizeRepos(repos), Mode: ModeWorkspace})
 	}
 
 	runner := &git.Runner{Dir: absStart}
@@ -79,7 +104,7 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 		}
 		if len(childRepos) > 0 {
 			repos := normalizeRepos(childRepos)
-			return &Workspace{Root: absStart, Repos: repos, Mode: ModeWorkspace}, nil
+			return complete(&Workspace{Root: absStart, Repos: repos, Mode: ModeWorkspace})
 		}
 		return nil, ErrNotGitRepository
 	}
@@ -90,7 +115,7 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 	}
 
 	if opts.Sandbox {
-		return &Workspace{
+		return complete(&Workspace{
 			Root:     mainRoot,
 			MainRoot: mainRoot,
 			Repos: []Repo{{
@@ -98,7 +123,7 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 				Path: mainRoot,
 			}},
 			Mode: ModeSingleRepo,
-		}, nil
+		})
 	}
 
 	if wsRoot, ok, err := detectContainingWorkspace(discovery, absStart, mainRoot); err != nil {
@@ -108,7 +133,7 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 		if err != nil {
 			return nil, err
 		}
-		return &Workspace{Root: wsRoot, Repos: repos, Mode: ModeWorkspace, MainRoot: mainRoot}, nil
+		return complete(&Workspace{Root: wsRoot, Repos: repos, Mode: ModeWorkspace, MainRoot: mainRoot})
 	}
 
 	if len(childRepos) > 0 && !isRepoMarker(filepath.Dir(absStart)) {
@@ -118,10 +143,10 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 		} else if ok {
 			repos = append(repos, Repo{Name: filepath.Base(absStart), Path: absStart})
 		}
-		return &Workspace{Root: absStart, Repos: normalizeRepos(repos), Mode: ModeWorkspace}, nil
+		return complete(&Workspace{Root: absStart, Repos: normalizeRepos(repos), Mode: ModeWorkspace})
 	}
 
-	return &Workspace{
+	return complete(&Workspace{
 		Root:     mainRoot,
 		MainRoot: mainRoot,
 		Repos: []Repo{{
@@ -129,6 +154,23 @@ func DetectWithOptions(startDir string, opts DetectOptions) (*Workspace, error) 
 			Path: mainRoot,
 		}},
 		Mode: ModeSingleRepo,
+	})
+}
+
+func workspaceFromTopology(topology cache.Topology) (*Workspace, error) {
+	mode := Mode(topology.Mode)
+	if mode != ModeSingleRepo && mode != ModeWorkspace {
+		return nil, ErrNotGitRepository
+	}
+	repos := make([]Repo, 0, len(topology.Repos))
+	for _, repo := range topology.Repos {
+		repos = append(repos, Repo{Name: repo.Name, Path: repo.Path})
+	}
+	return &Workspace{
+		Root:     topology.Root,
+		MainRoot: topology.MainRoot,
+		Repos:    repos,
+		Mode:     mode,
 	}, nil
 }
 
@@ -240,7 +282,8 @@ func scanImmediateRepos(dir string) ([]Repo, error) {
 }
 
 type discoveryContext struct {
-	scans map[string]scanResult
+	scans   map[string]scanResult
+	scanned map[string]struct{}
 }
 
 type scanResult struct {
@@ -249,7 +292,7 @@ type scanResult struct {
 }
 
 func newDiscoveryContext() *discoveryContext {
-	return &discoveryContext{scans: make(map[string]scanResult)}
+	return &discoveryContext{scans: make(map[string]scanResult), scanned: make(map[string]struct{})}
 }
 
 func (d *discoveryContext) scanImmediateRepos(dir string) ([]Repo, error) {
@@ -257,6 +300,7 @@ func (d *discoveryContext) scanImmediateRepos(dir string) ([]Repo, error) {
 	if err != nil {
 		return nil, err
 	}
+	d.scanned[absDir] = struct{}{}
 	if cached, ok := d.scans[absDir]; ok {
 		return cloneRepos(cached.repos), cached.err
 	}
@@ -267,6 +311,15 @@ func (d *discoveryContext) scanImmediateRepos(dir string) ([]Repo, error) {
 	}
 	d.scans[absDir] = scanResult{repos: cloneRepos(repos), err: err}
 	return cloneRepos(repos), err
+}
+
+func (d *discoveryContext) scannedDirs() []string {
+	dirs := make([]string, 0, len(d.scanned))
+	for dir := range d.scanned {
+		dirs = append(dirs, dir)
+	}
+	sort.Strings(dirs)
+	return dirs
 }
 
 func cloneRepos(repos []Repo) []Repo {
