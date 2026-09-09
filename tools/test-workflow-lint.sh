@@ -47,6 +47,11 @@ assert_not_contains() {
     fi
 }
 
+assert_no_warnings() {
+    local haystack="$1"
+    assert_not_contains '[WARN:' "$haystack"
+}
+
 run_linter() {
     local dir="$1"
     local output="$2"
@@ -64,6 +69,7 @@ run_linter() {
 active_dir=$(make_fixture active-plan $'# active plan')
 run_linter "$active_dir" "$tmp/active.out" --mode=pre-push
 assert_not_contains 'Missing exec-plan' "$tmp/active.out"
+assert_no_warnings "$tmp/active.out"
 
 # Deleting a plan and its linked local issue is a compliant closeout.
 local_dir=$(make_fixture local-closeout $'Addresses: docs/issues/0001-local-closeout.md')
@@ -76,6 +82,7 @@ git -C "$local_dir" commit -qm closeout
 run_linter "$local_dir" "$tmp/local.out" --mode=pre-push
 assert_not_contains 'Missing exec-plan' "$tmp/local.out"
 assert_not_contains 'but this branch does not delete it' "$tmp/local.out"
+assert_no_warnings "$tmp/local.out"
 
 # A plan without links may be deleted on its own.
 plan_only_dir=$(make_fixture plan-only $'# no linked issue')
@@ -83,6 +90,7 @@ git -C "$plan_only_dir" rm -- docs/exec-plan/todo/0001-plan-only.md >/dev/null
 git -C "$plan_only_dir" commit -qm closeout
 run_linter "$plan_only_dir" "$tmp/plan-only.out" --mode=pre-push
 assert_not_contains 'Missing exec-plan' "$tmp/plan-only.out"
+assert_no_warnings "$tmp/plan-only.out"
 
 # Omitting a linked local issue remains a fixable warning.
 missing_local_dir=$(make_fixture missing-local $'Addresses: docs/issues/0001-missing-local.md')
@@ -97,6 +105,7 @@ git -C "$external_dir" rm -- docs/exec-plan/todo/0001-external-closeout.md >/dev
 git -C "$external_dir" commit -qm closeout
 run_linter "$external_dir" "$tmp/external-ok.out" --mode=ci --pr-body='Closes #42'
 assert_not_contains 'does not include a matching closing keyword' "$tmp/external-ok.out"
+assert_no_warnings "$tmp/external-ok.out"
 run_linter "$external_dir" "$tmp/external-missing.out" --mode=ci --pr-body=''
 assert_contains "Deleted exec-plan 'docs/exec-plan/todo/0001-external-closeout.md' links external GitHub issue 'https://github.com/example/workflow-lint-fixture/issues/42' but the PR body does not include a matching closing keyword" "$tmp/external-missing.out"
 

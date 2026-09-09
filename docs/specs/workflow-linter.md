@@ -20,7 +20,8 @@ It resolves the comparison base from `origin/${GITHUB_BASE_REF}` when that
 environment variable is set, otherwise from `origin/main`. If the base or the
 comparison cannot be resolved, it reports an advisory warning and skips only
 diff-dependent checks. Branch and active-plan checks still run. The process
-always exits with status 0.
+always exits with status 0 for a valid invocation. Invalid arguments or a
+missing mode return a usage error.
 
 Warnings identify a primary finding, its rationale, and (for fixable findings)
 the expected remediation. When a report path is supplied, the same findings
