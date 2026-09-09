@@ -2168,6 +2168,78 @@ func TestNonGitWorkspaceRootRejectsWithoutRepoSelection(t *testing.T) {
 	}
 }
 
+func TestPersistentDiscoveryCacheAcrossProcessesKeepsOutputAndInvalidates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+
+	cold, err := runWW(t, ws.RootDir, "list")
+	if err != nil {
+		t.Fatalf("cold ww list: %v\n%s", err, cold)
+	}
+	warm, err := runWW(t, ws.RootDir, "list")
+	if err != nil {
+		t.Fatalf("warm ww list: %v\n%s", err, warm)
+	}
+	if warm != cold {
+		t.Fatalf("warm output changed\ncold:\n%s\nwarm:\n%s", cold, warm)
+	}
+
+	childC := filepath.Join(ws.RootDir, "repo3")
+	if err := globalEnv.MkdirAll(childC); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(childC, "init", "-b", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := globalEnv.WriteFile(filepath.Join(childC, "README.md"), "repo3\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(childC, "add", "README.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := globalEnv.Git(childC, "commit", "-m", "initial"); err != nil {
+		t.Fatal(err)
+	}
+	invalidated, err := runWW(t, ws.RootDir, "list")
+	if err != nil {
+		t.Fatalf("invalidated ww list: %v\n%s", err, invalidated)
+	}
+	if !strings.Contains(invalidated, "repo3") {
+		t.Fatalf("invalidated output omitted new repository: %s", invalidated)
+	}
+}
+
+func TestPersistentDiscoveryCacheIsOptionalWhenCacheRootIsReadOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	t.Parallel()
+
+	ws := testutil.SetupNonGitWorkspace(t, globalEnv, testutil.WorkspaceOpts{NumRepos: 2})
+	writeConfig(t, ws.RootDir, `default_base = "main"`)
+	cacheRoot, err := globalEnv.MkdirTemp("ww-readonly-cache")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cacheRoot, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(cacheRoot, 0700) })
+
+	out, err := runWWWithEnv(t, ws.RootDir, []string{"XDG_CACHE_HOME=" + cacheRoot}, "list")
+	if err != nil {
+		t.Fatalf("ww list with read-only cache root: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "repo1") || !strings.Contains(out, "repo2") {
+		t.Fatalf("read-only cache changed discovery output: %s", out)
+	}
+}
+
 func TestListUsesNearestContainingWorkspaceRoot(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping: integration test")

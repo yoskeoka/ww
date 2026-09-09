@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/pflag"
 
 	"github.com/yoskeoka/ww/git"
+	"github.com/yoskeoka/ww/internal/cache"
 	"github.com/yoskeoka/ww/internal/config"
 	"github.com/yoskeoka/ww/workspace"
 	"github.com/yoskeoka/ww/worktree"
@@ -144,11 +146,19 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 	if err != nil {
 		return nil, err
 	}
+	var discoveryCache cache.DiscoveryCache
+	if store := cache.New(); store != nil {
+		discoveryCache = store
+	}
 
 	sandboxMode := sandboxFlag
 	if !sandboxMode {
 		projectRoot := dir
-		if mainDir, err := (&git.Runner{Dir: dir}).MainWorktreeDir(); err == nil {
+		if ws, detectErr := workspace.DetectWithOptions(dir, workspace.DetectOptions{Cache: discoveryCache}); detectErr == nil {
+			if ws.MainRoot != "" {
+				projectRoot = ws.MainRoot
+			}
+		} else if mainDir, mainErr := (&git.Runner{Dir: dir}).MainWorktreeDir(); mainErr == nil {
 			projectRoot = mainDir
 		}
 		preCfg, err := config.LoadWithOptions(dir, config.LoadOptions{ProjectRoot: projectRoot})
@@ -158,7 +168,7 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 		sandboxMode = preCfg.Sandbox
 	}
 
-	ctx, err := loadManagerContext(dir, requireRepo, sandboxMode)
+	ctx, err := loadManagerContext(dir, requireRepo, sandboxMode, discoveryCache)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +177,7 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 	// affect workspace/config behavior, so rerun once in sandbox mode.
 	if !sandboxMode && ctx.cfg.Sandbox {
 		sandboxMode = true
-		ctx, err = loadManagerContext(dir, requireRepo, true)
+		ctx, err = loadManagerContext(dir, requireRepo, true, discoveryCache)
 		if err != nil {
 			return nil, err
 		}
@@ -194,8 +204,8 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 	}, nil
 }
 
-func loadManagerContext(dir string, requireRepo bool, sandboxMode bool) (*managerContext, error) {
-	ws, err := workspace.DetectWithOptions(dir, workspace.DetectOptions{Sandbox: sandboxMode})
+func loadManagerContext(dir string, requireRepo bool, sandboxMode bool, discoveryCache cache.DiscoveryCache) (*managerContext, error) {
+	ws, err := workspace.DetectWithOptions(dir, workspace.DetectOptions{Sandbox: sandboxMode, Cache: discoveryCache})
 	if err != nil {
 		return nil, err
 	}
@@ -206,9 +216,9 @@ func loadManagerContext(dir string, requireRepo bool, sandboxMode bool) (*manage
 		mainDir, err = runner.MainWorktreeDir()
 	}
 	if err != nil {
-		if ws.Mode == workspace.ModeWorkspace && ws.Root == dir && !requireRepo {
+		if ws.Mode == workspace.ModeWorkspace && equivalentPath(ws.Root, dir) && !requireRepo {
 			mainDir = ws.Root
-		} else if ws.Mode == workspace.ModeWorkspace && ws.Root == dir {
+		} else if ws.Mode == workspace.ModeWorkspace && equivalentPath(ws.Root, dir) {
 			return nil, fmt.Errorf("repo selection is not supported from a non-git workspace root")
 		} else {
 			return nil, fmt.Errorf("not a git repository: %w", err)
@@ -225,6 +235,15 @@ func loadManagerContext(dir string, requireRepo bool, sandboxMode bool) (*manage
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	return &managerContext{ws: ws, mainDir: mainDir, cfg: cfg}, nil
+}
+
+func equivalentPath(left, right string) bool {
+	leftCanonical, leftErr := filepath.EvalSymlinks(left)
+	rightCanonical, rightErr := filepath.EvalSymlinks(right)
+	if leftErr != nil || rightErr != nil {
+		return filepath.Clean(left) == filepath.Clean(right)
+	}
+	return filepath.Clean(leftCanonical) == filepath.Clean(rightCanonical)
 }
 
 func sandboxBoundary(ws *workspace.Workspace, mainDir string) string {

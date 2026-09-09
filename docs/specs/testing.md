@@ -21,6 +21,21 @@ Pull requests run the performance budget as a dedicated advisory job. A budget e
 
 Set `WW_PERF_PATCH_HEAVY=1` with the normal scale overrides to create a supplementary, non-budgeted fixture. In this profile, secondary worktree branches each contain two non-empty commits whose combined changes are squash-integrated into the base after the branches are created. This deliberately bypasses the commit-level `git cherry` fast path and exercises aggregate patch comparison across branches sharing a merge-base. It is for same-host before/after evidence only: it does not alter the default fixture, benchmark names, repetition count, or CI budgets.
 
+### Persistent discovery-cache profiles
+
+All unit, integration, and performance tests redirect `os.UserCacheDir` inputs
+to test-owned temporary state. Tests must not populate or depend on the
+operator's real cache.
+
+The existing budgeted `BenchmarkWorkspaceList` and
+`BenchmarkWorkspaceCleanDryRun` profiles remain cold-cache regression gates:
+their cache state is reset before timing and their fixture, command boundary,
+names, repetitions, and versioned limits do not change. Non-budgeted warm
+variants use the same PR #280 fixture and command boundary, prime the cache
+outside the timed region, and verify the same list entries or cleanable count.
+Warm measurements are same-host evidence for material improvement, not a new
+CI budget or a portable latency promise.
+
 ## Host-Based Integration Harness
 
 Integration tests execute `ww` and supporting shell commands directly on the host machine. Each test gets its own temporary directory via `os.MkdirTemp` for filesystem isolation.

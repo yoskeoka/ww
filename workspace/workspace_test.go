@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yoskeoka/ww/git"
+	"github.com/yoskeoka/ww/internal/cache"
 )
 
 // evalTempDir resolves symlinks in t.TempDir() so that path comparisons
@@ -42,6 +43,71 @@ func TestDetectStandaloneRepo(t *testing.T) {
 	}
 	if ws.Repos[0].Name != "repo" || ws.Repos[0].Path != repo {
 		t.Fatalf("Repos[0] = %+v, want repo at %s", ws.Repos[0], repo)
+	}
+}
+
+func TestDetectWithPersistentCacheMatchesColdDiscoveryAndInvalidates(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	childB := filepath.Join(root, "child-b")
+	gitInit(t, childA)
+	gitInit(t, childB)
+
+	store := cache.NewAt(filepath.Join(t.TempDir(), "ww-cache"))
+	cold, err := Detect(childA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := DetectWithOptions(childA, DetectOptions{Cache: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(first, cold) {
+		t.Fatalf("first cached discovery = %+v, cold = %+v", first, cold)
+	}
+	hit, err := DetectWithOptions(childA, DetectOptions{Cache: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(hit, cold) {
+		t.Fatalf("cache hit = %+v, cold = %+v", hit, cold)
+	}
+
+	childC := filepath.Join(root, "child-c")
+	gitInit(t, childC)
+	invalidated, err := DetectWithOptions(childA, DetectOptions{Cache: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := repoNames(invalidated.Repos); !reflect.DeepEqual(got, []string{"child-a", "child-b", "child-c"}) {
+		t.Fatalf("invalidated repositories = %v, want all children", got)
+	}
+}
+
+func TestDetectWithPersistentCachePreservesSandboxBoundary(t *testing.T) {
+	root := evalTempDir(t)
+	childA := filepath.Join(root, "child-a")
+	childB := filepath.Join(root, "child-b")
+	gitInit(t, childA)
+	gitInit(t, childB)
+
+	store := cache.NewAt(filepath.Join(t.TempDir(), "ww-cache"))
+	cold, err := DetectWithOptions(childA, DetectOptions{Sandbox: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DetectWithOptions(childA, DetectOptions{Sandbox: true, Cache: store}); err != nil {
+		t.Fatal(err)
+	}
+	hit, err := DetectWithOptions(childA, DetectOptions{Sandbox: true, Cache: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(hit, cold) {
+		t.Fatalf("sandbox cache hit = %+v, cold = %+v", hit, cold)
+	}
+	if hit.Root != childA || hit.Mode != ModeSingleRepo {
+		t.Fatalf("sandbox cache escaped boundary: %+v", hit)
 	}
 }
 
