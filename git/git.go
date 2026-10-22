@@ -80,6 +80,41 @@ func (r *Runner) WorktreeAdd(path, branch, base string) error {
 	return err
 }
 
+// ResolveCommit resolves a start point to its complete commit OID.
+func (r *Runner) ResolveCommit(ref string) (string, error) {
+	return r.Run("rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
+}
+
+// BranchCreateNoTrack creates a branch without writing tracking configuration.
+func (r *Runner) BranchCreateNoTrack(branch, oid string) error {
+	_, err := r.Run("branch", "--no-track", branch, oid)
+	return err
+}
+
+// BranchRef returns the complete OID and symbolic target of an exact local ref.
+// An empty OID with no error means absence; lookup errors remain errors.
+func (r *Runner) BranchRef(branch string) (oid, symbolic string, err error) {
+	ref := "refs/heads/" + branch
+	out, err := r.Run("for-each-ref", "--format=%(refname)%00%(objectname)%00%(symref)", ref)
+	if err != nil {
+		return "", "", err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Split(line, "\x00")
+		if len(fields) == 3 && fields[0] == ref {
+			return fields[1], fields[2], nil
+		}
+	}
+	return "", "", nil
+}
+
+// BranchDeleteExpected deletes only the named ref at the expected complete OID.
+// Callers must separately establish ownership, direct-ref status and non-use.
+func (r *Runner) BranchDeleteExpected(branch, oid string) error {
+	_, err := r.Run("update-ref", "--no-deref", "-d", "refs/heads/"+branch, oid)
+	return err
+}
+
 // BranchUnsetUpstream removes any upstream configured for branch.
 func (r *Runner) BranchUnsetUpstream(branch string) error {
 	remote, err := r.BranchRemote(branch)

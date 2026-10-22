@@ -777,3 +777,77 @@ func contains(items []string, want string) bool {
 	}
 	return false
 }
+
+func TestBranchRecoveryOperations(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	r := &Runner{Dir: repo}
+	oid, err := r.ResolveCommit("origin/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(oid) != 40 && len(oid) != 64 {
+		t.Fatalf("not a complete OID: %q", oid)
+	}
+	configPath := filepath.Join(repo, ".git", "config")
+	before, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock := configPath + ".lock"
+	if err := os.WriteFile(lock, []byte("preserve lock"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.BranchCreateNoTrack("topic/recover", oid); err != nil {
+		t.Fatal(err)
+	}
+	got, sym, err := r.BranchRef("topic/recover")
+	if err != nil || got != oid || sym != "" {
+		t.Fatalf("BranchRef = %q %q %v", got, sym, err)
+	}
+	if err := r.BranchCreateNoTrack("topic/recover", oid); err == nil {
+		t.Fatal("duplicate creation succeeded")
+	}
+	if err := r.BranchDeleteExpected("topic/recover", strings.Repeat("1", len(oid))); err == nil {
+		t.Fatal("deleted with wrong expected OID")
+	}
+	if !r.BranchExists("topic/recover") {
+		t.Fatal("mismatch removed branch")
+	}
+	if err := r.BranchDeleteExpected("topic/recover", oid); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = r.BranchRef("topic/recover")
+	if err != nil || got != "" {
+		t.Fatalf("missing ref = %q %v", got, err)
+	}
+	// Prefix matches must not be mistaken for the exact ref.
+	if err := r.BranchCreateNoTrack("topic/recover/child", oid); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = r.BranchRef("topic/recover")
+	if err != nil || got != "" {
+		t.Fatalf("prefix ref = %q %v", got, err)
+	}
+	if _, err := r.Run("symbolic-ref", "refs/heads/topic/symbolic", "refs/heads/main"); err != nil {
+		t.Fatal(err)
+	}
+	got, sym, err = r.BranchRef("topic/symbolic")
+	if err != nil || got != oid || sym != "refs/heads/main" {
+		t.Fatalf("symbolic ref = %q %q %v", got, sym, err)
+	}
+	after, err := os.ReadFile(configPath)
+	if err != nil || string(after) != string(before) {
+		t.Fatal("config changed", err)
+	}
+	data, err := os.ReadFile(lock)
+	if err != nil || string(data) != "preserve lock" {
+		t.Fatal("lock changed", err)
+	}
+	if _, err := r.ResolveCommit("missing"); err == nil {
+		t.Fatal("missing commit resolved")
+	}
+	r.GitBin = filepath.Join(t.TempDir(), "missing-git")
+	if _, _, err := r.BranchRef("topic/recover"); err == nil {
+		t.Fatal("lookup error treated as absence")
+	}
+}

@@ -79,7 +79,7 @@ The built-in help for `ww create` must preserve the create-vs-cd role split:
 4. If `--guess-remote` is set and the branch does not exist locally:
    - refresh `origin` before checkout so recently created remote branches can be resolved without a manual fetch step
    - ask Git to resolve and check out an existing remote branch with the same branch name using `git worktree add --guess-remote`
-   - if Git cannot resolve a matching remote branch, surface an actionable error explaining that no matching remote branch could be resolved after refreshing `origin`
+   - if checkout fails, preserve the original error and diagnose remaining branch, worktree, and path state; a matching remote branch must exist and be resolvable by Git
    - if the installed Git does not support `git worktree add --guess-remote`, surface the original Git error, tell the user to upgrade Git, and include a manual `git worktree add -b <branch> --track <path> origin/<branch>` fallback
 5. Otherwise: create a new branch from `default_base` (config), `origin/HEAD`, or the heuristic `origin/main` / `origin/master` fallback and add a worktree for it.
    - the created local branch must not keep an upstream that points at the base branch used only for branch creation
@@ -97,6 +97,33 @@ The built-in help for `ww create` must preserve the create-vs-cd role split:
 For `--repo <name>` in workspace mode, the config used for steps 6-8 must be resolved against the selected repository's main worktree root, not against the current workspace-root directory.
 
 If no base can be resolved for a new branch, the command must return an actionable error. The error must explain that no explicit `default_base` is configured, `origin/HEAD` could not be used, and heuristic fallback could not find a usable `origin/main` or `origin/master`. It must include both supported remediation paths: set `default_base` in `.ww.toml`, or run `git remote set-head origin --auto` when the remote exposes a default branch.
+
+**Create failure recovery:**
+
+Normal new-branch creation pins the base commit and creates the branch without
+tracking configuration before adding its worktree. A remote base with a locked
+repository config can therefore succeed when no other operation needs that config.
+
+If add fails, return exit 1 and preserve the original Git error. Roll back only
+a branch whose creation command succeeded in this invocation, whose direct
+(non-symbolic) local ref still equals its complete creation OID, and which has
+neither a registered worktree (at any path) nor a remaining target path.
+Recheck worktree usage immediately before conditional ref deletion. A missing
+ref needs no deletion. This permits retrying the same name as a new branch.
+
+Preserve existing or concurrently created branches, updated or symbolic refs,
+registered worktrees, remaining paths (including symlinks), and any state that
+cannot be inspected. Failed branch creation and failed guess-remote checkout
+also receive diagnostics, but never establish ownership for automatic deletion.
+Deletion failures are reported alongside the original error. Diagnostics distinguish
+absent, remaining, and unknown state, name the repository, branch, and target path,
+and provide shell-quoted inspection and state-appropriate recovery commands.
+No automatic path removal, worktree removal, prune, or remove hooks occur.
+
+On failure, stdout contains no success path or success JSON, including quiet and
+JSON modes; diagnostics go to stderr. Failed add never runs materialization or
+post-create hooks. Dry-run changes no refs, config, or worktrees, runs no hooks
+or fetch, and performs no rollback. These rules do not change remove or clean.
 
 **Worktree path:** mode-dependent default, or explicit `worktree_dir` override. Slashes in branch names are replaced with `-`.
 In workspace mode with `--repo`, the default path remains centralized at `<workspace_root>/.worktrees/<repo>@<branch>`.

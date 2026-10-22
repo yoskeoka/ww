@@ -260,14 +260,18 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 			return nil, nil, fmt.Errorf("refreshing origin before remote checkout: %w", err)
 		}
 		if err := m.Git.WorktreeAddGuessRemote(wtPath, branch); err != nil {
-			return nil, nil, guessRemoteCreateError(err, wtPath, branch)
+			return nil, nil, m.createFailure(guessRemoteCreateError(err, wtPath, branch), wtPath, branch, "")
 		}
 	} else {
-		if err := m.Git.WorktreeAdd(wtPath, branch, base); err != nil {
-			return nil, nil, fmt.Errorf("creating worktree with new branch: %w", err)
+		oid, err := m.Git.ResolveCommit(base)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolving new branch base: %w", err)
 		}
-		if err := m.Git.BranchUnsetUpstream(branch); err != nil {
-			return nil, nil, fmt.Errorf("clearing inherited upstream for new branch: %w", err)
+		if err := m.Git.BranchCreateNoTrack(branch, oid); err != nil {
+			return nil, nil, m.createFailure(fmt.Errorf("creating new branch: %w", err), wtPath, branch, "")
+		}
+		if err := m.Git.WorktreeAddExisting(wtPath, branch); err != nil {
+			return nil, nil, m.createFailure(fmt.Errorf("creating worktree with new branch: %w", err), wtPath, branch, oid)
 		}
 	}
 
@@ -278,6 +282,91 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 
 	info := &WorktreeInfo{Path: wtPath, Branch: branch, Created: true, Base: base}
 	return info, nil, nil
+}
+
+// createFailure preserves the original error and conservatively recovers only
+// refs owned by this invocation. Git usage checks and deletion are not atomic.
+func (m *Manager) createFailure(cause error, wtPath, branch, ownedOID string) error {
+	oid, symbolic, refErr := m.Git.BranchRef(branch)
+	entries, listErr := m.Git.WorktreeList()
+	_, pathErr := os.Lstat(wtPath)
+	pathAbsent := errors.Is(pathErr, fs.ErrNotExist)
+	var state []string
+	unused := listErr == nil
+	safe := true
+	if refErr != nil {
+		state = append(state, fmt.Sprintf("branch state unknown: %v", refErr))
+		safe = false
+	} else if oid == "" {
+		state = append(state, "branch absent")
+		safe = false
+	} else {
+		state = append(state, "branch remains at "+oid)
+		if symbolic != "" {
+			state = append(state, "symbolic ref preserved: "+symbolic)
+			safe = false
+		}
+		if ownedOID == "" {
+			state = append(state, "branch ownership unproven")
+			safe = false
+		} else if oid != ownedOID {
+			state = append(state, "branch changed since creation")
+			safe = false
+		}
+	}
+	if listErr != nil {
+		state = append(state, fmt.Sprintf("worktree state unknown: %v", listErr))
+		safe = false
+	} else {
+		used := false
+		for _, entry := range entries {
+			if entry.Branch == branch || filepath.Clean(entry.Path) == filepath.Clean(wtPath) {
+				state = append(state, "registered worktree remains: "+entry.Path)
+				used = true
+				unused = false
+			}
+		}
+		if used {
+			safe = false
+		} else {
+			state = append(state, "no associated registered worktree")
+		}
+	}
+	if pathErr == nil {
+		state = append(state, "target path remains (preserved)")
+		safe = false
+	} else if !pathAbsent {
+		state = append(state, fmt.Sprintf("target path state unknown: %v", pathErr))
+		safe = false
+	} else {
+		state = append(state, "target path absent")
+	}
+	if safe {
+		// Repeat all safety observations as close to deletion as possible.
+		currentOID, currentSymbolic, err := m.Git.BranchRef(branch)
+		freshEntries, freshErr := m.Git.WorktreeList()
+		_, freshPathErr := os.Lstat(wtPath)
+		if err != nil || freshErr != nil || currentOID != ownedOID || currentSymbolic != "" || !errors.Is(freshPathErr, fs.ErrNotExist) {
+			return m.createFailure(fmt.Errorf("%w\nrollback deferred: state changed or recheck failed (ref: %v; worktrees: %v; path: %v)", cause, err, freshErr, freshPathErr), wtPath, branch, "")
+
+		}
+		for _, entry := range freshEntries {
+			if entry.Branch == branch || filepath.Clean(entry.Path) == filepath.Clean(wtPath) {
+				return m.createFailure(fmt.Errorf("%w\nrollback deferred: registered worktree remains: %s", cause, entry.Path), wtPath, branch, "")
+			}
+		}
+		if err := m.Git.BranchDeleteExpected(branch, ownedOID); err == nil {
+			return fmt.Errorf("%w\nRolled back new branch %q at %s; target path absent; no associated registered worktree. Retry after fixing the original error.", cause, branch, ownedOID)
+		} else {
+			return m.createFailure(fmt.Errorf("%w\nrollback deletion failed: %v", cause, err), wtPath, branch, "")
+		}
+	}
+	repo := shellQuotePOSIX(m.RepoDir)
+	guidance := fmt.Sprintf("Inspect before recovery:\n  git -C %s worktree list --porcelain\n  git -C %s for-each-ref --format='%%(refname) %%(objectname) %%(symref)' %s\n  ls -ld -- %s\nPreserve any remaining worktree/path and repair the original failure before retrying.", repo, repo, shellQuotePOSIX("refs/heads/"+branch), shellQuotePOSIX(wtPath))
+	if oid != "" && symbolic == "" && refErr == nil && unused && pathAbsent {
+		guidance += fmt.Sprintf("\nOnly after confirming the branch is unused, unchanged, and safe to discard:\n  git -C %s update-ref --no-deref -d %s %s", repo, shellQuotePOSIX("refs/heads/"+branch), shellQuotePOSIX(oid))
+	}
+	return fmt.Errorf("%w\nCreate recovery: repo %s; branch %q; target %s\n%s\n%s", cause, m.RepoDir, branch, wtPath, strings.Join(state, "; "), guidance)
 }
 
 // Replay re-runs only the post-create materialization actions for a registered
@@ -351,7 +440,7 @@ func guessRemoteCreateError(err error, wtPath, branch string) error {
 	if isGuessRemoteUnsupported(err) {
 		return fmt.Errorf("git worktree add --guess-remote is unsupported by the installed Git. Upgrade Git and retry, or run manually:\n  git worktree add -b %s --track %s %s\nOriginal error: %w", shellQuotePOSIX(branch), shellQuotePOSIX(wtPath), shellQuotePOSIX("origin/"+branch), err)
 	}
-	return fmt.Errorf("cannot resolve remote branch %q with --guess-remote after refreshing origin. Make sure a matching remote branch exists and can be resolved by Git.\nOriginal error: %w", branch, err)
+	return fmt.Errorf("cannot check out remote branch %q with --guess-remote after refreshing origin. Make sure a matching remote branch exists and can be resolved by Git.\nOriginal error: %w", branch, err)
 }
 
 func isGuessRemoteUnsupported(err error) bool {
