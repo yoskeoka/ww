@@ -104,26 +104,38 @@ Normal new-branch creation pins the base commit and creates the branch without
 tracking configuration before adding its worktree. A remote base with a locked
 repository config can therefore succeed when no other operation needs that config.
 
-If add fails, return exit 1 and preserve the original Git error. Roll back only
+If add fails, return exit 1 and preserve the original Git error.
+
+Roll back only
 a branch whose creation command succeeded in this invocation, whose direct
 (non-symbolic) local ref still equals its complete creation OID, and which has
 neither a registered worktree (at any path) nor a remaining target path.
+
 Recheck worktree usage immediately before conditional ref deletion. A missing
 ref needs no deletion. This permits retrying the same name as a new branch.
 
 Preserve existing or concurrently created branches, updated or symbolic refs,
 registered worktrees, remaining paths (including symlinks), and any state that
-cannot be inspected. Failed branch creation and failed guess-remote checkout
+cannot be inspected.
+
+Failed branch creation and failed guess-remote checkout
 also receive diagnostics, but never establish ownership for automatic deletion.
+
 Deletion failures are reported alongside the original error. Diagnostics distinguish
 absent, remaining, and unknown state, name the repository, branch, and target path,
 and provide shell-quoted inspection and state-appropriate recovery commands.
+
 No automatic path removal, worktree removal, prune, or remove hooks occur.
 
-On failure, stdout contains no success path or success JSON, including quiet and
-JSON modes; diagnostics go to stderr. Failed add never runs materialization or
-post-create hooks. Dry-run changes no refs, config, or worktrees, runs no hooks
-or fetch, and performs no rollback. These rules do not change remove or clean.
+In all output modes, including quiet and JSON, failure diagnostics go to stderr
+and stdout contains no success path or success JSON.
+
+Failed add skips materialization and post-create hooks.
+
+Dry-run leaves refs, config, and worktrees intact. It skips hooks, fetch, and
+rollback.
+
+These rules apply only to create.
 
 **Worktree path:** mode-dependent default, or explicit `worktree_dir` override. Slashes in branch names are replaced with `-`.
 In workspace mode with `--repo`, the default path remains centralized at `<workspace_root>/.worktrees/<repo>@<branch>`.

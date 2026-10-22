@@ -49,8 +49,11 @@ git worktree add <path> <branch>
 ```
 
 The base is pinned to a complete commit OID and never becomes an upstream.
+
 Successful branch creation establishes ownership for failure recovery; an
-existence difference alone does not. On add failure, inspect the direct local
+existence difference alone does not.
+
+On add failure, inspect the direct local
 ref, complete OID, all registered worktrees, and the target path using Lstat.
 Only an owned, unchanged, non-symbolic ref with no associated worktree or
 remaining path may be removed, using an expected-OID conditional deletion:
@@ -59,13 +62,22 @@ remaining path may be removed, using an expected-OID conditional deletion:
 git update-ref --no-deref -d refs/heads/<branch> <complete-oid>
 ```
 
-Recheck worktree usage immediately before deletion. Preserve state on inspection
+Recheck worktree usage immediately before deletion.
+
+Preserve state on inspection
 or deletion errors and return the original error plus remaining/unknown state
-and shell-quoted recovery guidance. Branch creation failure and guess-remote
-failure require the same diagnostics without automatic deletion. Never remove
+and shell-quoted recovery guidance.
+
+Branch creation failure and guess-remote
+failure require the same diagnostics without automatic deletion.
+
+Never remove
 paths, prune worktrees, run remove hooks, or erase config sections during recovery.
+
 The usage check and ref deletion are not one Git transaction; arbitrary external
-checkouts are not fully excluded. Hooks, submodules, fetch, and other Git side
+checkouts are not fully excluded.
+
+Hooks, submodules, fetch, and other Git side
 effects remain environment-dependent; avoiding unnecessary upstream writes is
 not a general guarantee of config-write or sandbox compatibility.
 
