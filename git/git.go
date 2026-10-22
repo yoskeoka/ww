@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -151,7 +152,29 @@ func (r *Runner) WorktreeList() ([]WorktreeEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseWorktreeList(out), nil
+	// Older Git can emit unescaped line breaks in paths. Reject malformed
+	// records rather than using a truncated location for safety checks.
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" || line == "bare" || line == "detached" ||
+			line == "locked" || line == "prunable" ||
+			strings.HasPrefix(line, "worktree ") || strings.HasPrefix(line, "HEAD ") ||
+			strings.HasPrefix(line, "branch ") || strings.HasPrefix(line, "locked ") ||
+			strings.HasPrefix(line, "prunable ") {
+			continue
+		}
+		return nil, fmt.Errorf("cannot parse worktree listing: unexpected record %q", line)
+	}
+	entries := parseWorktreeList(out)
+	for i := range entries {
+		if strings.HasPrefix(entries[i].Path, "\"") {
+			decoded, err := strconv.Unquote(entries[i].Path)
+			if err != nil {
+				return nil, fmt.Errorf("decoding worktree path %q: %w", entries[i].Path, err)
+			}
+			entries[i].Path = decoded
+		}
+	}
+	return entries, nil
 }
 
 // WorktreeRoot returns the root of the current worktree.

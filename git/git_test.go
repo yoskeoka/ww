@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -850,4 +851,82 @@ func TestBranchRecoveryOperations(t *testing.T) {
 	if _, _, err := r.BranchRef("topic/recover"); err == nil {
 		t.Fatal("lookup error treated as absence")
 	}
+}
+
+func TestWorktreeListDecodesQuotedPaths(t *testing.T) {
+	repo := setupGitRepo(t)
+	r := &Runner{Dir: repo}
+	target := filepath.Join(t.TempDir(), "quote\" tab\t unicode-é")
+	if _, err := r.Run("worktree", "add", "--detach", target, "main"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := r.WorktreeList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, entry := range entries {
+		if entry.Path == resolved {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("decoded target %q missing in %#v", resolved, entries)
+	}
+}
+
+func TestWorktreeListQuotedRecordAndMalformedOutput(t *testing.T) {
+	target := "/tmp/quote\" tab\t newline\n unicode-é"
+	for _, malformed := range []bool{false, true} {
+		t.Run(fmt.Sprint(malformed), func(t *testing.T) {
+			output := "worktree " + strconv.Quote(target) + "\nHEAD " + strings.Repeat("1", 40) + "\ndetached\n\n"
+			if malformed {
+				output = "worktree /tmp/truncated\nunknown continuation\n\n"
+			}
+			quoted := "'" + strings.ReplaceAll(output, "'", "'\"'\"'") + "'"
+			script := filepath.Join(t.TempDir(), "git")
+			if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s' "+quoted+"\n"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			r := &Runner{GitBin: script}
+			entries, err := r.WorktreeList()
+			if malformed {
+				if err == nil {
+					t.Fatal("malformed output treated as known state", entries)
+				}
+			} else if err != nil || len(entries) != 1 || entries[0].Path != target {
+				t.Fatalf("quoted path not preserved: %#v %v", entries, err)
+			}
+		})
+	}
+}
+
+func TestWorktreeListRawNewlineNeverTruncatesSuccessfully(t *testing.T) {
+	repo := setupGitRepo(t)
+	r := &Runner{Dir: repo}
+	target := filepath.Join(t.TempDir(), "newline\ncontinuation")
+	if _, err := r.Run("worktree", "add", "--detach", target, "main"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := r.WorktreeList()
+	if err != nil {
+		if !strings.Contains(err.Error(), "cannot parse worktree listing") {
+			t.Fatal(err)
+		}
+		return // Legacy Git output is ambiguous: callers must preserve unknown state.
+	}
+	resolved, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Path == resolved {
+			return
+		}
+	}
+	t.Fatalf("worktree listing silently lost newline path: %#v", entries)
 }

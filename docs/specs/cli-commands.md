@@ -104,6 +104,10 @@ Normal new-branch creation pins the base commit and creates the branch without
 tracking configuration before adding its worktree. A remote base with a locked
 repository config can therefore succeed when no other operation needs that config.
 
+If stale upstream settings remain for a name whose branch ref is absent, clear
+them before attaching the new worktree. This case requires a config write.
+If that cleanup fails, apply the same owned-branch recovery checks.
+
 If add fails, return exit 1 and preserve the original Git error.
 
 Roll back only

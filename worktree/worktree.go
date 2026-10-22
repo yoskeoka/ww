@@ -270,6 +270,9 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		if err := m.Git.BranchCreateNoTrack(branch, oid); err != nil {
 			return nil, nil, m.createFailure(fmt.Errorf("creating new branch: %w", err), wtPath, branch, "")
 		}
+		if err := m.Git.BranchUnsetUpstream(branch); err != nil {
+			return nil, nil, m.createFailure(fmt.Errorf("clearing stale upstream for new branch: %w", err), wtPath, branch, oid)
+		}
 		if err := m.Git.WorktreeAddExisting(wtPath, branch); err != nil {
 			return nil, nil, m.createFailure(fmt.Errorf("creating worktree with new branch: %w", err), wtPath, branch, oid)
 		}

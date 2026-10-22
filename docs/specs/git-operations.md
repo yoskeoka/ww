@@ -49,6 +49,8 @@ git worktree add <path> <branch>
 ```
 
 The base is pinned to a complete commit OID and never becomes an upstream.
+If upstream settings already exist for the new name, clear them before adding
+the worktree; otherwise skip that config write.
 
 Successful branch creation establishes ownership for failure recovery; an
 existence difference alone does not.
@@ -101,6 +103,10 @@ manual fetch step. The checkout itself remains Git-driven; `ww` does not use
 ```
 git worktree list --porcelain
 ```
+
+Decode Git-quoted paths before comparing locations. If older Git emits a raw
+line break that makes the record invalid, treat the listing as unknown and
+preserve the branch.
 
 The output is parsed into structured entries. The first entry is always the main working tree and is marked accordingly. Each entry contains: path, HEAD (abbreviated), branch name, bare flag, and main worktree flag.
 

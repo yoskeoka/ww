@@ -1699,3 +1699,71 @@ func TestCreateRecoveryCommandsQuoteRepositoryPath(t *testing.T) {
 		t.Fatal("shell evaluated repository text", err)
 	}
 }
+
+func TestCreateClearsOrphanTrackingConfig(t *testing.T) {
+	for _, locked := range []bool{false, true} {
+		t.Run(fmt.Sprint(locked), func(t *testing.T) {
+			repo, _ := setupGitRepoWithRemote(t)
+			r := &git.Runner{Dir: repo}
+			mustGit(t, r, "config", "branch.topic/orphan.remote", "origin")
+			mustGit(t, r, "config", "branch.topic/orphan.merge", "refs/heads/main")
+			if locked {
+				if err := os.WriteFile(filepath.Join(repo, ".git", "config.lock"), []byte("preserve"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := &Manager{Git: r, RepoDir: repo}
+			_, _, err := m.Create("topic/orphan", CreateOpts{})
+			if locked {
+				if err == nil || !strings.Contains(err.Error(), "clearing stale upstream") || !strings.Contains(err.Error(), "Rolled back new branch") {
+					t.Fatal(err)
+				}
+				if r.BranchExists("topic/orphan") {
+					t.Fatal("owned branch remains after cleanup failure")
+				}
+				tracking, e := r.BranchTrackingConfig()
+				if e != nil || tracking["topic/orphan"].Remote != "origin" {
+					t.Fatal("old config changed", tracking, e)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				tracking, e := r.BranchTrackingConfig()
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, ok := tracking["topic/orphan"]; ok {
+					t.Fatal("orphan tracking retained", tracking)
+				}
+			}
+		})
+	}
+}
+
+func TestCreateFailurePreservesMissingQuotedDetachedWorktree(t *testing.T) {
+	repo := setupGitRepo(t)
+	r := &git.Runner{Dir: repo}
+	m := &Manager{Git: r, RepoDir: repo, Config: Config{DefaultBase: "main", WorktreeDir: filepath.Join(t.TempDir(), "quoted\"root")}}
+	wt, err := m.WorktreePath("topic/recover")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.GitBin = recoveryGit(t, `if [ "$1" = worktree ] && [ "$2" = add ]; then
+"$real" worktree add --detach "$3" main || exit
+rm -rf -- "$3"
+echo quoted-detached-failure >&2
+exit 42
+fi`)
+	_, _, err = m.Create("topic/recover", CreateOpts{})
+	if err == nil || !strings.Contains(err.Error(), "quoted-detached-failure") || !strings.Contains(err.Error(), "registered worktree remains: "+wt) {
+		t.Fatal(err)
+	}
+	r.GitBin = ""
+	if !r.BranchExists("topic/recover") {
+		t.Fatal("owned branch removed despite registered target")
+	}
+	if _, err := os.Lstat(wt); !os.IsNotExist(err) {
+		t.Fatal("fixture target must be missing", err)
+	}
+}
