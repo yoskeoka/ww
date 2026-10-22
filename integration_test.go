@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -3019,5 +3020,94 @@ func TestCleanIgnoresUnknownWorktrees(t *testing.T) {
 	// Worktree should still exist.
 	if !globalEnv.PathExists(wtPath) {
 		t.Errorf("worktree should not have been cleaned: %s", wtPath)
+	}
+}
+
+func TestCreateRollbackCLI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	for _, flags := range [][]string{nil, {"-q"}, {"--json"}} {
+		t.Run(fmt.Sprint(flags), func(t *testing.T) {
+			repo := setupRepo(t)
+			writeConfig(t, repo, "default_base = \"main\"\npost_create_hook = \"echo post-hook-must-not-run\"\n")
+			realGit, err := exec.LookPath("git")
+			if err != nil {
+				t.Fatal(err)
+			}
+			bin := t.TempDir()
+			script := "#!/bin/sh\nif [ \"$1\" = worktree ] && [ \"$2\" = add ]; then echo injected-cli-add-failure >&2; exit 42; fi\nexec " + recoveryShellQuote(realGit) + " \"$@\"\n"
+			if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0755); err != nil {
+				t.Fatal(err)
+			}
+			args := append([]string{"create"}, flags...)
+			args = append(args, "topic/rollback")
+			stdout, stderr, err := runWWSplitWithEnv(t, repo, []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}, args...)
+			if err == nil || err.Error() != "exit 1" || stdout != "" {
+				t.Fatalf("failure contract: %q %q %v", stdout, stderr, err)
+			}
+			for _, want := range []string{"injected-cli-add-failure", "Rolled back new branch"} {
+				if !strings.Contains(stderr, want) {
+					t.Fatalf("missing %q: %s", want, stderr)
+				}
+			}
+			if strings.Contains(stderr, "post-hook-must-not-run") {
+				t.Fatal("post hook ran")
+			}
+			if out, err := globalEnv.Git(repo, "show-ref", "--verify", "refs/heads/topic/rollback"); err == nil {
+				t.Fatal("branch remains", out)
+			}
+			if globalEnv.PathExists(worktreePath(repo, "topic/rollback")) {
+				t.Fatal("path remains")
+			}
+			if out, err := runWW(t, repo, args...); err != nil {
+				t.Fatal("same-name retry failed", out, err)
+			}
+		})
+	}
+}
+
+func recoveryShellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func TestCreateConfigLockCLI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: integration test")
+	}
+	repo := setupRepo(t)
+	writeConfig(t, repo, "default_base = \"origin/main\"\n")
+	if _, err := globalEnv.Git(repo, "config", "branch.autoSetupMerge", "true"); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(repo, ".git", "config")
+	before, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config+".lock", []byte("preserve"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runWW(t, repo, "create", "topic/locked"); err != nil {
+		t.Fatal(out, err)
+	}
+	after, err := os.ReadFile(config)
+	if err != nil || string(after) != string(before) {
+		t.Fatal("config changed", err)
+	}
+	lock, err := os.ReadFile(config + ".lock")
+	if err != nil || string(lock) != "preserve" {
+		t.Fatal("lock changed", err)
+	}
+	oid, err := globalEnv.Git(repo, "rev-parse", "topic/locked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := globalEnv.Git(repo, "rev-parse", "origin/main")
+	if err != nil || oid != base {
+		t.Fatal("wrong branch commit", err)
+	}
+	if out, err := globalEnv.Git(repo, "config", "--get", "branch.topic/locked.remote"); err == nil {
+		t.Fatal("unexpected upstream", out)
 	}
 }

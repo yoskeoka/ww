@@ -675,7 +675,7 @@ func TestCreateGuessRemoteMissingRemoteBranchIsActionable(t *testing.T) {
 	}
 	msg := err.Error()
 	for _, want := range []string{
-		`cannot resolve remote branch "feat/missing" with --guess-remote after refreshing origin`,
+		`cannot check out remote branch "feat/missing" with --guess-remote after refreshing origin`,
 		"Make sure a matching remote branch exists and can be resolved by Git",
 		"Original error:",
 		"invalid reference: feat/missing",
@@ -1395,4 +1395,375 @@ func hookAppendCommand(logPath, phase string, exitCode int) string {
 		shellQuotePOSIX(phase), shellQuotePOSIX(logPath), exitCode,
 	)
 	return command
+}
+
+// recoveryGit delegates to real Git except for deterministic failure injection.
+func recoveryGit(t *testing.T, body string) string {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(t.TempDir(), "git")
+	content := "#!/bin/sh\nreal=" + shellQuotePOSIX(realGit) + "\n" + body + "\nexec \"$real\" \"$@\"\n"
+	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
+		t.Fatal(err)
+	}
+	return script
+}
+
+func TestCreateFailureRecovery(t *testing.T) {
+	tests := []struct {
+		name, injection, diagnostic string
+		preserve                    bool
+	}{
+		{"rollback", "", "Rolled back new branch", false},
+		{"updated", `"$real" update-ref refs/heads/topic/recover "$changed"`, "branch changed since creation", true},
+		{"registered", `"$real" "$@" || exit; `, "registered worktree remains", true},
+		{"used-elsewhere", `"$real" worktree add "$other" topic/recover || exit;`, "registered worktree remains", true},
+		{"file", `mkdir -p "$(dirname "$3")"; echo precious > "$3"`, "target path remains", true},
+		{"symlink", `mkdir -p "$(dirname "$3")"; ln -s missing "$3"`, "target path remains", true},
+		{"symbolic", `"$real" update-ref -d refs/heads/topic/recover; "$real" symbolic-ref refs/heads/topic/recover refs/heads/main`, "symbolic ref preserved", true},
+		{"already-absent", `"$real" update-ref -d refs/heads/topic/recover`, "branch absent", false},
+		{"ref-query", `touch "$marker"`, "branch state unknown", true},
+		{"worktree-query", `touch "$marker"`, "worktree state unknown", true},
+		{"delete", "", "rollback deletion failed", true},
+		{"delete-race", "", "rollback deletion failed", true},
+		{"recheck-use", `touch "$marker"`, "rollback deferred: registered worktree remains", true},
+		{"recheck-ref", `touch "$marker"`, "rollback deferred: state changed", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := setupGitRepo(t)
+			r := &git.Runner{Dir: repo}
+			original := recoveryOID(t, r, "HEAD")
+			mustGit(t, r, "commit", "--allow-empty", "-m", "second")
+			changed := recoveryOID(t, r, "HEAD")
+			mustGit(t, r, "reset", "--hard", original)
+			other := filepath.Join(t.TempDir(), "other")
+			marker := filepath.Join(t.TempDir(), "marker")
+			post := filepath.Join(t.TempDir(), "post")
+			prefix := "changed=" + shellQuotePOSIX(changed) + "\nother=" + shellQuotePOSIX(other) + "\nmarker=" + shellQuotePOSIX(marker) + "\n"
+			special := ""
+			switch tc.name {
+			case "ref-query":
+				special = `if [ -f "$marker" ] && [ "$1" = for-each-ref ]; then echo query-failed >&2; exit 42; fi`
+			case "worktree-query":
+				special = `if [ -f "$marker" ] && [ "$1" = worktree ] && [ "$2" = list ]; then echo query-failed >&2; exit 42; fi`
+			case "delete":
+				special = `if [ "$1" = update-ref ] && [ "$2" = --no-deref ]; then echo cleanup-failed >&2; exit 42; fi`
+			case "delete-race":
+				special = `if [ "$1" = update-ref ] && [ "$2" = --no-deref ]; then "$real" update-ref refs/heads/topic/recover "$changed"; fi`
+			case "recheck-use", "recheck-ref":
+				action := `"$real" worktree add "$other" topic/recover || exit`
+				if tc.name == "recheck-ref" {
+					action = `"$real" update-ref refs/heads/topic/recover "$changed"`
+				}
+				special = `if [ -f "$marker" ] && [ "$1" = for-each-ref ]; then
+if [ -f "$marker.seen" ]; then ` + action + `; else touch "$marker.seen"; fi
+fi`
+			}
+			add := `if [ "$1" = worktree ] && [ "$2" = add ]; then
+` + tc.injection + `
+echo injected-add-failure >&2
+exit 42
+fi`
+			r.GitBin = recoveryGit(t, prefix+special+"\n"+add)
+			m := &Manager{Git: r, RepoDir: repo, Config: Config{DefaultBase: "main", PostCreateHook: "touch " + shellQuotePOSIX(post)}}
+			wt, err := m.WorktreePath("topic/recover")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = m.Create("topic/recover", CreateOpts{})
+			if err == nil || !strings.Contains(err.Error(), "injected-add-failure") || !strings.Contains(err.Error(), tc.diagnostic) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if _, err := os.Stat(post); !os.IsNotExist(err) {
+				t.Fatal("post hook ran", err)
+			}
+			r.GitBin = ""
+			if r.BranchExists("topic/recover") != tc.preserve {
+				t.Fatalf("branch preservation mismatch: %v", tc.preserve)
+			}
+			if tc.name == "updated" || tc.name == "delete-race" || tc.name == "recheck-ref" {
+				if got := recoveryOID(t, r, "refs/heads/topic/recover"); got != changed {
+					t.Fatal("updated ref lost", got)
+				}
+			}
+			if tc.name == "file" || tc.name == "symlink" || tc.name == "registered" {
+				if _, err := os.Lstat(wt); err != nil {
+					t.Fatal("remaining path lost", err)
+				}
+			}
+			if tc.name == "rollback" {
+				if _, _, err := m.Create("topic/recover", CreateOpts{}); err != nil {
+					t.Fatal("retry failed", err)
+				}
+			}
+		})
+	}
+}
+
+func TestCreateBranchFailureDoesNotOwnRef(t *testing.T) {
+	for _, mode := range []string{"before", "partial", "hook"} {
+		t.Run(mode, func(t *testing.T) {
+			repo := setupGitRepo(t)
+			r := &git.Runner{Dir: repo}
+			m := &Manager{Git: r, RepoDir: repo, Config: Config{DefaultBase: "main"}}
+			if mode == "hook" {
+				m.Config.PreCreateHook = "git branch topic/recover"
+			} else {
+				action := ""
+				if mode == "partial" {
+					action = `"$real" "$@" || exit`
+				}
+				r.GitBin = recoveryGit(t, `if [ "$1" = branch ] && [ "$2" = --no-track ]; then
+`+action+`
+echo injected-branch-failure >&2
+exit 42
+fi`)
+			}
+			_, _, err := m.Create("topic/recover", CreateOpts{})
+			if err == nil {
+				t.Fatal("expected failure")
+			}
+			want := "branch absent"
+			if mode != "before" {
+				want = "branch ownership unproven"
+			}
+			if !strings.Contains(err.Error(), want) {
+				t.Fatal(err)
+			}
+			r.GitBin = ""
+			if r.BranchExists("topic/recover") != (mode != "before") {
+				t.Fatal("wrong remaining ref")
+			}
+		})
+	}
+}
+
+func TestCreateFailureUnknownPathAndQuotedGuidance(t *testing.T) {
+	repo := setupGitRepo(t)
+	r := &git.Runner{Dir: repo}
+	oid := recoveryOID(t, r, "HEAD")
+	branch := "topic/quote'branch"
+	mustGit(t, r, "branch", branch)
+	loop := filepath.Join(t.TempDir(), "loop")
+	if err := os.Symlink("loop", loop); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{Git: r, RepoDir: repo}
+	err := m.createFailure(errors.New("original"), filepath.Join(loop, "target"), branch, oid)
+	if !strings.Contains(err.Error(), "target path state unknown") || !strings.Contains(err.Error(), shellQuotePOSIX("refs/heads/"+branch)) {
+		t.Fatal(err)
+	}
+	if !r.BranchExists(branch) {
+		t.Fatal("branch deleted after Lstat failure")
+	}
+}
+
+func TestCreateConfigLockAvoidsUpstreamWrites(t *testing.T) {
+	repo, _ := setupGitRepoWithRemote(t)
+	r := &git.Runner{Dir: repo}
+	mustGit(t, r, "config", "branch.autoSetupMerge", "true")
+	config := filepath.Join(repo, ".git", "config")
+	before, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config+".lock", []byte("lock-content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{Git: r, RepoDir: repo}
+	info, _, err := m.Create("topic/locked", CreateOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := recoveryOID(t, r, "topic/locked")
+	want := recoveryOID(t, r, "origin/main")
+	if got != want || info.Base != "origin/main" {
+		t.Fatalf("wrong base: %s %s %+v", got, want, info)
+	}
+	tracking, err := r.BranchTrackingConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tracking["topic/locked"]; ok {
+		t.Fatal("tracking created")
+	}
+	after, err := os.ReadFile(config)
+	if err != nil || string(after) != string(before) {
+		t.Fatal("config changed", err)
+	}
+	lock, err := os.ReadFile(config + ".lock")
+	if err != nil || string(lock) != "lock-content" {
+		t.Fatal("lock changed", err)
+	}
+}
+
+func recoveryOID(t *testing.T, r *git.Runner, ref string) string {
+	t.Helper()
+	oid, err := r.ResolveCommit(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return oid
+}
+
+func TestCreatePreservesExistingAndRemoteFailureRefs(t *testing.T) {
+	for _, remote := range []bool{false, true} {
+		t.Run(fmt.Sprint(remote), func(t *testing.T) {
+			repo, _ := setupGitRepoWithRemote(t)
+			r := &git.Runner{Dir: repo}
+			if !remote {
+				mustGit(t, r, "branch", "--track", "topic/preserve", "origin/main")
+			}
+			oid := recoveryOID(t, r, "main")
+			injection := ""
+			if remote {
+				injection = `"$real" branch --track topic/preserve origin/main || exit`
+			}
+			r.GitBin = recoveryGit(t, `if [ "$1" = worktree ] && [ "$2" = add ]; then
+`+injection+`
+echo original-checkout-failure >&2; exit 42
+fi`)
+			m := &Manager{Git: r, RepoDir: repo}
+			_, _, err := m.Create("topic/preserve", CreateOpts{GuessRemote: remote})
+			if err == nil || !strings.Contains(err.Error(), "original-checkout-failure") {
+				t.Fatal(err)
+			}
+			if remote && (!strings.Contains(err.Error(), "branch ownership unproven") || !strings.Contains(err.Error(), repo)) {
+				t.Fatal(err)
+			}
+			r.GitBin = ""
+			if got := recoveryOID(t, r, "topic/preserve"); got != oid {
+				t.Fatal("branch changed", got)
+			}
+			tracking, err := r.BranchTrackingConfig()
+			if err != nil || tracking["topic/preserve"].Remote != "origin" {
+				t.Fatal("tracking lost", tracking, err)
+			}
+		})
+	}
+}
+
+func TestCreateDryRunDoesNotMutateOrRecover(t *testing.T) {
+	repo := setupGitRepo(t)
+	r := &git.Runner{Dir: repo}
+	log := filepath.Join(t.TempDir(), "calls")
+	r.GitBin = recoveryGit(t, "echo \"$*\" >> "+shellQuotePOSIX(log))
+	m := &Manager{Git: r, RepoDir: repo, Config: Config{DefaultBase: "main", PreCreateHook: "exit 42", PostCreateHook: "exit 42"}}
+	for _, remote := range []bool{false, true} {
+		if _, _, err := m.Create("topic/dry", CreateOpts{DryRun: true, GuessRemote: remote}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"branch --no-track", "worktree add", "fetch", "update-ref", "for-each-ref"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Fatalf("dry-run executed %s: %s", forbidden, data)
+		}
+	}
+}
+
+func TestCreateRecoveryCommandsQuoteRepositoryPath(t *testing.T) {
+	oldRepo := setupGitRepo(t)
+	repo := filepath.Join(t.TempDir(), "repo ' $(touch SENTINEL)")
+	if err := os.Rename(oldRepo, repo); err != nil {
+		t.Fatal(err)
+	}
+	r := &git.Runner{Dir: repo}
+	branch := "topic/quote'branch"
+	mustGit(t, r, "branch", branch)
+	m := &Manager{Git: r, RepoDir: repo}
+	target := filepath.Join(repo, "missing ' target")
+	err := m.createFailure(errors.New("original"), target, branch, "")
+	for _, line := range strings.Split(err.Error(), "\n") {
+		// Execute only the non-mutating Git inspection commands from guidance.
+		if !strings.HasPrefix(line, "  git ") {
+			continue
+		}
+		if strings.Contains(line, "update-ref") {
+			continue
+		}
+		cmd := exec.Command("sh", "-c", line)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("invalid recovery command %q: %s %v", line, out, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(repo, "SENTINEL")); !os.IsNotExist(err) {
+		t.Fatal("shell evaluated repository text", err)
+	}
+}
+
+func TestCreateClearsOrphanTrackingConfig(t *testing.T) {
+	for _, locked := range []bool{false, true} {
+		t.Run(fmt.Sprint(locked), func(t *testing.T) {
+			repo, _ := setupGitRepoWithRemote(t)
+			r := &git.Runner{Dir: repo}
+			mustGit(t, r, "config", "branch.topic/orphan.remote", "origin")
+			mustGit(t, r, "config", "branch.topic/orphan.merge", "refs/heads/main")
+			if locked {
+				if err := os.WriteFile(filepath.Join(repo, ".git", "config.lock"), []byte("preserve"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := &Manager{Git: r, RepoDir: repo}
+			_, _, err := m.Create("topic/orphan", CreateOpts{})
+			if locked {
+				if err == nil || !strings.Contains(err.Error(), "clearing stale upstream") || !strings.Contains(err.Error(), "Rolled back new branch") {
+					t.Fatal(err)
+				}
+				if r.BranchExists("topic/orphan") {
+					t.Fatal("owned branch remains after cleanup failure")
+				}
+				tracking, e := r.BranchTrackingConfig()
+				if e != nil || tracking["topic/orphan"].Remote != "origin" {
+					t.Fatal("old config changed", tracking, e)
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				tracking, e := r.BranchTrackingConfig()
+				if e != nil {
+					t.Fatal(e)
+				}
+				if _, ok := tracking["topic/orphan"]; ok {
+					t.Fatal("orphan tracking retained", tracking)
+				}
+			}
+		})
+	}
+}
+
+func TestCreateFailurePreservesMissingQuotedDetachedWorktree(t *testing.T) {
+	repo := setupGitRepo(t)
+	r := &git.Runner{Dir: repo}
+	m := &Manager{Git: r, RepoDir: repo, Config: Config{DefaultBase: "main", WorktreeDir: filepath.Join(t.TempDir(), "quoted\"root")}}
+	wt, err := m.WorktreePath("topic/recover")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.GitBin = recoveryGit(t, `if [ "$1" = worktree ] && [ "$2" = add ]; then
+"$real" worktree add --detach "$3" main || exit
+rm -rf -- "$3"
+echo quoted-detached-failure >&2
+exit 42
+fi`)
+	_, _, err = m.Create("topic/recover", CreateOpts{})
+	if err == nil || !strings.Contains(err.Error(), "quoted-detached-failure") || !strings.Contains(err.Error(), "registered worktree remains: "+wt) {
+		t.Fatal(err)
+	}
+	r.GitBin = ""
+	if !r.BranchExists("topic/recover") {
+		t.Fatal("owned branch removed despite registered target")
+	}
+	if _, err := os.Lstat(wt); !os.IsNotExist(err) {
+		t.Fatal("fixture target must be missing", err)
+	}
 }

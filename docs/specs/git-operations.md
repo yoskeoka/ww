@@ -43,15 +43,45 @@ This excludes linked worktree checkouts while still allowing valid standalone re
 
 **Create worktree with new branch:**
 ```
-git worktree add -b <branch> <path> <base>
-git branch --unset-upstream <branch>
+git rev-parse --verify <base>^{commit}
+git branch --no-track <branch> <complete-oid>
+git worktree add <path> <branch>
 ```
 
-Git may automatically record `<base>` as the new branch's upstream when `<base>`
-is a remote-tracking ref such as `origin/main`. `ww` uses that ref only as the
-branch creation start-point, so after creating a new local branch from a base
-ref it must remove that auto-created upstream. This keeps normal `ww create
-<branch>` output from leaving the new branch tracking `origin/main` by mistake.
+The base is pinned to a complete commit OID and never becomes an upstream.
+If upstream settings already exist for the new name, clear them before adding
+the worktree; otherwise skip that config write.
+
+Successful branch creation establishes ownership for failure recovery; an
+existence difference alone does not.
+
+On add failure, inspect the direct local
+ref, complete OID, all registered worktrees, and the target path using Lstat.
+Only an owned, unchanged, non-symbolic ref with no associated worktree or
+remaining path may be removed, using an expected-OID conditional deletion:
+
+```
+git update-ref --no-deref -d refs/heads/<branch> <complete-oid>
+```
+
+Recheck worktree usage immediately before deletion.
+
+Preserve state on inspection
+or deletion errors and return the original error plus remaining/unknown state
+and shell-quoted recovery guidance.
+
+Branch creation failure and guess-remote
+failure require the same diagnostics without automatic deletion.
+
+Never remove
+paths, prune worktrees, run remove hooks, or erase config sections during recovery.
+
+The usage check and ref deletion are not one Git transaction; arbitrary external
+checkouts are not fully excluded.
+
+Hooks, submodules, fetch, and other Git side
+effects remain environment-dependent; avoiding unnecessary upstream writes is
+not a general guarantee of config-write or sandbox compatibility.
 
 **Create worktree for existing branch:**
 ```
@@ -73,6 +103,10 @@ manual fetch step. The checkout itself remains Git-driven; `ww` does not use
 ```
 git worktree list --porcelain
 ```
+
+Decode Git-quoted paths before comparing locations. If older Git emits a raw
+line break that makes the record invalid, treat the listing as unknown and
+preserve the branch.
 
 The output is parsed into structured entries. The first entry is always the main working tree and is marked accordingly. Each entry contains: path, HEAD (abbreviated), branch name, bare flag, and main worktree flag.
 
@@ -210,8 +244,8 @@ support that flag, `ww` must return an actionable error that:
 git worktree add -b <branch> --track <path> origin/<branch>
 ```
 
-If Git still cannot resolve the branch after the fetch, `ww` must surface an
-actionable error explaining that no matching remote branch could be resolved
+If Git checkout fails after the fetch, `ww` must surface an
+actionable error identifying the checkout failure and diagnosing remaining state
 after refreshing `origin`. The message should preserve the underlying Git error
 for debugging and note the supported limitation that Git-native guessing depends
 on a same-named matching remote branch being resolvable by Git.
