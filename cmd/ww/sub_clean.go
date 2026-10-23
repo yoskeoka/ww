@@ -10,6 +10,8 @@ import (
 )
 
 type cleanResult struct {
+	StaleReason   string `json:"stale_reason,omitempty"`
+	RemoveDirty   bool   `json:"remove_dirty"`
 	Repo          string `json:"repo"`
 	Path          string `json:"path"`
 	Branch        string `json:"branch"`
@@ -22,6 +24,7 @@ type cleanResult struct {
 
 func cleanCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" clean", pflag.ContinueOnError)
+	staleDays := fset.Int64("stale-days", 0, "Mark worktrees stale after N elapsed days since the HEAD commit (0 disables time detection)")
 	jsonFlag := fset.Bool("json", false, "Output NDJSON")
 	dryRun := fset.Bool("dry-run", false, "Show planned actions without executing")
 	force := fset.Bool("force", false, "Force removal even if the worktree is dirty")
@@ -39,6 +42,9 @@ func cleanCmd() command {
 
 			mgr, err := newManagerWithOptions(false, glOpts.sandbox)
 			if err != nil {
+				return err
+			}
+			if err := applyStaleDays(mgr, fset, *staleDays); err != nil {
 				return err
 			}
 
@@ -78,11 +84,13 @@ func executeCleanWorktrees(mgr *worktree.Manager, infos []worktree.WorktreeInfo,
 				failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
 				if glOpts.json {
 					if outErr := outputJSON(glOpts.output, cleanResult{
-						Repo:   info.Repo,
-						Path:   info.Path,
-						Branch: info.Branch,
-						Status: info.Status,
-						Error:  err.Error(),
+						Repo:        info.Repo,
+						Path:        info.Path,
+						Branch:      info.Branch,
+						Status:      info.Status,
+						StaleReason: info.StaleReason,
+						RemoveDirty: force || info.RemoveDirty,
+						Error:       err.Error(),
 					}); outErr != nil {
 						return outErr
 					}
@@ -98,27 +106,31 @@ func executeCleanWorktrees(mgr *worktree.Manager, infos []worktree.WorktreeInfo,
 		var err error
 		if glOpts.dryRun {
 			result, dryLog, err = repoMgr.PreviewRemove(info, worktree.RemoveOpts{
-				Force:    force,
-				DryRun:   true,
-				Output:   glOpts.output,
-				TextMode: !glOpts.json,
+				Force:       force,
+				RemoveDirty: info.RemoveDirty,
+				DryRun:      true,
+				Output:      glOpts.output,
+				TextMode:    !glOpts.json,
 			})
 		} else {
 			result, dryLog, err = repoMgr.Remove(info.Branch, worktree.RemoveOpts{
-				Force:    force,
-				Output:   glOpts.output,
-				TextMode: !glOpts.json,
+				Force:       force,
+				RemoveDirty: info.RemoveDirty,
+				Output:      glOpts.output,
+				TextMode:    !glOpts.json,
 			})
 		}
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s (%s): %v", info.Branch, info.Path, err))
 			if glOpts.json {
 				if outErr := outputJSON(glOpts.output, cleanResult{
-					Repo:   info.Repo,
-					Path:   info.Path,
-					Branch: info.Branch,
-					Status: info.Status,
-					Error:  err.Error(),
+					Repo:        info.Repo,
+					Path:        info.Path,
+					Branch:      info.Branch,
+					Status:      info.Status,
+					StaleReason: info.StaleReason,
+					RemoveDirty: force || info.RemoveDirty,
+					Error:       err.Error(),
 				}); outErr != nil {
 					return outErr
 				}
@@ -134,6 +146,8 @@ func executeCleanWorktrees(mgr *worktree.Manager, infos []worktree.WorktreeInfo,
 				Path:          result.Path,
 				Branch:        result.Branch,
 				Status:        info.Status,
+				StaleReason:   info.StaleReason,
+				RemoveDirty:   force || info.RemoveDirty,
 				Removed:       result.Removed,
 				BranchDeleted: result.BranchDeleted,
 				BranchError:   result.BranchError,

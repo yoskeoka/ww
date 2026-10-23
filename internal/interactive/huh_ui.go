@@ -197,7 +197,7 @@ func (ui *HuhListUI) SelectCleanMode(summary []CleanSummary) (CleanMode, error) 
 			Title("Clean mode").
 			Description(formatCleanSummary(summary)).
 			Options(
-				huh.NewOption("safe (`ww clean`)", CleanModeSafe),
+				huh.NewOption("configured policy (`ww clean`)", CleanModeSafe),
 				huh.NewOption("force (`ww clean --force`)", CleanModeForce),
 			).
 			Value(&mode).
@@ -339,6 +339,7 @@ func formatCleanConfirmation(mode CleanMode, targets []CleanTarget) string {
 	lines := []string{fmt.Sprintf("Mode: %s", mode), "Targets:"}
 	for _, target := range targets {
 		lines = append(lines, fmt.Sprintf("- %s | %s | %s | %s", target.Repo, target.Branch, target.Status, target.Path))
+		lines = append(lines, fmt.Sprintf("  Dirty removal: %t (stale reason: %s)", mode == CleanModeForce || target.RemoveDirty, target.StaleReason))
 	}
 	return strings.Join(lines, "\n")
 }

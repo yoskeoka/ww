@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yoskeoka/ww/git"
 	"github.com/yoskeoka/ww/validate"
@@ -29,16 +30,21 @@ const (
 // This is decoupled from the TOML config file format (internal/config)
 // so that library consumers can construct it directly.
 type Config struct {
-	WorktreeDir    string
-	DefaultBase    string
-	CopyFiles      []string
-	SymlinkFiles   []string
-	PreCreateHook  string
-	PostCreateHook string
-	PreRemoveHook  string
-	PostRemoveHook string
-	Sandbox        bool
-	RemoteCache    RemoteBranchCache
+	StaleDays int64
+	// StaleRemoveDirty defaults to true when nil.
+	StaleRemoveDirty *bool
+	// StaleDaysOverride preserves an explicit command-level zero.
+	StaleDaysOverride *int64
+	WorktreeDir       string
+	DefaultBase       string
+	CopyFiles         []string
+	SymlinkFiles      []string
+	PreCreateHook     string
+	PostCreateHook    string
+	PreRemoveHook     string
+	PostRemoveHook    string
+	Sandbox           bool
+	RemoteCache       RemoteBranchCache
 }
 
 // RemoteBranchCache supplies optional positive remote-branch evidence for
@@ -55,8 +61,12 @@ type Manager struct {
 	RepoDir   string // absolute path to the main repository
 	Workspace *workspace.Workspace
 
-	// listRepoFn is an internal seam for testing workspace scheduling without
-	// creating repositories or Git subprocesses.
+	// ResolveConfig resolves configuration for each repository main root.
+	ResolveConfig func(repoPath string) (Config, error)
+	// Now optionally supplies a clock; a List invocation samples it once.
+	Now          func() time.Time
+	snapshotTime time.Time
+	// listRepoFn tests workspace scheduling without Git subprocesses.
 	listRepoFn func(repoName, repoPath string) ([]WorktreeInfo, error)
 }
 
@@ -70,15 +80,19 @@ type CreateOpts struct {
 
 // RemoveOpts configures worktree removal.
 type RemoveOpts struct {
-	Force      bool
-	KeepBranch bool
-	DryRun     bool
-	Output     io.Writer // destination for text-mode output (nil defaults to os.Stdout)
-	TextMode   bool      // when true, print human-readable progress (e.g. hook announcement)
+	Force bool
+	// RemoveDirty permits dirty worktree removal without forcing branch deletion.
+	RemoveDirty bool
+	KeepBranch  bool
+	DryRun      bool
+	Output      io.Writer // destination for text-mode output (nil defaults to os.Stdout)
+	TextMode    bool      // when true, print human-readable progress (e.g. hook announcement)
 }
 
 // WorktreeInfo holds information about a created/listed worktree.
 type WorktreeInfo struct {
+	StaleReason  string `json:"stale_reason,omitempty"`
+	RemoveDirty  bool   `json:"remove_dirty,omitempty"`
 	Path         string `json:"path"`
 	Branch       string `json:"branch"`
 	Repo         string `json:"repo,omitempty"`
@@ -460,6 +474,19 @@ func isGuessRemoteUnsupported(err error) bool {
 
 // List returns all worktrees.
 func (m *Manager) List() ([]WorktreeInfo, error) {
+	snapshot := *m
+	snapshot.snapshotTime = m.currentTime()
+	return snapshot.listSnapshot()
+}
+
+func (m *Manager) currentTime() time.Time {
+	if m.Now != nil {
+		return m.Now()
+	}
+	return time.Now()
+}
+
+func (m *Manager) listSnapshot() ([]WorktreeInfo, error) {
 	if m.isWorkspaceMode() {
 		return m.listWorkspace()
 	}
@@ -609,7 +636,33 @@ func (m *Manager) listRepoFor(repoName, repoPath string) ([]WorktreeInfo, error)
 }
 
 func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
+	resolved := *m
+	if m.ResolveConfig != nil {
+		cfg, err := m.ResolveConfig(repoPath)
+		if err != nil {
+			return nil, fmt.Errorf("resolving config for %s: %w", repoName, err)
+		}
+		resolved.Config = cfg
+	}
+	return resolved.listRepoResolved(repoName, repoPath)
+}
+
+func (m *Manager) listRepoResolved(repoName, repoPath string) ([]WorktreeInfo, error) {
+	days := m.Config.StaleDays
+	if m.Config.StaleDaysOverride != nil {
+		days = *m.Config.StaleDaysOverride
+	}
+	if days < 0 || days > int64(time.Duration(1<<63-1)/(24*time.Hour)) {
+		return nil, fmt.Errorf("invalid stale_days: %d", days)
+	}
+	now := m.snapshotTime
+	if now.IsZero() {
+		now = m.currentTime()
+	}
 	runner := &git.Runner{Dir: repoPath}
+	if m.Git != nil {
+		runner.GitBin = m.Git.GitBin
+	}
 	entries, err := runner.WorktreeList()
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees for %s: %w", repoName, err)
@@ -714,14 +767,40 @@ func (m *Manager) listRepo(repoName, repoPath string) ([]WorktreeInfo, error) {
 		}
 	}
 
+	var times map[string]time.Time
+	if days > 0 {
+		var commits []string
+		for _, e := range entries {
+			if !e.Main && !e.Bare && e.Branch != "" {
+				if _, ok := mergedSet[e.Branch]; !ok {
+					commits = append(commits, e.Commit)
+				}
+			}
+		}
+		times, err = runner.CommitterTimes(commits)
+		if err != nil {
+			return nil, fmt.Errorf("getting HEAD committer timestamps for %s: %w", repoName, err)
+		}
+	}
 	infos := make([]WorktreeInfo, 0, len(entries))
 	for entryIndex, e := range entries {
 		status := resolveStatus(e, mergedSet, branchRemote, remoteBranches)
+		reason := ""
+		if status == StatusStale {
+			reason = "remote"
+		}
+		if days > 0 && status != StatusMerged && !e.Main && !e.Bare && e.Branch != "" && elapsedStale(now, times[e.Commit], days) {
+			status = StatusStale
+			reason = "time"
+		}
+		removeDirty := reason == "time" && (m.Config.StaleRemoveDirty == nil || *m.Config.StaleRemoveDirty)
 		infos = append(infos, WorktreeInfo{
 			Path:          e.Path,
 			Branch:        e.Branch,
 			Repo:          repoName,
 			Status:        status,
+			StaleReason:   reason,
+			RemoveDirty:   removeDirty,
 			StatusDetail:  baseInfo.StatusDetail,
 			Head:          e.Head,
 			Bare:          e.Bare,
@@ -918,7 +997,7 @@ func (m *Manager) Remove(branch string, opts RemoveOpts) (*RemoveResult, []strin
 		TextMode: opts.TextMode,
 	})
 
-	if err := m.Git.WorktreeRemove(found.Path, opts.Force); err != nil {
+	if err := m.Git.WorktreeRemove(found.Path, opts.Force || opts.RemoveDirty); err != nil {
 		if git.IsWorktreeRemoveSubmoduleError(err) {
 			return nil, nil, submoduleWorktreeRemoveError(found.Path, m.RepoDir, err)
 		}
@@ -968,6 +1047,9 @@ func (m *Manager) PreviewRemove(info WorktreeInfo, opts RemoveOpts) (*RemoveResu
 		dryRunLog = append(dryRunLog, fmt.Sprintf("Would run pre_remove_hook: %s", m.Config.PreRemoveHook))
 	}
 	dryRunLog = append(dryRunLog, fmt.Sprintf("Would remove worktree at %s", info.Path))
+	if opts.Force || opts.RemoveDirty {
+		dryRunLog = append(dryRunLog, "Dirty worktree removal enabled (uncommitted tracked and untracked files will be deleted)")
+	}
 	if !opts.KeepBranch {
 		dryRunLog = append(dryRunLog, fmt.Sprintf("Would delete branch %s", info.Branch))
 	}
@@ -1154,4 +1236,8 @@ func copyFile(src, dst string, mode fs.FileMode) error {
 		return copyErr
 	}
 	return closeErr
+}
+
+func elapsedStale(now, committed time.Time, days int64) bool {
+	return !committed.IsZero() && !committed.After(now) && now.Sub(committed) >= time.Duration(days)*24*time.Hour
 }

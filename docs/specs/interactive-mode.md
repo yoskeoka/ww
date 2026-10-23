@@ -233,7 +233,7 @@ The clean flow must:
 - preserve zero-count repos in workspace mode so the user keeps repo-wide
   visibility
 - offer exactly two execution choices:
-  - safe clean, equivalent to `ww clean`
+  - configured-policy clean, equivalent to `ww clean`
   - forced clean, equivalent to `ww clean --force`
 - show the detailed clean target list before final confirmation
 - require explicit confirmation before execution
@@ -262,3 +262,12 @@ vs forced execution.
 
 Those child flows must preserve the same stream contract from this spec:
 prompt UI on `stderr`, path-only or machine-oriented results on `stdout`.
+
+## 時間ベース stale と clean
+
+`ww i --stale-days N` は list/clean と同じ override を全 repo に適用する。
+各 repo の main root で解決した設定と共通時刻で snapshot を作り、候補の時間理由と
+dirty 削除 policy を最終確認と実削除まで保持する。最終確認は対象ごとに dirty 削除の
+有効状態を示す。時間 stale は既定で dirty でも削除するが、branch は安全な `-d` を使う。
+`stale_remove_dirty=false` は dirty を保護し、既存 force 選択は worktree と branch を
+強制削除する。新しい確認段階は追加しない。

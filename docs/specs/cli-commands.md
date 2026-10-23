@@ -431,13 +431,14 @@ Note: `ww list` shows **worktrees**, not branches. Branches that do not have an 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--cleanable` | bool | false | Show only worktrees with `merged` or `stale` status |
+| `--stale-days` | integer | config or 0 | Elapsed days since HEAD committer time; explicit 0 disables time detection |
 
 **Status values:**
 | Status | Meaning |
 |--------|---------|
 | `active` | Main worktree, or a branch that is neither merged nor stale |
 | `merged` | Branch changes are already integrated into the resolved base branch by direct merge, by commit-equivalent rebase/cherry-pick, or by a squash merge that lands the branch diff as a single base commit |
-| `stale` | Branch has tracking configured, the remote branch no longer exists, and it is not merged |
+| `stale` | Unmerged branch whose remote branch is gone or whose HEAD commit reached the configured stale age |
 | `unknown` | Base branch could not be determined; status classification was skipped |
 
 When the base branch is resolved heuristically according to [git-operations.md](git-operations.md), `ww list` still emits normal `active` / `merged` / `stale` statuses. In text output, those render as `active(heuristic-base)`, `merged(heuristic-base)`, or `stale(heuristic-base)`. In JSON output, the `status` value remains `active`, `merged`, or `stale`, and `status_detail=heuristic-base` is emitted separately for every listed worktree entry.
@@ -446,11 +447,11 @@ When the base branch cannot be resolved at all (no `default_base` config, `origi
 
 In text output, any non-empty `status_detail` renders as `<status>(<detail>)`. In JSON output, `status` and `status_detail` are emitted as separate fields.
 
-`--cleanable` and `ww clean` only act on `merged` and `stale` worktrees. `unknown` worktrees are never eligible for cleanup. A branch can be `merged` even when `git branch --merged <base>` does not report it, as long as the branch-intended changes are already present in the resolved base branch according to the Git detection contract in [git-operations.md](git-operations.md). Local-only branches without integrated changes remain `active`.
+`--cleanable` and `ww clean` only act on `merged` and `stale` worktrees. `unknown` worktrees are never eligible for cleanup. A branch can be `merged` even when `git branch --merged <base>` does not report it, as long as the branch-intended changes are already present in the resolved base branch according to the Git detection contract in [git-operations.md](git-operations.md). Local-only branches without integrated changes remain `active` unless they reach the configured time threshold.
 
 Remote branch presence used to distinguish `active` from `stale` may be served
 from a recent positive-only cache entry for up to 30 seconds. Therefore a
-remote deletion can conservatively leave a worktree `active` temporarily, but
+remote deletion can conservatively leave a worktree `active` temporarily unless the time threshold is reached, but
 it must never be classified as `stale` or become cleanable because of cached
 absence. A missing candidate, expired entry, changed remote identity, invalid
 cache, or live-query failure follows the live/error behavior in
@@ -574,6 +575,7 @@ from a non-git workspace root, it still cleans the workspace repositories.
 **Flags:**
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--stale-days` | integer | config or 0 | Same threshold override as list, including explicit 0 |
 | `--force` | bool | false | Force removal even if the worktree is dirty and force-delete the branch (`git worktree remove --force` + `git branch -D`) |
 | `--dry-run` | bool | false | Show planned actions without executing |
 | `--json` | bool | false | Output NDJSON (one JSON object per line) |
@@ -637,3 +639,29 @@ ww version dev+abc1234
 ```json
 {"version":"dev","commit":"abc1234"}
 ```
+
+## 時間ベース stale 判定（FR-23）
+
+
+
+| 候補と指定 | worktree 削除 | ローカル branch 削除 |
+| --- | --- | --- |
+| 時間理由の stale、`stale_remove_dirty` 未設定/true | dirty でも削除 | 従来の安全な `-d`。失敗なら branch を残して警告 |
+| 時間理由の stale、`stale_remove_dirty = false` | dirty なら保護 | 従来どおり |
+| merged、または remote 理由だけの stale | 従来の dirty 保護 | 従来どおり |
+| 明示 `--force`（または対話の既存 force 選択） | dirty でも削除 | 従来の `-D` |
+
+時間ベースの dirty 削除は branch 強制削除を許可しない。
+明示 force の意味・外部ライブラリ利用者の既存挙動は維持する。
+時間理由・各 repo の policy を preview、JSON 結果、実削除、対話 snapshot の経路で保持する。
+`ww clean --dry-run` はファイルや branch を消さず、dirty を消す予定であることを表示する。
+対話 clean の最終確認でも dirty 削除の有効状態が分かるようにし、新しい承認段階は増やさない。
+submodule 削除エラーの既存案内は維持し、Git が拒否した場合の再帰削除は導入しない。
+
+
+`ww list`、`ww clean`、`ww i` は `--stale-days N` を受け付ける。
+明示 0 は時間判定を無効にする。status は merged を優先し、時間条件の stale は
+JSON `stale_reason=time`、remote 消失だけなら `remote` とする。stale 以外は省略する。
+一覧の STATUS text は変えない。設定と時刻の詳細は configuration/git-operations を参照。
+
+Clean JSON always includes `remove_dirty` with the effective policy (including explicit force), even on errors and dry-run. List JSON includes `remove_dirty=true` for time-stale entries whose configured policy permits dirty removal.

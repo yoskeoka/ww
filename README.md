@@ -257,7 +257,7 @@ post_create_hook = "npm install"
 |--------|---------|
 | `active` | Main worktree, or a branch that is neither merged nor stale |
 | `merged` | Branch is merged into the base branch |
-| `stale` | Remote tracking branch no longer exists and branch is not merged |
+| `stale` | Unmerged branch whose remote is gone or whose HEAD commit reached `stale_days` |
 | `unknown` | Base branch could not be determined |
 
 `ww clean` removes worktrees with `merged` or `stale` status. `active` and `unknown` worktrees are never cleaned automatically.
@@ -282,3 +282,35 @@ For detailed specifications, see [docs/specs/](docs/specs/).
 ## License
 
 [MIT](LICENSE)
+
+### Time-based stale cleanup
+
+Set defaults in `$XDG_CONFIG_HOME/ww/config.toml` (or `~/.config/ww/config.toml`):
+
+```toml
+stale_days = 30
+stale_remove_dirty = true
+```
+
+After 30 elapsed 24-hour days since the HEAD commit's committer timestamp,
+unmerged secondary worktrees become stale, including local-only branches.
+Without `stale_days` (or with `0`), time detection is disabled. Merged status
+still takes precedence. Repo-local `.ww.toml` and matching global project rules
+can override these settings.
+
+**Time-stale worktrees are removed even when dirty by default: uncommitted
+tracked and untracked files are deleted.** Set `stale_remove_dirty = false`
+to protect them. Automatic dirty removal retains unmerged branches when Git's
+safe branch deletion refuses; explicit `--force` also forces branch deletion.
+Merged and remote-only stale worktrees retain their existing dirty protection.
+
+```sh
+ww list --stale-days 14 --cleanable
+ww clean --stale-days 14 --dry-run
+ww clean --stale-days 0  # disable only time detection for this invocation
+ww i --stale-days 14
+```
+
+CLI overrides apply to all listed repositories; explicit zero overrides config.
+JSON adds `stale_reason` (`time` or `remote`); clean JSON includes `remove_dirty`
+to describe the effective deletion policy, including in dry-run output.

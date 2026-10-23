@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -14,15 +15,17 @@ const GlobalFileName = "config.toml"
 
 // Config represents the ww configuration.
 type Config struct {
-	WorktreeDir    string   `toml:"worktree_dir"`
-	DefaultBase    string   `toml:"default_base"`
-	CopyFiles      []string `toml:"copy_files"`
-	SymlinkFiles   []string `toml:"symlink_files"`
-	PreCreateHook  string   `toml:"pre_create_hook"`
-	PostCreateHook string   `toml:"post_create_hook"`
-	PreRemoveHook  string   `toml:"pre_remove_hook"`
-	PostRemoveHook string   `toml:"post_remove_hook"`
-	Sandbox        bool     `toml:"sandbox"`
+	StaleDays        int64    `toml:"stale_days"`
+	StaleRemoveDirty *bool    `toml:"stale_remove_dirty"`
+	WorktreeDir      string   `toml:"worktree_dir"`
+	DefaultBase      string   `toml:"default_base"`
+	CopyFiles        []string `toml:"copy_files"`
+	SymlinkFiles     []string `toml:"symlink_files"`
+	PreCreateHook    string   `toml:"pre_create_hook"`
+	PostCreateHook   string   `toml:"post_create_hook"`
+	PreRemoveHook    string   `toml:"pre_remove_hook"`
+	PostRemoveHook   string   `toml:"post_remove_hook"`
+	Sandbox          bool     `toml:"sandbox"`
 }
 
 // LoadOptions controls config search behavior.
@@ -77,11 +80,16 @@ func LoadWithOptions(startDir string, opts LoadOptions) (*Config, error) {
 		mergeConfig(&cfg, localLayer)
 	}
 
+	if err := ValidateStaleDays(cfg.StaleDays); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
 }
 
 type configLayer struct {
 	cfg                    Config
+	staleDays              bool
+	staleRemoveDirty       bool
 	worktreeDir            bool
 	defaultBase            bool
 	copyFiles              bool
@@ -96,6 +104,8 @@ type configLayer struct {
 }
 
 type configFields struct {
+	StaleDays              *int64    `toml:"stale_days"`
+	StaleRemoveDirty       *bool     `toml:"stale_remove_dirty"`
 	WorktreeDir            *string   `toml:"worktree_dir"`
 	DefaultBase            *string   `toml:"default_base"`
 	CopyFiles              *[]string `toml:"copy_files"`
@@ -131,6 +141,11 @@ func decodeConfigLayer(path string) (*configLayer, error) {
 	if _, err := toml.DecodeFile(path, &doc); err != nil {
 		return nil, err
 	}
+	if doc.StaleDays != nil {
+		if err := ValidateStaleDays(*doc.StaleDays); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+	}
 	return decodeFields(doc), nil
 }
 
@@ -140,6 +155,11 @@ func decodeGlobalConfig(path, projectRoot string) (*configLayer, *configLayer, m
 		return nil, nil, nil, err
 	}
 
+	if doc.StaleDays != nil {
+		if err := ValidateStaleDays(*doc.StaleDays); err != nil {
+			return nil, nil, nil, fmt.Errorf("%s: %w", path, err)
+		}
+	}
 	baseLayer := decodeFields(doc.configFields)
 	profiles, err := decodeMaterializationProfiles(doc.MaterializationProfiles)
 	if err != nil {
@@ -160,6 +180,14 @@ func decodeGlobalConfig(path, projectRoot string) (*configLayer, *configLayer, m
 
 func decodeFields(fields configFields) *configLayer {
 	layer := &configLayer{}
+	if fields.StaleDays != nil {
+		layer.cfg.StaleDays = *fields.StaleDays
+		layer.staleDays = true
+	}
+	if fields.StaleRemoveDirty != nil {
+		layer.cfg.StaleRemoveDirty = fields.StaleRemoveDirty
+		layer.staleRemoveDirty = true
+	}
 	if fields.WorktreeDir != nil {
 		layer.cfg.WorktreeDir = *fields.WorktreeDir
 		layer.worktreeDir = true
@@ -206,6 +234,12 @@ func decodeFields(fields configFields) *configLayer {
 func mergeConfig(dst *Config, layer *configLayer) {
 	if layer == nil {
 		return
+	}
+	if layer.staleDays {
+		dst.StaleDays = layer.cfg.StaleDays
+	}
+	if layer.staleRemoveDirty {
+		dst.StaleRemoveDirty = layer.cfg.StaleRemoveDirty
 	}
 	if layer.worktreeDir {
 		dst.WorktreeDir = layer.cfg.WorktreeDir
@@ -322,6 +356,11 @@ func selectProjectLayer(projects []projectDocument, projectRoot string) (*config
 }
 
 func validateProjectDocument(project projectDocument, index int) error {
+	if project.StaleDays != nil {
+		if err := ValidateStaleDays(*project.StaleDays); err != nil {
+			return fmt.Errorf("projects[%d]: %w", index, err)
+		}
+	}
 	hasRoot := project.Root != nil
 	hasPrefix := project.RootPrefix != nil
 	if hasRoot == hasPrefix {
@@ -437,4 +476,12 @@ func findConfigInDirs(dirs []string) string {
 		}
 	}
 	return ""
+}
+
+// ValidateStaleDays rejects values that cannot be represented as elapsed durations.
+func ValidateStaleDays(days int64) error {
+	if days < 0 || days > int64((time.Duration(1<<63-1))/(24*time.Hour)) {
+		return fmt.Errorf("stale_days must be between 0 and %d", int64((time.Duration(1<<63-1))/(24*time.Hour)))
+	}
+	return nil
 }

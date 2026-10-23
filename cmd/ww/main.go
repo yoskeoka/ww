@@ -188,23 +188,37 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 
 	runner := &git.Runner{Dir: dir}
 
-	return &worktree.Manager{
+	mgr := &worktree.Manager{
 		Git: runner,
 		Config: worktree.Config{
-			WorktreeDir:    ctx.cfg.WorktreeDir,
-			DefaultBase:    ctx.cfg.DefaultBase,
-			CopyFiles:      ctx.cfg.CopyFiles,
-			SymlinkFiles:   ctx.cfg.SymlinkFiles,
-			PreCreateHook:  ctx.cfg.PreCreateHook,
-			PostCreateHook: ctx.cfg.PostCreateHook,
-			PreRemoveHook:  ctx.cfg.PreRemoveHook,
-			PostRemoveHook: ctx.cfg.PostRemoveHook,
-			Sandbox:        sandboxMode,
-			RemoteCache:    remoteCache,
+			StaleDays:        ctx.cfg.StaleDays,
+			StaleRemoveDirty: ctx.cfg.StaleRemoveDirty,
+			WorktreeDir:      ctx.cfg.WorktreeDir,
+			DefaultBase:      ctx.cfg.DefaultBase,
+			CopyFiles:        ctx.cfg.CopyFiles,
+			SymlinkFiles:     ctx.cfg.SymlinkFiles,
+			PreCreateHook:    ctx.cfg.PreCreateHook,
+			PostCreateHook:   ctx.cfg.PostCreateHook,
+			PreRemoveHook:    ctx.cfg.PreRemoveHook,
+			PostRemoveHook:   ctx.cfg.PostRemoveHook,
+			Sandbox:          sandboxMode,
+			RemoteCache:      remoteCache,
 		},
 		RepoDir:   ctx.mainDir,
 		Workspace: ctx.ws,
-	}, nil
+	}
+	mgr.ResolveConfig = func(repoPath string) (worktree.Config, error) {
+		cfg, err := loadRepoConfigForSelection(mgr, repoPath)
+		if err != nil {
+			return worktree.Config{}, err
+		}
+		resolved := mgr.Config
+		resolved.DefaultBase = cfg.DefaultBase
+		resolved.StaleDays = cfg.StaleDays
+		resolved.StaleRemoveDirty = cfg.StaleRemoveDirty
+		return resolved, nil
+	}
+	return mgr, nil
 }
 
 func loadManagerContext(dir string, requireRepo bool, sandboxMode bool, discoveryCache cache.DiscoveryCache) (*managerContext, error) {
