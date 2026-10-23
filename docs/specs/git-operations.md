@@ -259,3 +259,24 @@ All git errors include:
 Errors are wrapped with context to make debugging straightforward.
 
 When `git` is not found in PATH, the error message must clearly state that git is required rather than showing a raw exec error.
+
+## 時間ベース stale 判定（FR-23）
+
+
+
+1. 起点は各 worktree の HEAD commit の **committer timestamp**。author date、ファイル mtime、アクセス時刻、worktree 作成日時ではない。
+2. `現在時刻 - committer timestamp >= N × 24時間` なら閾値到達。タイムゾーンや暦日切替に依存させない。
+3. 同一 list/clean snapshot では共通の現在時刻を使用し、境界の前後を決定的に検証可能にする。日数換算で overflow させない。
+4. main worktree、解決された base branch、bare、branchless/detached entry は時間 stale にしない。base branch が secondary worktree にあっても同じ。
+5. `merged` は従来どおり `stale` に優先する。未統合の local-only branch や remote が現存する branch も時間条件で stale にできる。
+6. 既存の remote 消失 stale は時間設定の有無にかかわらず維持する。`--stale-days 0` は remote 判定を無効化しない。
+7. base 判定不能時の `unknown(base-detect-failed)` は維持し、時間だけで clean 対象へ昇格させない。
+8. 必要な timestamp の Git 取得/解析が失敗した場合は文脈付きエラーで列挙を失敗させ、削除を始めない。日時不明を古い値として扱わない。未来時刻は時間 stale にしない。
+9. 時間判定無効時は timestamp 取得を追加しない。既存の remote cache は時間 stale を妨げず、時刻や最終 status を永続キャッシュしない。
+
+`status` は既存の `active/merged/stale/unknown` を維持する。
+時間理由と remote 理由を区別する additive JSON フィールド `stale_reason` を追加し、
+時間条件に到達した `stale` では `time`、remote 消失だけなら `remote` を返す。
+両方成立時は `time` とし dirty policy も時間経過に基づいて適用する。
+stale 以外では省略する。既存 `status_detail=heuristic-base` はそのまま維持する。
+text の STATUS 表示は既存形式のままとし、JSON と内部 snapshot で理由を保持する。

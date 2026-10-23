@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var heuristicDefaultBranchCandidates = []string{"main", "master"}
@@ -22,6 +23,7 @@ type Runner struct {
 
 // WorktreeEntry represents a single git worktree.
 type WorktreeEntry struct {
+	Commit string // full HEAD object ID for snapshot timestamp lookup
 	Path   string
 	Head   string
 	Branch string
@@ -462,6 +464,7 @@ func parseWorktreeList(output string) []WorktreeEntry {
 			current = WorktreeEntry{Path: strings.TrimPrefix(line, "worktree ")}
 		case strings.HasPrefix(line, "HEAD "):
 			hash := strings.TrimPrefix(line, "HEAD ")
+			current.Commit = hash
 			if len(hash) > 7 {
 				hash = hash[:7]
 			}
@@ -690,4 +693,36 @@ func (r *Runner) RepoName() (string, error) {
 		return "", err
 	}
 	return filepath.Base(dir), nil
+}
+
+// CommitterTimes reads commit timestamps in a single process without walking history.
+func (r *Runner) CommitterTimes(commits []string) (map[string]time.Time, error) {
+	result := make(map[string]time.Time, len(commits))
+	if len(commits) == 0 {
+		return result, nil
+	}
+	args := []string{"show", "--no-patch", "--no-walk=unsorted", "--no-notes", "--no-show-signature", "--format=%H %ct"}
+	args = append(args, commits...)
+	args = append(args, "--")
+	out, err := r.Run(args...)
+	if err != nil {
+		return nil, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("invalid committer timestamp record %q", line)
+		}
+		seconds, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid committer timestamp for %s: %w", fields[0], err)
+		}
+		result[fields[0]] = time.Unix(seconds, 0)
+	}
+	for _, commit := range commits {
+		if _, ok := result[commit]; !ok {
+			return nil, fmt.Errorf("missing committer timestamp for %s", commit)
+		}
+	}
+	return result, nil
 }

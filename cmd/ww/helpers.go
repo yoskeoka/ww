@@ -53,15 +53,19 @@ func managerForRepo(base *worktree.Manager, repoName string) (*worktree.Manager,
 		return &worktree.Manager{
 			Git: &git.Runner{Dir: repo.Path},
 			Config: worktree.Config{
-				WorktreeDir:    cfg.WorktreeDir,
-				DefaultBase:    cfg.DefaultBase,
-				CopyFiles:      cfg.CopyFiles,
-				SymlinkFiles:   cfg.SymlinkFiles,
-				PreCreateHook:  cfg.PreCreateHook,
-				PostCreateHook: cfg.PostCreateHook,
-				PreRemoveHook:  cfg.PreRemoveHook,
-				PostRemoveHook: cfg.PostRemoveHook,
-				Sandbox:        cfg.Sandbox,
+				StaleDays:         cfg.StaleDays,
+				StaleRemoveDirty:  cfg.StaleRemoveDirty,
+				StaleDaysOverride: base.Config.StaleDaysOverride,
+				RemoteCache:       base.Config.RemoteCache,
+				WorktreeDir:       cfg.WorktreeDir,
+				DefaultBase:       cfg.DefaultBase,
+				CopyFiles:         cfg.CopyFiles,
+				SymlinkFiles:      cfg.SymlinkFiles,
+				PreCreateHook:     cfg.PreCreateHook,
+				PostCreateHook:    cfg.PostCreateHook,
+				PreRemoveHook:     cfg.PreRemoveHook,
+				PostRemoveHook:    cfg.PostRemoveHook,
+				Sandbox:           cfg.Sandbox,
 			},
 			RepoDir:   repo.Path,
 			Workspace: base.Workspace,
@@ -128,6 +132,16 @@ func parseFlags(fset *pflag.FlagSet, args []string) error {
 			return errHelp
 		}
 		return err
+	}
+	return nil
+}
+
+func applyStaleDays(mgr *worktree.Manager, fset *pflag.FlagSet, days int64) error {
+	if err := config.ValidateStaleDays(days); err != nil {
+		return err
+	}
+	if fset.Changed("stale-days") {
+		mgr.Config.StaleDaysOverride = &days
 	}
 	return nil
 }

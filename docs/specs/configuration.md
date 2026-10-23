@@ -243,3 +243,29 @@ Branch names are sanitized for use in directory names:
 - `/` is replaced with `-`
 
 Example: `feat/my-feature` becomes `feat-my-feature` in directory names.
+
+## 時間ベース stale 判定（FR-23）
+
+
+
+| 項目 | 契約 |
+| --- | --- |
+| `stale_days` | TOML 整数。未設定または `0` は時間判定なし。正の値で有効。有効範囲は 0〜106751。負数、型不正、範囲外は明確なエラー |
+| `stale_remove_dirty` | TOML bool。未設定の既定は `true`。時間ベース stale の clean 時に dirty worktree を削除可能にする。`false` なら従来の dirty 保護 |
+| `ww list --stale-days N` | 当該呼出しの閾値を全対象 repo に適用する。明示 `0` は config の正数も上書きして無効化 |
+| `ww clean --stale-days N` | list と同じ閾値指定。`--dry-run` / `--json` と併用可能 |
+| `ww i --stale-days N` | 対話 list/clean に同じ明示 override を適用。設定値だけでも利用可能 |
+
+両 TOML フィールドは既存の通常設定として global 共通、global `[[projects]]`、repo-local で利用可能。
+優先順位は `CLI（stale_days のみ） > repo-local > 最初にマッチした global project > global 共通 > 未設定時既定`。
+bool の明示 `false` と未設定を区別し、整数の明示 `0` と未設定も区別する。
+materialization profile のフィールドには加えない。新しい `ww config` サブコマンドは追加しない。
+
+workspace の list/clean/対話では各 repo の main root を基準に設定解決する。
+呼出し元や最初の child の閾値・dirty policy を他 repo に流用しない。
+CLI の `--stale-days` は列挙対象全体に適用し、削除用 Manager の再生成で失わない。
+sandbox 時も既存の global パスと repo-local 境界を守る。
+
+単一 repo の status 判定に使う `default_base` は既存どおり呼出し位置の設定を保持する。
+main-root で再解決する時間設定を理由に、subdirectory や secondary worktree の base 設定を変更しない。
+workspace 列挙の base は対象 repo ごとに解決する。

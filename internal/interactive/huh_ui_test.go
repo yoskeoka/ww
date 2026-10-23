@@ -1,6 +1,9 @@
 package interactive
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSelectHeightForOptionsIncludesTitleAndDescriptionRows(t *testing.T) {
 	cases := []struct {
@@ -49,5 +52,16 @@ func TestTopLevelActionSetIsFixed(t *testing.T) {
 	}
 	if got := len(topLevelActionOptions()); got != len(want) {
 		t.Fatalf("topLevelActionOptions length = %d, want %d", got, len(want))
+	}
+}
+
+func TestCleanConfirmationDirtyPolicy(t *testing.T) {
+	targets := []CleanTarget{{Repo: "a", Branch: "old", RemoveDirty: true, StaleReason: "time"}, {Repo: "b", Branch: "protected"}}
+	text := formatCleanConfirmation(CleanModeSafe, targets)
+	if !strings.Contains(text, "Dirty removal: true (stale reason: time)") || !strings.Contains(text, "Dirty removal: false") {
+		t.Fatal(text)
+	}
+	if strings.Contains(formatCleanConfirmation(CleanModeForce, targets), "Dirty removal: false") {
+		t.Fatal("force policy not shown")
 	}
 }

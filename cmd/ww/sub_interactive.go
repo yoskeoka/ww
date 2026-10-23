@@ -17,6 +17,7 @@ const interactiveJSONMessage = "interactive mode does not support --json; use st
 
 func interactiveCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" i", pflag.ContinueOnError)
+	staleDays := fset.Int64("stale-days", 0, "Mark worktrees stale after N elapsed days since the HEAD commit (0 disables time detection)")
 	jsonFlag := fset.Bool("json", false, "Unsupported in interactive mode; use standard ww commands for machine-readable output")
 	fset.MarkHidden("json")
 	fset.Usage = func() {
@@ -24,7 +25,8 @@ func interactiveCmd() command {
 		fmt.Fprintln(out, "Start interactive mode")
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Usage:")
-		fmt.Fprintln(out, "  ww i")
+		fmt.Fprintln(out, "  ww i [--stale-days N]")
+		fset.PrintDefaults()
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Notes:")
 		fmt.Fprintln(out, "  - requires a TTY on stdin and stderr")
@@ -52,6 +54,9 @@ func interactiveCmd() command {
 
 			mgr, err := newManagerWithOptions(false, glOpts.sandbox)
 			if err != nil {
+				return err
+			}
+			if err := applyStaleDays(mgr, fset, *staleDays); err != nil {
 				return err
 			}
 
@@ -283,10 +288,12 @@ func interactiveCleanSnapshot(mgr *worktree.Manager) (interactive.CleanSnapshot,
 	targets := make([]interactive.CleanTarget, 0, len(infos))
 	for _, info := range infos {
 		targets = append(targets, interactive.CleanTarget{
-			Repo:   info.Repo,
-			Branch: info.Branch,
-			Status: displayStatus(info),
-			Path:   info.Path,
+			Repo:        info.Repo,
+			Branch:      info.Branch,
+			Status:      displayStatus(info),
+			Path:        info.Path,
+			RemoveDirty: info.RemoveDirty,
+			StaleReason: info.StaleReason,
 		})
 	}
 	return interactive.CleanSnapshot{

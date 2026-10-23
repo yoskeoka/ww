@@ -19,10 +19,12 @@ type CleanSummary struct {
 }
 
 type CleanTarget struct {
-	Repo   string
-	Branch string
-	Status string
-	Path   string
+	RemoveDirty bool
+	StaleReason string
+	Repo        string
+	Branch      string
+	Status      string
+	Path        string
 }
 
 type CleanSnapshot struct {

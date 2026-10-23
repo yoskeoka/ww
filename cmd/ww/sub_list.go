@@ -12,6 +12,7 @@ import (
 
 func listCmd() command {
 	fset := pflag.NewFlagSet(mainCmdName+" list", pflag.ContinueOnError)
+	staleDays := fset.Int64("stale-days", 0, "Mark worktrees stale after N elapsed days since the HEAD commit (0 disables time detection)")
 	jsonFlag := fset.Bool("json", false, "Output NDJSON")
 	cleanable := fset.Bool("cleanable", false, "Show only merged or stale worktrees")
 
@@ -27,6 +28,9 @@ func listCmd() command {
 
 			mgr, err := newManagerWithOptions(false, glOpts.sandbox)
 			if err != nil {
+				return err
+			}
+			if err := applyStaleDays(mgr, fset, *staleDays); err != nil {
 				return err
 			}
 
