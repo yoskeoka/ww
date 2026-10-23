@@ -201,3 +201,33 @@ func TestTimeStalePrecedenceAndRemoteReasons(t *testing.T) {
 		}
 	}
 }
+
+func TestTimeStaleExcludesSecondaryBase(t *testing.T) {
+	repo := setupGitRepo(t)
+	r := &git.Runner{Dir: repo}
+	mustGit(t, r, "checkout", "-b", "topic/main-checkout")
+	basePath := filepath.Join(t.TempDir(), "main")
+	mustGit(t, r, "worktree", "add", basePath, "main")
+	for _, base := range []string{"main", "origin/main"} {
+		if base == "origin/main" {
+			mustGit(t, r, "update-ref", "refs/remotes/origin/main", "main")
+		}
+		m := &Manager{Git: r, RepoDir: repo, Config: Config{DefaultBase: base, StaleDays: 30}, Now: func() time.Time { return time.Now().Add(31 * 24 * time.Hour) }}
+		infos, err := m.List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, v := range infos {
+			if v.Path == basePath {
+				found = true
+				if v.Status != StatusActive || v.StaleReason != "" || v.RemoveDirty {
+					t.Fatalf("base %s: %+v", base, v)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("base worktree not listed")
+		}
+	}
+}

@@ -683,7 +683,9 @@ func (m *Manager) listRepoResolved(repoName, repoPath string) ([]WorktreeInfo, e
 		mergedSet[branch] = struct{}{}
 	}
 	// The base branch itself is always active even though git reports it as merged.
+	baseBranches := make(map[string]bool)
 	for _, branch := range baseBranchNames(baseInfo.Ref) {
+		baseBranches[branch] = true
 		delete(mergedSet, branch)
 	}
 
@@ -771,7 +773,7 @@ func (m *Manager) listRepoResolved(repoName, repoPath string) ([]WorktreeInfo, e
 	if days > 0 {
 		var commits []string
 		for _, e := range entries {
-			if !e.Main && !e.Bare && e.Branch != "" {
+			if !e.Main && !e.Bare && e.Branch != "" && !baseBranches[e.Branch] {
 				if _, ok := mergedSet[e.Branch]; !ok {
 					commits = append(commits, e.Commit)
 				}
@@ -789,7 +791,7 @@ func (m *Manager) listRepoResolved(repoName, repoPath string) ([]WorktreeInfo, e
 		if status == StatusStale {
 			reason = "remote"
 		}
-		if days > 0 && status != StatusMerged && !e.Main && !e.Bare && e.Branch != "" && elapsedStale(now, times[e.Commit], days) {
+		if days > 0 && status != StatusMerged && !baseBranches[e.Branch] && !e.Main && !e.Bare && e.Branch != "" && elapsedStale(now, times[e.Commit], days) {
 			status = StatusStale
 			reason = "time"
 		}

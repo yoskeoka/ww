@@ -267,7 +267,7 @@ When `git` is not found in PATH, the error message must clearly state that git i
 1. 起点は各 worktree の HEAD commit の **committer timestamp**。author date、ファイル mtime、アクセス時刻、worktree 作成日時ではない。
 2. `現在時刻 - committer timestamp >= N × 24時間` なら閾値到達。タイムゾーンや暦日切替に依存させない。
 3. 同一 list/clean snapshot では共通の現在時刻を使用し、境界の前後を決定的に検証可能にする。日数換算で overflow させない。
-4. main worktree、bare、branchless/detached entry は時間 stale にしない。
+4. main worktree、解決された base branch、bare、branchless/detached entry は時間 stale にしない。base branch が secondary worktree にあっても同じ。
 5. `merged` は従来どおり `stale` に優先する。未統合の local-only branch や remote が現存する branch も時間条件で stale にできる。
 6. 既存の remote 消失 stale は時間設定の有無にかかわらず維持する。`--stale-days 0` は remote 判定を無効化しない。
 7. base 判定不能時の `unknown(base-detect-failed)` は維持し、時間だけで clean 対象へ昇格させない。

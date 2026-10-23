@@ -213,7 +213,9 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 			return worktree.Config{}, err
 		}
 		resolved := mgr.Config
-		resolved.DefaultBase = cfg.DefaultBase
+		if mgr.Workspace != nil && mgr.Workspace.Mode == workspace.ModeWorkspace {
+			resolved.DefaultBase = cfg.DefaultBase
+		}
 		resolved.StaleDays = cfg.StaleDays
 		resolved.StaleRemoveDirty = cfg.StaleRemoveDirty
 		return resolved, nil

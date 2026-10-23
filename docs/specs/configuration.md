@@ -265,3 +265,7 @@ workspace の list/clean/対話では各 repo の main root を基準に設定�
 呼出し元や最初の child の閾値・dirty policy を他 repo に流用しない。
 CLI の `--stale-days` は列挙対象全体に適用し、削除用 Manager の再生成で失わない。
 sandbox 時も既存の global パスと repo-local 境界を守る。
+
+単一 repo の status 判定に使う `default_base` は既存どおり呼出し位置の設定を保持する。
+main-root で再解決する時間設定を理由に、subdirectory や secondary worktree の base 設定を変更しない。
+workspace 列挙の base は対象 repo ごとに解決する。

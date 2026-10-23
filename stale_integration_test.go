@@ -157,3 +157,48 @@ func TestTimeStaleWorkspaceRepoSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestSingleRepoPreservesInvocationBase(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration")
+	}
+	t.Parallel()
+	repo := setupRepo(t)
+	writeConfig(t, repo, "default_base=\"main\"\n")
+	git := func(dir string, args ...string) {
+		t.Helper()
+		out, err := globalEnv.Git(dir, args...)
+		if err != nil {
+			t.Fatalf("%v: %s %v", args, out, err)
+		}
+	}
+	git(repo, "branch", "alternate")
+	wt := filepath.Join(t.TempDir(), "topic")
+	git(repo, "worktree", "add", "-b", "topic/guarded", wt)
+	if err := globalEnv.WriteFile(filepath.Join(wt, "unique"), "unique"); err != nil {
+		t.Fatal(err)
+	}
+	git(wt, "add", "unique")
+	git(wt, "commit", "-m", "unique")
+	git(repo, "merge", "--ff-only", "topic/guarded")
+	sub := filepath.Join(repo, "subdirectory")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{sub, wt} {
+		writeConfig(t, dir, "default_base=\"alternate\"\n")
+		for _, threshold := range []string{"0", "30"} {
+			out, err := runWW(t, dir, "list", "--cleanable", "--stale-days", threshold, "--json")
+			if err != nil {
+				t.Fatalf("%s %v", out, err)
+			}
+			if strings.Contains(out, "topic/guarded") {
+				t.Fatalf("invocation base replaced: %s", out)
+			}
+			out, err = runWW(t, dir, "clean", "--dry-run", "--stale-days", threshold, "--json")
+			if err != nil || strings.Contains(out, "topic/guarded") {
+				t.Fatalf("unexpected clean target: %s %v", out, err)
+			}
+		}
+	}
+}
