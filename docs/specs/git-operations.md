@@ -280,3 +280,9 @@ When `git` is not found in PATH, the error message must clearly state that git i
 両方成立時は `time` とし dirty policy も時間経過に基づいて適用する。
 stale 以外では省略する。既存 `status_detail=heuristic-base` はそのまま維持する。
 text の STATUS 表示は既存形式のままとし、JSON と内部 snapshot で理由を保持する。
+# Restricted worktree checkout
+
+Configured checkout exclusions apply to new, existing and guessed remote
+branches before their first checkout. The worktree's sparse configuration must
+be isolated from existing worktrees; configurations that cannot be isolated
+must fail before checkout. Git metadata and configuration remain necessary.

@@ -20,6 +20,7 @@ type Config struct {
 	WorktreeDir      string   `toml:"worktree_dir"`
 	DefaultBase      string   `toml:"default_base"`
 	CopyFiles        []string `toml:"copy_files"`
+	CheckoutExclude  []string `toml:"checkout_exclude"`
 	SymlinkFiles     []string `toml:"symlink_files"`
 	PreCreateHook    string   `toml:"pre_create_hook"`
 	PostCreateHook   string   `toml:"post_create_hook"`
@@ -93,6 +94,7 @@ type configLayer struct {
 	worktreeDir            bool
 	defaultBase            bool
 	copyFiles              bool
+	checkoutExclude        bool
 	symlinkFiles           bool
 	preCreateHook          bool
 	postHook               bool
@@ -109,6 +111,7 @@ type configFields struct {
 	WorktreeDir            *string   `toml:"worktree_dir"`
 	DefaultBase            *string   `toml:"default_base"`
 	CopyFiles              *[]string `toml:"copy_files"`
+	CheckoutExclude        *[]string `toml:"checkout_exclude"`
 	SymlinkFiles           *[]string `toml:"symlink_files"`
 	PreCreateHook          *string   `toml:"pre_create_hook"`
 	PostCreateHook         *string   `toml:"post_create_hook"`
@@ -180,6 +183,10 @@ func decodeGlobalConfig(path, projectRoot string) (*configLayer, *configLayer, m
 
 func decodeFields(fields configFields) *configLayer {
 	layer := &configLayer{}
+	if fields.CheckoutExclude != nil {
+		layer.cfg.CheckoutExclude = cloneStrings(*fields.CheckoutExclude)
+		layer.checkoutExclude = true
+	}
 	if fields.StaleDays != nil {
 		layer.cfg.StaleDays = *fields.StaleDays
 		layer.staleDays = true
@@ -234,6 +241,9 @@ func decodeFields(fields configFields) *configLayer {
 func mergeConfig(dst *Config, layer *configLayer) {
 	if layer == nil {
 		return
+	}
+	if layer.checkoutExclude {
+		dst.CheckoutExclude = cloneStrings(layer.cfg.CheckoutExclude)
 	}
 	if layer.staleDays {
 		dst.StaleDays = layer.cfg.StaleDays

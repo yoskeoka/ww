@@ -269,3 +269,16 @@ sandbox 時も既存の global パスと repo-local 境界を守る。
 単一 repo の status 判定に使う `default_base` は既存どおり呼出し位置の設定を保持する。
 main-root で再解決する時間設定を理由に、subdirectory や secondary worktree の base 設定を変更しない。
 workspace 列挙の base は対象 repo ごとに解決する。
+# Checkout exclusions
+
+`checkout_exclude` is an optional array of Git non-cone sparse-checkout
+patterns. Project and repo-local settings replace the whole array; `[]` clears
+it. For example, `checkout_exclude = ['*.pem', '.env', '/.gitconfig', '/private/']`
+excludes matching names at any depth, the root `.gitconfig`, and the root
+`private` directory. Patterns use Git's gitignore syntax; TOML literal strings
+avoid interpreting backslashes. Empty strings, newlines, NUL and patterns that
+start with `!` are invalid. With no patterns, checkout remains unchanged.
+
+Exclusions only govern Git checkout. Copy and symlink rules, lifecycle and Git
+hooks, and submodules can still access excluded paths; review their settings.
+Git still needs access to its shared configuration, refs, metadata and hooks.

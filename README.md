@@ -27,6 +27,27 @@ go build -o ww ./cmd/ww
 
 ## Quick Start
 
+### Exclude tracked files from new worktrees
+
+Set `checkout_exclude` in `$XDG_CONFIG_HOME/ww/config.toml` (or
+`~/.config/ww/config.toml`) to omit matching tracked files from the first
+checkout:
+
+```toml
+checkout_exclude = ['*.pem', '.env', '/.gitconfig', '/private/']
+```
+
+These are Git non-cone sparse-checkout patterns in gitignore syntax. The first
+two match at any depth; the other two are root-only. TOML literal strings keep
+backslashes literal. A matching project or repo-local setting replaces the
+array; use `checkout_exclude = []` to disable it. Empty patterns, newlines,
+NUL and leading `!` are rejected. `ww create --dry-run` previews the setting.
+
+Git still needs access to repository metadata, config and hooks. Copy and
+symlink rules, hooks and submodules can separately access excluded files;
+review those settings for restricted environments. Legacy shared sparse
+checkout settings must be migrated to worktree-specific settings first.
+
 `ww` works out of the box in any git repository — no configuration required.
 
 ### Basic flows

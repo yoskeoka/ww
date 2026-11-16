@@ -38,6 +38,7 @@ type Config struct {
 	WorktreeDir       string
 	DefaultBase       string
 	CopyFiles         []string
+	CheckoutExclude   []string
 	SymlinkFiles      []string
 	PreCreateHook     string
 	PostCreateHook    string
@@ -199,6 +200,17 @@ func (m *Manager) WorktreePath(branch string) (string, error) {
 
 // Create creates a worktree for the given branch.
 func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []string, error) {
+	for _, pattern := range m.Config.CheckoutExclude {
+		if strings.TrimSpace(pattern) == "" || strings.ContainsAny(pattern, "\r\n\x00") || strings.HasPrefix(pattern, "!") || strings.HasPrefix(pattern, "#") {
+			return nil, nil, fmt.Errorf("invalid checkout_exclude pattern %q", pattern)
+		}
+	}
+	restricted := len(m.Config.CheckoutExclude) > 0
+	if restricted {
+		if err := m.Git.CheckSparseIsolation(); err != nil {
+			return nil, nil, fmt.Errorf("checking sparse checkout isolation: %w", err)
+		}
+	}
 	if err := validate.BranchName(branch); err != nil {
 		return nil, nil, err
 	}
@@ -247,6 +259,9 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		} else {
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would create worktree at %s (branch: %s, base: %s)", wtPath, branch, base))
 		}
+		if restricted {
+			dryRunLog = append(dryRunLog, fmt.Sprintf("Would configure sparse checkout excluding: %q", m.Config.CheckoutExclude))
+		}
 		for _, f := range m.Config.CopyFiles {
 			dryRunLog = append(dryRunLog, fmt.Sprintf("Would copy: %s", f))
 		}
@@ -265,15 +280,27 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		TextMode: opts.TextMode,
 	})
 
+	add := func(guess bool) error {
+		if restricted {
+			return m.Git.WorktreeAddWithoutCheckout(wtPath, branch, guess)
+		}
+		if guess {
+			return m.Git.WorktreeAddGuessRemote(wtPath, branch)
+		}
+		return m.Git.WorktreeAddExisting(wtPath, branch)
+	}
 	if branchExists {
-		if err := m.Git.WorktreeAddExisting(wtPath, branch); err != nil {
+		if err := add(false); err != nil {
+			if restricted {
+				return nil, nil, m.createFailure(fmt.Errorf("adding worktree for existing branch: %w", err), wtPath, branch, "")
+			}
 			return nil, nil, fmt.Errorf("adding worktree for existing branch: %w", err)
 		}
 	} else if guessRemote {
 		if err := m.Git.Fetch(); err != nil {
 			return nil, nil, fmt.Errorf("refreshing origin before remote checkout: %w", err)
 		}
-		if err := m.Git.WorktreeAddGuessRemote(wtPath, branch); err != nil {
+		if err := add(true); err != nil {
 			return nil, nil, m.createFailure(guessRemoteCreateError(err, wtPath, branch), wtPath, branch, "")
 		}
 	} else {
@@ -287,8 +314,13 @@ func (m *Manager) Create(branch string, opts CreateOpts) (*WorktreeInfo, []strin
 		if err := m.Git.BranchUnsetUpstream(branch); err != nil {
 			return nil, nil, m.createFailure(fmt.Errorf("clearing stale upstream for new branch: %w", err), wtPath, branch, oid)
 		}
-		if err := m.Git.WorktreeAddExisting(wtPath, branch); err != nil {
+		if err := add(false); err != nil {
 			return nil, nil, m.createFailure(fmt.Errorf("creating worktree with new branch: %w", err), wtPath, branch, oid)
+		}
+	}
+	if restricted {
+		if err := m.Git.RestrictedCheckout(wtPath, m.Config.CheckoutExclude); err != nil {
+			return nil, nil, m.createFailure(fmt.Errorf("restricted checkout failed (Git configuration, metadata and hooks require access): %w", err), wtPath, branch, "")
 		}
 	}
 
