@@ -196,6 +196,7 @@ func newManagerWithOptions(requireRepo bool, sandboxFlag bool) (*worktree.Manage
 			WorktreeDir:      ctx.cfg.WorktreeDir,
 			DefaultBase:      ctx.cfg.DefaultBase,
 			CopyFiles:        ctx.cfg.CopyFiles,
+			CheckoutExclude:  ctx.cfg.CheckoutExclude,
 			SymlinkFiles:     ctx.cfg.SymlinkFiles,
 			PreCreateHook:    ctx.cfg.PreCreateHook,
 			PostCreateHook:   ctx.cfg.PostCreateHook,

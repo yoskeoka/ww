@@ -148,6 +148,65 @@ func (r *Runner) WorktreeAddExisting(path, branch string) error {
 	return err
 }
 
+// CheckSparseIsolation rejects legacy shared sparse settings before mutation.
+func (r *Runner) CheckSparseIsolation() error {
+	sparse, err := r.run([]string{"config", "--bool", "--get", "core.sparseCheckout"}, true)
+	if err != nil {
+		return err
+	}
+	extension, err := r.run([]string{"config", "--bool", "--get", "extensions.worktreeConfig"}, true)
+	if err != nil {
+		return err
+	}
+	if sparse == "true" && extension != "true" {
+		return fmt.Errorf("shared sparse checkout cannot be safely isolated; configure worktree-specific Git settings before retrying")
+	}
+	return nil
+}
+
+// WorktreeAddWithoutCheckout registers a worktree without writing tracked files.
+func (r *Runner) WorktreeAddWithoutCheckout(path, branch string, guess bool) error {
+	args := []string{"worktree", "add", "--no-checkout"}
+	if guess {
+		args = append(args, "--guess-remote")
+	}
+	args = append(args, path, branch)
+	_, err := r.Run(args...)
+	return err
+}
+
+// RestrictedCheckout configures the new worktree before populating its index.
+func (r *Runner) RestrictedCheckout(path string, excludes []string) error {
+	w := &Runner{GitBin: r.GitBin, Dir: path}
+	if _, err := w.Run("sparse-checkout", "init", "--no-cone"); err != nil {
+		return fmt.Errorf("initializing sparse checkout: %w", err)
+	}
+	extension, err := w.run([]string{"config", "--bool", "--get", "extensions.worktreeConfig"}, true)
+	if err != nil {
+		return err
+	}
+	if extension != "true" {
+		return fmt.Errorf("Git did not enable isolated worktree configuration")
+	}
+	if _, err := w.Run("config", "--worktree", "core.sparseCheckout", "true"); err != nil {
+		return fmt.Errorf("enabling worktree sparse checkout: %w", err)
+	}
+	if _, err := w.Run("config", "--worktree", "core.sparseCheckoutCone", "false"); err != nil {
+		return fmt.Errorf("selecting non-cone patterns: %w", err)
+	}
+	patterns := []string{"/*"}
+	for _, p := range excludes {
+		patterns = append(patterns, "!"+p)
+	}
+	if _, err := w.runWithInput([]string{"sparse-checkout", "set", "--stdin"}, strings.Join(patterns, "\n")+"\n", false); err != nil {
+		return fmt.Errorf("setting sparse patterns: %w", err)
+	}
+	if _, err := w.Run("read-tree", "-mu", "HEAD"); err != nil {
+		return fmt.Errorf("checking out files: %w", err)
+	}
+	return nil
+}
+
 // WorktreeList returns all worktrees using porcelain format.
 func (r *Runner) WorktreeList() ([]WorktreeEntry, error) {
 	out, err := r.Run("worktree", "list", "--porcelain")

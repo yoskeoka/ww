@@ -109,6 +109,7 @@ Post-Phase 2 (originally tracked as `--no-upward-search`) is complete. The plann
 - [ ] Phase 6: Lifecycle hook expansion — extend today's post-create-only model with broader hook phases and richer hook context so setup/teardown workflows remain expressible without ad hoc wrapper scripts.
 - [ ] Phase 7 (hardening): Hook trust hardening — once the hook/config surface is powerful enough, add first-run confirmation, config-change detection, sandbox execution options, and dangerous-pattern warnings.
 - [ ] Future: Sandboxed environment full compatibility (FR-25). Treat this as a verification-and-gap track across real Claude Code sandbox cases, not as a single internal feature that `ww` can finish in isolation.
+  Continue verifying opt-in checkout exclusions in both ordinary clones and repositories whose main worktree already uses sparse checkout, including existing linked worktrees, Git versions and real agent sandbox restrictions. Fixture results do not establish compatibility for every sparse configuration or sandbox; record further evidence and gaps as they arise.
 
 ## Design Principles
 

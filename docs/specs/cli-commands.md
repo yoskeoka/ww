@@ -665,3 +665,11 @@ JSON `stale_reason=time`、remote 消失だけなら `remote` とする。stale 
 一覧の STATUS text は変えない。設定と時刻の詳細は configuration/git-operations を参照。
 
 Clean JSON always includes `remove_dirty` with the effective policy (including explicit force), even on errors and dry-run. List JSON includes `remove_dirty=true` for time-stale entries whose configured policy permits dirty removal.
+# Restricted checkout
+
+When `checkout_exclude` is configured, create excludes the specified tracked
+paths from the first checkout. Dry-run describes the patterns and planned
+checkout without changing state. A failed setup or checkout reports the stage,
+original error, remaining state and recovery guidance; registered worktrees
+and state of uncertain ownership are preserved. Copy, symlink and post-create
+actions run only after checkout succeeds.
